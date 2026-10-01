@@ -537,6 +537,18 @@ Item {
         // Right
         // ==================================================
 
+        Rectangle {
+            anchors.right: parent.right
+            anchors.rightMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            width: rightRow.width + 24
+            height: 34
+            radius: 11
+            color: Qt.rgba(0.02, 0.015, 0.04, 0.28)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.10)
+        }
+
         Row {
             id: rightRow
 
@@ -545,14 +557,14 @@ Item {
                     parent.right
 
                 rightMargin:
-                    16
+                    22
 
                 verticalCenter:
                     parent.verticalCenter
             }
 
             spacing:
-                16
+                13
 
             StatusIcon {
                 glyph:
@@ -608,6 +620,13 @@ Item {
                         }
                     }
                 }
+            }
+
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 1
+                height: 17
+                color: Qt.rgba(1, 1, 1, 0.17)
             }
 
             StatusIcon {
@@ -745,10 +764,10 @@ Item {
         property Component glyph
 
         width:
-            22
+            24
 
         height:
-            22
+            24
 
         scale:
             statusHover.hovered
@@ -767,10 +786,10 @@ Item {
                 parent
 
             width:
-                28
+                30
 
             height:
-                28
+                30
 
             radius:
                 9
@@ -781,7 +800,7 @@ Item {
                     1,
                     1,
                     statusHover.hovered
-                        ? 0.08
+                        ? 0.12
                         : 0.0
                 )
 
@@ -910,16 +929,17 @@ Item {
 
     component SpeakerGlyph: Canvas {
         width:
-            18
+            20
 
         height:
-            18
+            20
 
         onPaint: {
             var ctx =
                 getContext("2d")
 
             ctx.reset()
+            ctx.scale(20 / 18, 20 / 18)
 
             ctx.fillStyle =
                 "#FFFFFF"
@@ -1002,16 +1022,17 @@ Item {
 
     component BluetoothGlyph: Canvas {
         width:
-            14
+            17
 
         height:
-            18
+            20
 
         onPaint: {
             var ctx =
                 getContext("2d")
 
             ctx.reset()
+            ctx.scale(17 / 14, 20 / 18)
 
             ctx.strokeStyle =
                 "#FFFFFF"
@@ -1067,16 +1088,17 @@ Item {
 
     component WifiGlyph: Canvas {
         width:
-            18
+            20
 
         height:
-            18
+            20
 
         onPaint: {
             var ctx =
                 getContext("2d")
 
             ctx.reset()
+            ctx.scale(20 / 18, 20 / 18)
 
             ctx.strokeStyle =
                 "#FFFFFF"
@@ -1091,10 +1113,10 @@ Item {
 
             ctx.arc(
                 9,
-                12,
+                15,
                 7,
-                3.95,
-                5.48,
+                Math.PI * 1.20,
+                Math.PI * 1.80,
                 false
             )
 
@@ -1104,10 +1126,10 @@ Item {
 
             ctx.arc(
                 9,
-                12,
+                15,
                 4.5,
-                4.10,
-                5.34,
+                Math.PI * 1.22,
+                Math.PI * 1.78,
                 false
             )
 
@@ -1117,10 +1139,10 @@ Item {
 
             ctx.arc(
                 9,
-                12,
+                15,
                 2,
-                4.20,
-                5.20,
+                Math.PI * 1.25,
+                Math.PI * 1.75,
                 false
             )
 
@@ -1133,7 +1155,7 @@ Item {
 
             ctx.arc(
                 9,
-                14.2,
+                15,
                 1.2,
                 0,
                 Math.PI * 2
@@ -1149,16 +1171,17 @@ Item {
 
     component SearchGlyph: Canvas {
         width:
-            18
+            20
 
         height:
-            18
+            20
 
         onPaint: {
             var ctx =
                 getContext("2d")
 
             ctx.reset()
+            ctx.scale(20 / 18, 20 / 18)
 
             ctx.strokeStyle =
                 "#FFFFFF"
@@ -1203,16 +1226,17 @@ Item {
 
     component PowerGlyph: Canvas {
         width:
-            18
+            20
 
         height:
-            18
+            20
 
         onPaint: {
             var ctx =
                 getContext("2d")
 
             ctx.reset()
+            ctx.scale(20 / 18, 20 / 18)
 
             ctx.strokeStyle =
                 "#FFFFFF"
@@ -1229,9 +1253,9 @@ Item {
                 9,
                 10,
                 6,
-                -0.3,
-                3.45,
-                true
+                -Math.PI / 4,
+                Math.PI * 1.25,
+                false
             )
 
             ctx.stroke()
