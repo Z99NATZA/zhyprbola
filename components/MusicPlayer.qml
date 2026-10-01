@@ -4,7 +4,7 @@ Item {
     id: win
 
     width: 390
-    height: 210
+    height: 230
 
 
     // ==================================================
@@ -23,19 +23,19 @@ Item {
         anchors.centerIn: parent
 
         width: 390
-        height: 210
+        height: 230
 
-        property string songTitle: "Sakura"
-        property string artist: "Hello World"
-        property string coverSource: ""
+        property string songTitle: backend.songTitle
+        property string artist: backend.artist
+        property string coverSource: backend.coverSource
 
-        property bool liked: true
-        property bool playing: true
+        property bool liked: false
+        property bool playing: backend.playing
         property bool shuffle: false
         property bool repeat: false
 
-        property int currentSeconds: 87
-        property int totalSeconds: 252
+        property int currentSeconds: backend.positionSeconds
+        property int totalSeconds: backend.durationSeconds
 
         readonly property real progress:
             totalSeconds > 0
@@ -374,6 +374,7 @@ Item {
         // ==================================================
 
         Item {
+            visible: false
             anchors {
                 right: parent.right
                 top: parent.top
@@ -429,7 +430,7 @@ Item {
                 topMargin: 13
 
                 bottom: parent.bottom
-                bottomMargin: 11
+                bottomMargin: 31
             }
 
             // ==================================================
@@ -508,6 +509,7 @@ Item {
 
                 MouseArea {
                     anchors.fill: parent
+                    enabled: backend.hasPlayer && card.totalSeconds > 0
 
                     cursorShape:
                         Qt.PointingHandCursor
@@ -516,10 +518,7 @@ Item {
                         var p =
                             mouse.x / width
 
-                        card.currentSeconds =
-                            Math.round(
-                                card.totalSeconds * p
-                            )
+                        backend.seek(Math.round(card.totalSeconds * p))
                     }
                 }
             }
@@ -610,6 +609,7 @@ Item {
                 // --------------------------------------------------
 
                 Text {
+                    visible: false
                     anchors {
                         left: parent.left
                         leftMargin: 10
@@ -697,6 +697,13 @@ Item {
                             ctx.fill()
                         }
                     }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: backend.hasPlayer
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: backend.previousTrack()
+                    }
                 }
 
                 // --------------------------------------------------
@@ -777,10 +784,10 @@ Item {
 
                     MouseArea {
                         anchors.fill: parent
+                        enabled: backend.hasPlayer
                         cursorShape: Qt.PointingHandCursor
 
-                        onClicked:
-                            card.playing = !card.playing
+                        onClicked: backend.togglePlayback()
                     }
                 }
 
@@ -838,6 +845,13 @@ Item {
                             ctx.fill()
                         }
                     }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: backend.hasPlayer
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: backend.nextTrack()
+                    }
                 }
 
                 // --------------------------------------------------
@@ -845,6 +859,7 @@ Item {
                 // --------------------------------------------------
 
                 Text {
+                    visible: false
                     anchors {
                         right: parent.right
                         rightMargin: 10

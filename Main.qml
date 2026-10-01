@@ -52,7 +52,7 @@ Window {
                 x: 90 + 40 * stage.layoutProgress
                 y: 310 + 60 * stage.layoutProgress
                 width: 390 * stage.leftScale
-                height: 210 * stage.leftScale
+                height: 230 * stage.leftScale
 
                 MusicPlayer {
                     scale: stage.leftScale
@@ -106,6 +106,13 @@ Window {
                     scale: stage.rightScale
                     transformOrigin: Item.TopLeft
                 }
+            }
+
+            AudioSpectrum {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: Math.min(200, Math.max(72, stage.height - 1080))
             }
 
         }

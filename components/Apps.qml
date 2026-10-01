@@ -382,6 +382,9 @@ Item {
 
         property string name:
             "App"
+        readonly property bool available: backend.appAvailable(name)
+
+        opacity: available ? 1 : 0.45
 
         width:
             76
@@ -434,221 +437,15 @@ Item {
             height:
                 52
 
-            // ----------------------------------------------
-            // Icon background
-            // ----------------------------------------------
-
             Rectangle {
-                anchors.fill:
-                    parent
-
-                radius:
-                    13
-
-                color:
-                    card.accentColor
-
-                border.width:
-                    1
-
-                border.color:
-                    Qt.rgba(
-                        1,
-                        1,
-                        1,
-                        0.12
-                    )
-
-                // subtle icon gradient
-
-                Rectangle {
-                    anchors.fill:
-                        parent
-
-                    anchors.margins:
-                        1
-
-                    radius:
-                        parent.radius - 1
-
-                    gradient: Gradient {
-                        GradientStop {
-                            position:
-                                0.0
-
-                            color:
-                                Qt.rgba(
-                                    1,
-                                    1,
-                                    1,
-                                    0.14
-                                )
-                        }
-
-                        GradientStop {
-                            position:
-                                0.5
-
-                            color:
-                                Qt.rgba(
-                                    1,
-                                    1,
-                                    1,
-                                    0.02
-                                )
-                        }
-
-                        GradientStop {
-                            position:
-                                1.0
-
-                            color:
-                                Qt.rgba(
-                                    1,
-                                    1,
-                                    1,
-                                    0.04
-                                )
-                        }
-                    }
-                }
-
-                // soft hover glow
-
-                Rectangle {
-                    anchors.fill:
-                        parent
-
-                    radius:
-                        parent.radius
-
-                    color:
-                        Qt.rgba(
-                            1,
-                            1,
-                            1,
-                            appHover.hovered
-                                ? 0.08
-                                : 0.0
-                        )
-
-                    Behavior on color {
-                        ColorAnimation {
-                            duration: 160
-                        }
-                    }
-                }
+                anchors.fill: parent
+                radius: 14
+                color: Qt.rgba(1, 1, 1, appHover.hovered ? 0.09 : 0)
             }
 
-            // ==================================================
-            // Placeholder glyph
-            // ==================================================
-
-            Item {
-                anchors.centerIn:
-                    parent
-
-                width:
-                    26
-
-                height:
-                    23
-
-                // body
-
-                Rectangle {
-                    x: 1
-                    y: 5
-
-                    width:
-                        24
-
-                    height:
-                        17
-
-                    radius:
-                        5
-
-                    color:
-                        Qt.rgba(
-                            1,
-                            1,
-                            1,
-                            0.30
-                        )
-                }
-
-                // top tab
-
-                Rectangle {
-                    x: 5
-                    y: 2
-
-                    width:
-                        10
-
-                    height:
-                        6
-
-                    radius:
-                        3
-
-                    color:
-                        Qt.rgba(
-                            1,
-                            1,
-                            1,
-                            0.55
-                        )
-                }
-
-                // line 1
-
-                Rectangle {
-                    x: 6
-                    y: 10
-
-                    width:
-                        13
-
-                    height:
-                        2
-
-                    radius:
-                        1
-
-                    color:
-                        Qt.rgba(
-                            1,
-                            1,
-                            1,
-                            0.78
-                        )
-                }
-
-                // line 2
-
-                Rectangle {
-                    x: 6
-                    y: 14
-
-                    width:
-                        10
-
-                    height:
-                        2
-
-                    radius:
-                        1
-
-                    color:
-                        Qt.rgba(
-                            1,
-                            1,
-                            1,
-                            0.48
-                        )
-                }
+            AppIcon {
+                anchors.fill: parent
+                name: app.name
             }
         }
 
@@ -715,8 +512,10 @@ Item {
             anchors.fill:
                 parent
 
+            enabled: app.available
             cursorShape:
                 Qt.PointingHandCursor
+            onClicked: backend.launchApp(app.name)
         }
     }
 }

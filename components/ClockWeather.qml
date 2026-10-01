@@ -73,14 +73,14 @@ Item {
 
         property bool use24Hour: true
 
-        property int temperature: 24
+        property int temperature: backend.temperature
 
-        property string condition: "Partly cloudy"
+        property string condition: backend.condition
 
-        property int high: 29
-        property int low: 22
+        property int high: backend.high
+        property int low: backend.low
 
-        property string location: "Bangkok"
+        property string location: backend.location
 
         // ----------------------------------------------
         // Style
@@ -940,8 +940,9 @@ Item {
                                 card.ready
 
                             text:
-                                card.temperature
-                                    + "°"
+                                backend.weatherAvailable
+                                    ? card.temperature + "°"
+                                    : "--°"
 
                             color:
                                 card.textColor
@@ -989,7 +990,7 @@ Item {
                     Text {
                         text:
                             "↑ "
-                                + card.high
+                                + (backend.weatherAvailable ? card.high : "--")
                                 + "°"
 
                         color:
@@ -1007,7 +1008,7 @@ Item {
                     Text {
                         text:
                             "↓ "
-                                + card.low
+                                + (backend.weatherAvailable ? card.low : "--")
                                 + "°"
 
                         color:

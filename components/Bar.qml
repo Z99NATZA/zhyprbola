@@ -454,7 +454,7 @@ Item {
                             parent.verticalCenter
 
                         text:
-                            "znnn"
+                            backend.userName
 
                         color:
                             topBar.textColor
@@ -570,6 +570,7 @@ Item {
             }
 
             Item {
+                visible: backend.batteryAvailable
                 width:
                     66
 
@@ -590,7 +591,7 @@ Item {
                             parent.verticalCenter
 
                         text:
-                            "85%"
+                            backend.batteryPercent + "%"
 
                         color:
                             topBar.textColor
@@ -864,7 +865,7 @@ Item {
                 y: 2
 
                 width:
-                    15
+                    18 * backend.batteryPercent / 100
 
                 height:
                     6

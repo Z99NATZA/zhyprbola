@@ -1,0 +1,298 @@
+#include "Backend.h"
+
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QCoreApplication>
+#include <QProcess>
+#include <QStandardPaths>
+#include <QStorageInfo>
+#include <QUrlQuery>
+#include <QtMath>
+
+namespace {
+QString formatGiB(quint64 bytes) {
+    return QString::number(double(bytes) / 1073741824.0, 'f', 1) + QStringLiteral(" GB");
+}
+
+QString weatherDescription(int code) {
+    if (code == 0) return QStringLiteral("Clear sky");
+    if (code <= 3) return QStringLiteral("Partly cloudy");
+    if (code == 45 || code == 48) return QStringLiteral("Foggy");
+    if (code >= 51 && code <= 57) return QStringLiteral("Drizzle");
+    if (code >= 61 && code <= 67) return QStringLiteral("Rainy");
+    if (code >= 71 && code <= 77) return QStringLiteral("Snowy");
+    if (code >= 80 && code <= 82) return QStringLiteral("Rain showers");
+    if (code >= 85 && code <= 86) return QStringLiteral("Snow showers");
+    if (code >= 95) return QStringLiteral("Thunderstorm");
+    return QStringLiteral("Cloudy");
+}
+
+QStringList commandForApp(const QString &name) {
+    if (name == QLatin1String("Code")) return {QStringLiteral("code")};
+    if (name == QLatin1String("Browser")) {
+        for (const auto &program : {"firefox", "google-chrome", "chromium"})
+            if (!QStandardPaths::findExecutable(QString::fromLatin1(program)).isEmpty())
+                return {QString::fromLatin1(program)};
+    }
+    if (name == QLatin1String("Terminal")) {
+        for (const auto &program : {"x-terminal-emulator", "gnome-terminal", "konsole"})
+            if (!QStandardPaths::findExecutable(QString::fromLatin1(program)).isEmpty())
+                return {QString::fromLatin1(program)};
+    }
+    if (name == QLatin1String("Files")) return {QStringLiteral("xdg-open"), QDir::homePath()};
+    if (name == QLatin1String("Docker")) return {QStringLiteral("docker-desktop")};
+    if (name == QLatin1String("Git")) {
+        for (const auto &program : {"git-gui", "gitk"})
+            if (!QStandardPaths::findExecutable(QString::fromLatin1(program)).isEmpty())
+                return {QString::fromLatin1(program)};
+    }
+    if (name == QLatin1String("Music")) {
+        for (const auto &program : {"spotify", "rhythmbox", "amarok"})
+            if (!QStandardPaths::findExecutable(QString::fromLatin1(program)).isEmpty())
+                return {QString::fromLatin1(program)};
+    }
+    if (name == QLatin1String("Settings")) return {QStringLiteral("gnome-control-center")};
+    return {};
+}
+}
+
+Backend::Backend(QObject *parent) : QObject(parent) {
+    m_location = qEnvironmentVariable("ZPOLA_LOCATION", "Bangkok");
+    m_userName = qEnvironmentVariable("USER", "User");
+
+    QFile cpuInfo(QStringLiteral("/proc/cpuinfo"));
+    if (cpuInfo.open(QIODevice::ReadOnly)) {
+        for (const QByteArray &line : cpuInfo.readAll().split('\n')) {
+            if (line.startsWith("model name")) {
+                m_cpuDetail = QString::fromUtf8(line.mid(line.indexOf(':') + 1)).trimmed();
+                break;
+            }
+        }
+    }
+    if (m_cpuDetail.isEmpty()) m_cpuDetail = QStringLiteral("CPU");
+
+    connect(&m_systemTimer, &QTimer::timeout, this, &Backend::refreshSystem);
+    m_systemTimer.start(2000);
+    refreshSystem();
+
+    connect(&m_weatherTimer, &QTimer::timeout, this, &Backend::refreshWeather);
+    m_weatherTimer.start(15 * 60 * 1000);
+    refreshWeather();
+
+    connect(&m_musicTimer, &QTimer::timeout, this, &Backend::refreshMusic);
+    m_musicTimer.start(2000);
+    refreshMusic();
+
+    const QString config = QDir(QCoreApplication::applicationDirPath())
+        .absoluteFilePath(QStringLiteral("../components/cava.conf"));
+    if (!QStandardPaths::findExecutable(QStringLiteral("cava")).isEmpty()
+        && QFileInfo::exists(config)) {
+        connect(&m_cava, &QProcess::readyReadStandardOutput, this, &Backend::readSpectrum);
+        m_cava.start(QStringLiteral("cava"), {QStringLiteral("-p"), config});
+    }
+}
+
+Backend::~Backend() {
+    if (m_cava.state() != QProcess::NotRunning) {
+        m_cava.terminate();
+        if (!m_cava.waitForFinished(500)) {
+            m_cava.kill();
+            m_cava.waitForFinished(500);
+        }
+    }
+}
+
+void Backend::readSpectrum() {
+    m_cavaBuffer.append(m_cava.readAllStandardOutput());
+    if (m_cavaBuffer.size() > 65536) m_cavaBuffer.clear();
+    int end = m_cavaBuffer.indexOf('\n');
+    while (end >= 0) {
+        const QByteArray frame = m_cavaBuffer.left(end).trimmed();
+        m_cavaBuffer.remove(0, end + 1);
+        QVariantList levels;
+        for (const QByteArray &entry : frame.split(';')) {
+            if (entry.isEmpty()) continue;
+            bool valid = false;
+            const double value = entry.toDouble(&valid);
+            if (valid) levels.append(qBound(0.0, value / 100.0, 1.0));
+        }
+        if (!levels.isEmpty()) {
+            m_spectrum = levels;
+            emit spectrumChanged();
+        }
+        end = m_cavaBuffer.indexOf('\n');
+    }
+}
+
+void Backend::refreshSystem() {
+    QFile stat(QStringLiteral("/proc/stat"));
+    if (stat.open(QIODevice::ReadOnly)) {
+        const QList<QByteArray> fields = stat.readLine().simplified().split(' ');
+        if (fields.size() >= 5 && fields.first() == "cpu") {
+            quint64 total = 0;
+            for (int i = 1; i < fields.size(); ++i) total += fields.at(i).toULongLong();
+            const quint64 idle = fields.at(4).toULongLong()
+                + (fields.size() > 5 ? fields.at(5).toULongLong() : 0);
+            if (m_previousTotal && total > m_previousTotal) {
+                const double busy = 1.0 - double(idle - m_previousIdle) / double(total - m_previousTotal);
+                m_cpuPercent = qBound(0, qRound(busy * 100), 100);
+            }
+            m_previousTotal = total;
+            m_previousIdle = idle;
+        }
+    }
+
+    QFile memory(QStringLiteral("/proc/meminfo"));
+    if (memory.open(QIODevice::ReadOnly)) {
+        quint64 totalKiB = 0;
+        quint64 availableKiB = 0;
+        for (const QByteArray &line : memory.readAll().split('\n')) {
+            if (line.startsWith("MemTotal:")) totalKiB = line.mid(9).trimmed().split(' ').first().toULongLong();
+            if (line.startsWith("MemAvailable:")) availableKiB = line.mid(13).trimmed().split(' ').first().toULongLong();
+        }
+        if (totalKiB) {
+            const quint64 used = totalKiB - qMin(totalKiB, availableKiB);
+            m_ramPercent = qRound(double(used) * 100 / double(totalKiB));
+            m_ramDetail = formatGiB(used * 1024) + QStringLiteral(" / ") + formatGiB(totalKiB * 1024);
+        }
+    }
+
+    const QStorageInfo disk = QStorageInfo::root();
+    if (disk.isValid() && disk.bytesTotal() > 0) {
+        const quint64 total = disk.bytesTotal();
+        const quint64 used = total - disk.bytesAvailable();
+        m_diskPercent = qRound(double(used) * 100 / double(total));
+        m_diskDetail = formatGiB(used) + QStringLiteral(" / ") + formatGiB(total);
+    }
+
+    m_batteryAvailable = false;
+    const QDir power(QStringLiteral("/sys/class/power_supply"));
+    for (const QString &device : power.entryList({QStringLiteral("BAT*")}, QDir::Dirs | QDir::NoDotAndDotDot)) {
+        QFile capacity(power.filePath(device + QStringLiteral("/capacity")));
+        if (capacity.open(QIODevice::ReadOnly)) {
+            bool valid = false;
+            const int percent = capacity.readAll().trimmed().toInt(&valid);
+            if (valid) {
+                m_batteryAvailable = true;
+                m_batteryPercent = qBound(0, percent, 100);
+                break;
+            }
+        }
+    }
+    emit systemChanged();
+}
+
+void Backend::refreshWeather() {
+    QUrl url(QStringLiteral("https://api.open-meteo.com/v1/forecast"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("latitude"), qEnvironmentVariable("ZPOLA_LATITUDE", "13.7563"));
+    query.addQueryItem(QStringLiteral("longitude"), qEnvironmentVariable("ZPOLA_LONGITUDE", "100.5018"));
+    query.addQueryItem(QStringLiteral("current"), QStringLiteral("temperature_2m,weather_code"));
+    query.addQueryItem(QStringLiteral("daily"), QStringLiteral("temperature_2m_max,temperature_2m_min"));
+    query.addQueryItem(QStringLiteral("timezone"), QStringLiteral("auto"));
+    query.addQueryItem(QStringLiteral("forecast_days"), QStringLiteral("1"));
+    url.setQuery(query);
+
+    QNetworkRequest request(url);
+    request.setTransferTimeout(10000);
+    QNetworkReply *reply = m_network.get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        const QJsonDocument json = QJsonDocument::fromJson(reply->readAll());
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError || !json.isObject()) {
+            if (!m_weatherAvailable) {
+                m_condition = QStringLiteral("Weather unavailable");
+                emit weatherChanged();
+            }
+            return;
+        }
+        const QJsonObject root = json.object();
+        const QJsonObject current = root.value(QStringLiteral("current")).toObject();
+        const QJsonObject daily = root.value(QStringLiteral("daily")).toObject();
+        const QJsonArray highs = daily.value(QStringLiteral("temperature_2m_max")).toArray();
+        const QJsonArray lows = daily.value(QStringLiteral("temperature_2m_min")).toArray();
+        if (!current.value(QStringLiteral("temperature_2m")).isDouble() || highs.isEmpty() || lows.isEmpty())
+            return;
+        m_temperature = qRound(current.value(QStringLiteral("temperature_2m")).toDouble());
+        m_high = qRound(highs.first().toDouble());
+        m_low = qRound(lows.first().toDouble());
+        m_condition = weatherDescription(current.value(QStringLiteral("weather_code")).toInt());
+        m_weatherAvailable = true;
+        emit weatherChanged();
+    });
+}
+
+QString Backend::playerctl(const QStringList &args) const {
+    QProcess process;
+    process.start(QStringLiteral("playerctl"), args);
+    if (!process.waitForFinished(700)) {
+        process.kill();
+        process.waitForFinished(100);
+        return {};
+    }
+    return process.exitCode() == 0 ? QString::fromUtf8(process.readAllStandardOutput()).trimmed() : QString();
+}
+
+void Backend::refreshMusic() {
+    const QStringList players = playerctl({QStringLiteral("-l")}).split('\n', Qt::SkipEmptyParts);
+    QString selected;
+    for (const QString &player : players) {
+        if (playerctl({QStringLiteral("-p"), player, QStringLiteral("status")}) == QLatin1String("Playing")) {
+            selected = player;
+            break;
+        }
+    }
+    if (selected.isEmpty() && !players.isEmpty()) selected = players.first();
+    m_player = selected;
+    if (selected.isEmpty()) {
+        m_songTitle = QStringLiteral("No music playing");
+        m_artist = QStringLiteral("Open a music app");
+        m_coverSource.clear();
+        m_positionSeconds = 0;
+        m_durationSeconds = 0;
+        m_playing = false;
+        emit musicChanged();
+        return;
+    }
+
+    const QString metadata = playerctl({QStringLiteral("-p"), selected, QStringLiteral("metadata"),
+        QStringLiteral("--format"), QStringLiteral("{{title}}\x1f{{artist}}\x1f{{mpris:length}}\x1f{{mpris:artUrl}}")});
+    const QStringList fields = metadata.split(QChar(0x1f));
+    m_songTitle = fields.value(0).isEmpty() ? QStringLiteral("Unknown track") : fields.value(0);
+    m_artist = fields.value(1).isEmpty() ? selected.section('.', 0, 0) : fields.value(1);
+    m_durationSeconds = qMax(0, int(fields.value(2).toLongLong() / 1000000));
+    m_coverSource = fields.value(3);
+    m_positionSeconds = qMax(0, qRound(playerctl({QStringLiteral("-p"), selected, QStringLiteral("position")}).toDouble()));
+    m_playing = playerctl({QStringLiteral("-p"), selected, QStringLiteral("status")}) == QLatin1String("Playing");
+    emit musicChanged();
+}
+
+void Backend::playerCommand(const QStringList &args) {
+    if (m_player.isEmpty()) return;
+    QStringList command = {QStringLiteral("-p"), m_player};
+    command.append(args);
+    QProcess::startDetached(QStringLiteral("playerctl"), command);
+    QTimer::singleShot(350, this, &Backend::refreshMusic);
+}
+
+void Backend::togglePlayback() { playerCommand({QStringLiteral("play-pause")}); }
+void Backend::nextTrack() { playerCommand({QStringLiteral("next")}); }
+void Backend::previousTrack() { playerCommand({QStringLiteral("previous")}); }
+void Backend::seek(int seconds) { playerCommand({QStringLiteral("position"), QString::number(qMax(0, seconds))}); }
+
+bool Backend::appAvailable(const QString &name) const {
+    const QStringList command = commandForApp(name);
+    return !command.isEmpty() && !QStandardPaths::findExecutable(command.first()).isEmpty();
+}
+
+void Backend::launchApp(const QString &name) {
+    const QStringList command = commandForApp(name);
+    if (command.isEmpty() || !appAvailable(name)) return;
+    QProcess::startDetached(command.first(), command.mid(1));
+}

@@ -19,7 +19,7 @@ Item {
         id: stat
 
         property string title: "CPU"
-        property int value: 18
+        property int value: 0
         property string detail: "Ryzen 5 5600"
         property color accentColor: "#F2A1C6"
 
@@ -325,22 +325,22 @@ Item {
 
             RingStat {
                 title: "CPU"
-                value: 18
-                detail: "Ryzen 5 5600 hello-world"
+                value: backend.cpuPercent
+                detail: backend.cpuDetail
                 accentColor: "#F2A1C6"
             }
 
             RingStat {
                 title: "RAM"
-                value: 42
-                detail: "32GB"
+                value: backend.ramPercent
+                detail: backend.ramDetail
                 accentColor: "#B675FF"
             }
 
             RingStat {
                 title: "Disk"
-                value: 19
-                detail: "128/512GB"
+                value: backend.diskPercent
+                detail: backend.diskDetail
                 accentColor: "#6CC7FF"
             }
         }
