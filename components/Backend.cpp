@@ -767,6 +767,7 @@ void Backend::connectBluetoothDevice(const QString &address) {
 
     QProcess::startDetached(QStringLiteral("bluetoothctl"), {QStringLiteral("connect"), address});
     QTimer::singleShot(1600, this, &Backend::refreshSystem);
+    QTimer::singleShot(4000, this, &Backend::refreshSystem);
 }
 
 void Backend::disconnectBluetoothDevice(const QString &address) {
@@ -774,6 +775,7 @@ void Backend::disconnectBluetoothDevice(const QString &address) {
 
     QProcess::startDetached(QStringLiteral("bluetoothctl"), {QStringLiteral("disconnect"), address});
     QTimer::singleShot(1000, this, &Backend::refreshSystem);
+    QTimer::singleShot(3000, this, &Backend::refreshSystem);
 }
 
 bool Backend::componentEnabled(const QString &key) const {

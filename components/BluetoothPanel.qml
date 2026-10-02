@@ -6,6 +6,7 @@ Item {
     property bool opened: false
     property bool standalone: false
     property string activeTab: "devices"
+    property var pendingDeviceActions: ({})
     readonly property string family: Qt.application.font.family
     readonly property color surfaceColor: Theme.panelSurface
     readonly property color textColor: Theme.text
@@ -15,6 +16,37 @@ Item {
 
     signal closeRequested()
 
+    function runDeviceAction(address, connect) {
+        if (!address || pendingDeviceActions[address])
+            return
+
+        const actions = Object.assign({}, pendingDeviceActions)
+        actions[address] = {connect: connect, expiresAt: Date.now() + 7000}
+        pendingDeviceActions = actions
+
+        if (connect)
+            backend.connectBluetoothDevice(address)
+        else
+            backend.disconnectBluetoothDevice(address)
+    }
+
+    function reconcileDeviceActions() {
+        const actions = Object.assign({}, pendingDeviceActions)
+        let changed = false
+
+        for (const address in actions) {
+            const device = backend.bluetoothDevices.find(item => item.address === address)
+            if ((device && Boolean(device.connected) === actions[address].connect)
+                    || Date.now() >= actions[address].expiresAt) {
+                delete actions[address]
+                changed = true
+            }
+        }
+
+        if (changed)
+            pendingDeviceActions = actions
+    }
+
     anchors.fill: parent
     visible: opened || opacity > 0
     opacity: opened ? 1 : 0
@@ -23,6 +55,18 @@ Item {
     onOpenedChanged: {
         if (opened)
             backend.scanBluetoothDevices()
+    }
+
+    Connections {
+        target: backend
+        function onBluetoothDevicesChanged() { panelRoot.reconcileDeviceActions() }
+    }
+
+    Timer {
+        interval: 500
+        running: Object.keys(panelRoot.pendingDeviceActions).length > 0
+        repeat: true
+        onTriggered: panelRoot.reconcileDeviceActions()
     }
 
     Behavior on opacity {
@@ -303,12 +347,11 @@ Item {
         property bool paired: false
         property bool trusted: false
         property bool connected: false
+        readonly property var pendingAction: panelRoot.pendingDeviceActions[address]
 
         height: 50
         radius: 9
-        color: connected
-            ? Theme.selected
-            : (rowMouse.containsMouse ? Theme.controlHover : Theme.control)
+        color: connected ? Theme.selected : Theme.control
 
         Behavior on color {
             ColorAnimation { duration: 120 }
@@ -329,10 +372,10 @@ Item {
         Column {
             anchors {
                 left: deviceGlyph.right
-                right: actionLabel.left
+                right: actionButton.visible ? actionButton.left : parent.right
                 verticalCenter: parent.verticalCenter
                 leftMargin: 12
-                rightMargin: 10
+                rightMargin: actionButton.visible ? 10 : 12
             }
 
             spacing: 2
@@ -351,7 +394,9 @@ Item {
 
             Text {
                 width: parent.width
-                text: row.connected ? "Connected" : (row.paired ? "Paired" : "Available")
+                text: row.pendingAction
+                    ? (row.pendingAction.connect ? "Connecting…" : "Disconnecting…")
+                    : (row.connected ? "Connected" : (row.paired ? "Paired" : "Available"))
                 color: panelRoot.dimTextColor
                 elide: Text.ElideRight
                 font {
@@ -361,37 +406,41 @@ Item {
             }
         }
 
-        Text {
-            id: actionLabel
+        Rectangle {
+            id: actionButton
             anchors {
                 right: parent.right
                 verticalCenter: parent.verticalCenter
                 rightMargin: 12
             }
 
-            width: 82
-            horizontalAlignment: Text.AlignRight
-            text: row.connected ? (rowMouse.containsMouse ? "Disconnect" : "Current") : (rowMouse.containsMouse ? "Connect" : (row.paired ? "Saved" : "Pair"))
-            color: row.connected ? panelRoot.accentColor : panelRoot.dimTextColor
-            elide: Text.ElideRight
-            font {
-                family: panelRoot.family
-                pixelSize: 11
-                weight: Font.DemiBold
-            }
-        }
+            width: 94
+            height: 30
+            radius: 8
+            visible: row.connected || row.paired
+            opacity: row.pendingAction || !backend.bluetoothEnabled ? 0.6 : 1
+            color: row.connected
+                ? (actionMouse.containsMouse ? Theme.controlHover : Theme.control)
+                : (actionMouse.containsMouse ? Qt.lighter(panelRoot.accentColor, 1.1) : panelRoot.accentColor)
 
-        MouseArea {
-            id: rowMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-                if (row.connected) {
-                    backend.disconnectBluetoothDevice(row.address)
-                } else {
-                    backend.connectBluetoothDevice(row.address)
+            Text {
+                anchors.centerIn: parent
+                text: row.pendingAction ? "Wait…" : (row.connected ? "Disconnect" : "Connect")
+                color: row.connected ? panelRoot.textColor : panelRoot.accentTextColor
+                font {
+                    family: panelRoot.family
+                    pixelSize: 11
+                    weight: Font.DemiBold
                 }
+            }
+
+            MouseArea {
+                id: actionMouse
+                anchors.fill: parent
+                enabled: !row.pendingAction && backend.bluetoothEnabled
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: panelRoot.runDeviceAction(row.address, !row.connected)
             }
         }
     }
