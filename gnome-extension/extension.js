@@ -21,8 +21,9 @@ const DOCK_CONFIG = Object.freeze({
 });
 
 const THEMES = [
-    {name: 'current', label: 'Current · Dark'},
-    {name: 'white', label: 'White glass'},
+    {name: 'current', label: 'Purple Night'},
+    {name: 'white', label: 'White Mist'},
+    {name: 'white-sky', label: 'White Sky'},
 ];
 
 export default class ZhyprbolaExtension extends Extension {
@@ -107,6 +108,7 @@ export default class ZhyprbolaExtension extends Extension {
         }[DOCK_CONFIG.position];
         this._themeMenu = new PopupMenu.PopupMenu(button, 0.5, side);
         this._themeMenu.actor.add_style_class_name('zhyprbola-theme-menu');
+        this._themeMenu.actor.hide();
         Main.uiGroup.add_child(this._themeMenu.actor);
         this._menuManager = new PopupMenu.PopupMenuManager(button);
         this._menuManager.addMenu(this._themeMenu);
@@ -148,12 +150,19 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _applyTheme() {
-        if (this._themeName === 'white') {
+        if (this._themeName === 'white' || this._themeName === 'white-sky') {
             this._dock.add_style_class_name('zhyprbola-dock-white');
             this._themeMenu.actor.add_style_class_name('zhyprbola-theme-menu-white');
         } else {
             this._dock.remove_style_class_name('zhyprbola-dock-white');
             this._themeMenu.actor.remove_style_class_name('zhyprbola-theme-menu-white');
+        }
+        if (this._themeName === 'white-sky') {
+            this._dock.add_style_class_name('zhyprbola-dock-white-sky');
+            this._themeMenu.actor.add_style_class_name('zhyprbola-theme-menu-white-sky');
+        } else {
+            this._dock.remove_style_class_name('zhyprbola-dock-white-sky');
+            this._themeMenu.actor.remove_style_class_name('zhyprbola-theme-menu-white-sky');
         }
 
         for (const [name, item] of this._themeItems)

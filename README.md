@@ -28,8 +28,8 @@ On a first install, GNOME may need a logout and login before it recognizes the
 extension. `make dock` enables it for the next login automatically.
 
 The extension creates a configurable sidebar dock with Bluetooth and Theme
-buttons. Theme opens a GNOME Shell menu with the current dark and white glass
-palettes. The choice is saved in `~/.config/zhyprbola/theme` and updates open
+buttons. Theme opens a GNOME Shell menu with Purple Night, White Mist, and White
+Sky palettes. The choice is saved in `~/.config/zhyprbola/theme` and updates open
 QML windows. The dock defaults to the right edge, but its placement is kept as
 a small config in `gnome-extension/extension.js` so it can later support left,
 right, top, and bottom positions.

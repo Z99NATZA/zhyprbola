@@ -388,7 +388,7 @@ Item {
                     4
 
                 color:
-                    Theme.light ? "#A4CFE1" : "#F6ADB2"
+                    Theme.sky ? "#A9D5FA" : (Theme.light ? "#A4CFE1" : "#F6ADB2")
             }
 
             // folder body
@@ -412,7 +412,7 @@ Item {
                             0.0
 
                         color:
-                            Theme.light ? "#C2E1EC" : "#FFC0C0"
+                            Theme.sky ? "#D6EDFF" : (Theme.light ? "#C2E1EC" : "#FFC0C0")
                     }
 
                     GradientStop {
@@ -420,7 +420,7 @@ Item {
                             1.0
 
                         color:
-                            Theme.light ? "#6BA5C3" : "#EF858C"
+                            Theme.sky ? "#72B6F2" : (Theme.light ? "#6BA5C3" : "#EF858C")
                     }
                 }
             }

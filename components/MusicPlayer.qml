@@ -244,12 +244,12 @@ Item {
             gradient: Gradient {
                 GradientStop {
                     position: 0
-                    color: Theme.light ? "#B8DCEB" : "#efb1d2"
+                    color: Theme.sky ? "#D7EEFF" : (Theme.light ? "#B8DCEB" : "#efb1d2")
                 }
 
                 GradientStop {
                     position: 1
-                    color: Theme.light ? "#5B96B8" : "#9377b3"
+                    color: Theme.sky ? "#70B5F3" : (Theme.light ? "#5B96B8" : "#9377b3")
                 }
             }
 

@@ -331,21 +331,21 @@ Item {
                 title: "CPU"
                 value: backend.cpuPercent
                 detail: backend.cpuDetail
-                accentColor: Theme.light ? "#6DA6C4" : "#F2A1C6"
+                accentColor: Theme.sky ? "#69B7F6" : (Theme.light ? "#6DA6C4" : "#F2A1C6")
             }
 
             RingStat {
                 title: "RAM"
                 value: backend.ramPercent
                 detail: backend.ramDetail
-                accentColor: Theme.light ? "#4D86A9" : "#B675FF"
+                accentColor: Theme.sky ? "#1E73E7" : (Theme.light ? "#4D86A9" : "#B675FF")
             }
 
             RingStat {
                 title: "Disk"
                 value: backend.diskPercent
                 detail: backend.diskDetail
-                accentColor: Theme.light ? "#78B8D3" : "#6CC7FF"
+                accentColor: Theme.sky ? "#88CFF7" : (Theme.light ? "#78B8D3" : "#6CC7FF")
             }
         }
     }
