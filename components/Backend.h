@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QNetworkAccessManager>
+#include <QFileSystemWatcher>
 #include <QProcess>
 #include <QTimer>
 #include <QVariantList>
@@ -43,6 +44,7 @@ class Backend : public QObject {
     Q_PROPERTY(int durationSeconds READ durationSeconds NOTIFY musicChanged)
     Q_PROPERTY(bool playing READ playing NOTIFY musicChanged)
     Q_PROPERTY(QVariantList spectrum READ spectrum NOTIFY spectrumChanged)
+    Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -83,6 +85,7 @@ public:
     int durationSeconds() const { return m_durationSeconds; }
     bool playing() const { return m_playing; }
     QVariantList spectrum() const { return m_spectrum; }
+    QString themeName() const { return m_themeName; }
 
     Q_INVOKABLE void togglePlayback();
     Q_INVOKABLE void nextTrack();
@@ -112,6 +115,7 @@ signals:
     void componentSettingsChanged();
     void wifiNetworksChanged();
     void bluetoothDevicesChanged();
+    void themeChanged();
 
 private:
     void refreshSystem();
@@ -120,6 +124,7 @@ private:
     void refreshWifiNetworks();
     void refreshBluetoothDevices();
     void readSpectrum();
+    void refreshTheme();
     bool playerctlAvailable() const;
     QString playerctl(const QStringList &args) const;
     QStringList mprisPlayers() const;
@@ -171,4 +176,6 @@ private:
     QProcess m_cava;
     QByteArray m_cavaBuffer;
     QVariantList m_spectrum;
+    QFileSystemWatcher m_themeWatcher;
+    QString m_themeName = QStringLiteral("current");
 };

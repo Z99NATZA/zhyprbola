@@ -86,16 +86,13 @@ Item {
         // Style
         // ----------------------------------------------
 
-        property color textColor: "#FFFFFF"
+        property color textColor: Theme.text
 
-        property color glassColor:
-            Qt.rgba(0.22, 0.17, 0.25, 0.84)
+        property color glassColor: Theme.cardSurface
 
-        property color borderColor:
-            Qt.rgba(1, 1, 1, 0.24)
+        property color borderColor: Theme.cardBorder
 
-        property color accentColor:
-            "#FFD76A"
+        property color accentColor: Theme.clockAccent
 
         property real cornerRadius: 26
 

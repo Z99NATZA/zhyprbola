@@ -50,20 +50,16 @@ Item {
         // Style — same family as ClockWeather
         // --------------------------------------------------
 
-        property color glassColor:
-            Qt.rgba(0.08, 0.06, 0.11, 0.86)
+        property color glassColor: Theme.barSurface
 
-        property color borderColor:
-            Qt.rgba(1, 1, 1, 0.20)
+        property color borderColor: Theme.barBorder
 
-        property color textColor:
-            "#FFFFFF"
+        property color textColor: Theme.text
 
         property color dimTextColor:
             Qt.alpha(textColor, 0.75)
 
-        property color accentColor:
-            "#F3A5CD"
+        property color accentColor: Theme.accent
 
         property real cornerRadius:
             14
@@ -411,6 +407,9 @@ Item {
                             height:
                                 12
 
+                            readonly property color themePaintColor: Theme.light ? Theme.accentText : "#6E506C"
+                            onThemePaintColorChanged: requestPaint()
+
                             onPaint: {
                                 var ctx =
                                     getContext("2d")
@@ -418,7 +417,7 @@ Item {
                                 ctx.reset()
 
                                 ctx.strokeStyle =
-                                    "#6E506C"
+                                    themePaintColor
 
                                 ctx.lineWidth =
                                     1.5
@@ -776,7 +775,7 @@ Item {
 
             color:
                 workspace.active
-                    ? "#6D4F6B"
+                    ? Theme.accentText
                     : topBar.textColor
 
             font {
@@ -856,7 +855,9 @@ Item {
 
             color:
                 statusIcon.active
-                    ? Qt.rgba(0.95, 0.65, 0.80, statusHover.hovered ? 0.26 : 0.16)
+                    ? (Theme.light
+                        ? Qt.rgba(0.30, 0.53, 0.66, statusHover.hovered ? 0.26 : 0.16)
+                        : Qt.rgba(0.95, 0.65, 0.80, statusHover.hovered ? 0.26 : 0.16))
                     : Qt.rgba(
                         1,
                         1,
@@ -922,13 +923,13 @@ Item {
                     14
 
                 color:
-                    Qt.rgba(0.08, 0.06, 0.11, 0.88)
+                    Theme.panelSurface
 
                 border.width:
                     1
 
                 border.color:
-                    Qt.rgba(1, 1, 1, 0.18)
+                    Theme.panelBorder
             }
 
             Column {
@@ -1074,7 +1075,7 @@ Item {
                     2
 
                 color:
-                    "#FFFFFF"
+                    Theme.text
             }
         }
 
@@ -1109,6 +1110,8 @@ Item {
     // ==================================================
 
     component SpeakerGlyph: Canvas {
+        readonly property color themePaintColor: Theme.text
+        onThemePaintColorChanged: requestPaint()
         width:
             20
 
@@ -1123,10 +1126,10 @@ Item {
             ctx.scale(20 / 18, 20 / 18)
 
             ctx.fillStyle =
-                "#FFFFFF"
+                Theme.text
 
             ctx.strokeStyle =
-                "#FFFFFF"
+                Theme.text
 
             ctx.lineWidth =
                 1.6
@@ -1202,6 +1205,8 @@ Item {
     // ==================================================
 
     component BluetoothGlyph: Canvas {
+        readonly property color themePaintColor: Theme.text
+        onThemePaintColorChanged: requestPaint()
         width:
             17
 
@@ -1216,7 +1221,7 @@ Item {
             ctx.scale(17 / 14, 20 / 18)
 
             ctx.strokeStyle =
-                "#FFFFFF"
+                Theme.text
 
             ctx.lineWidth =
                 1.8
@@ -1268,6 +1273,8 @@ Item {
     // ==================================================
 
     component WifiGlyph: Canvas {
+        readonly property color themePaintColor: Theme.text
+        onThemePaintColorChanged: requestPaint()
         property bool connected:
             true
 
@@ -1295,8 +1302,8 @@ Item {
 
             ctx.strokeStyle =
                 connected
-                    ? "#FFFFFF"
-                    : "rgba(255, 255, 255, 0.42)"
+                    ? Theme.text
+                    : Qt.alpha(Theme.text, 0.42)
 
             ctx.lineWidth =
                 1.6
@@ -1350,7 +1357,7 @@ Item {
             ctx.beginPath()
 
             ctx.fillStyle =
-                "#FFFFFF"
+                Theme.text
 
             ctx.arc(
                 9,
@@ -1364,7 +1371,7 @@ Item {
 
             if (!connected) {
                 ctx.strokeStyle =
-                    "rgba(255, 255, 255, 0.72)"
+                    Qt.alpha(Theme.text, 0.72)
 
                 ctx.lineWidth =
                     1.7
@@ -1391,6 +1398,8 @@ Item {
     // ==================================================
 
     component ManagerGlyph: Canvas {
+        readonly property color themePaintColor: Theme.text
+        onThemePaintColorChanged: requestPaint()
         width:
             20
 
@@ -1405,10 +1414,10 @@ Item {
             ctx.scale(20 / 18, 20 / 18)
 
             ctx.strokeStyle =
-                "#FFFFFF"
+                Theme.text
 
             ctx.fillStyle =
-                "#FFFFFF"
+                Theme.text
 
             ctx.lineWidth =
                 1.7
@@ -1453,6 +1462,8 @@ Item {
     // ==================================================
 
     component SearchGlyph: Canvas {
+        readonly property color themePaintColor: Theme.text
+        onThemePaintColorChanged: requestPaint()
         width:
             20
 
@@ -1467,7 +1478,7 @@ Item {
             ctx.scale(20 / 18, 20 / 18)
 
             ctx.strokeStyle =
-                "#FFFFFF"
+                Theme.text
 
             ctx.lineWidth =
                 1.8
@@ -1508,6 +1519,8 @@ Item {
     // ==================================================
 
     component PowerGlyph: Canvas {
+        readonly property color themePaintColor: Theme.text
+        onThemePaintColorChanged: requestPaint()
         width:
             20
 
@@ -1522,7 +1535,7 @@ Item {
             ctx.scale(20 / 18, 20 / 18)
 
             ctx.strokeStyle =
-                "#FFFFFF"
+                Theme.text
 
             ctx.lineWidth =
                 1.8

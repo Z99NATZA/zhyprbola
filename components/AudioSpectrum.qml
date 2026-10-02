@@ -9,7 +9,7 @@ Item {
     readonly property int minimumBarHeight: 6
     readonly property int transitionDuration: 1
     property real sensitivity: 1.25
-    property color barColor: "#F3A5CD"
+    property color barColor: Theme.accent
 
     Row {
         anchors.fill: parent

@@ -5,11 +5,11 @@ Item {
 
     property bool opened: false
     readonly property string family: Qt.application.font.family
-    readonly property color glassColor: Qt.rgba(0.08, 0.06, 0.11, 0.90)
-    readonly property color borderColor: Qt.rgba(1, 1, 1, 0.18)
-    readonly property color textColor: "#FFFFFF"
+    readonly property color glassColor: Theme.managerSurface
+    readonly property color borderColor: Theme.panelBorder
+    readonly property color textColor: Theme.text
     readonly property color dimTextColor: Qt.alpha(textColor, 0.70)
-    readonly property color accentColor: "#F3A5CD"
+    readonly property color accentColor: Theme.accent
     readonly property var componentItems: [
         { key: "clock", title: "Clock & Weather", detail: "Time, date, and forecast" },
         { key: "music", title: "Music Player", detail: "MPRIS player controls" },
@@ -81,7 +81,7 @@ Item {
             gradient: Gradient {
                 GradientStop {
                     position: 0
-                    color: Qt.rgba(1, 1, 1, 0.08)
+                    color: Theme.control
                 }
                 GradientStop {
                     position: 1
@@ -173,10 +173,10 @@ Item {
             anchors.fill: parent
             radius: 8
             color: buttonMouse.containsMouse
-                ? Qt.rgba(1, 1, 1, 0.14)
-                : Qt.rgba(1, 1, 1, 0.08)
+                ? Theme.controlHover
+                : Theme.control
             border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.10)
+            border.color: Theme.controlBorder
 
             Behavior on color {
                 ColorAnimation { duration: 120 }
@@ -216,10 +216,10 @@ Item {
             anchors.fill: parent
             radius: 8
             color: buttonMouse.containsMouse
-                ? Qt.rgba(1, 1, 1, 0.14)
-                : Qt.rgba(1, 1, 1, 0.08)
+                ? Theme.controlHover
+                : Theme.control
             border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.10)
+            border.color: Theme.controlBorder
 
             Behavior on color {
                 ColorAnimation { duration: 120 }
@@ -257,12 +257,12 @@ Item {
         height: 56
         radius: 8
         color: toggleMouse.containsMouse
-            ? Qt.rgba(1, 1, 1, 0.105)
-            : Qt.rgba(1, 1, 1, 0.065)
+            ? Theme.controlHover
+            : Theme.control
         border.width: 1
         border.color: checked
-            ? Qt.rgba(0.95, 0.65, 0.80, 0.32)
-            : Qt.rgba(1, 1, 1, 0.09)
+            ? Theme.selectedBorder
+            : Theme.controlBorder
 
         Component.onCompleted: checked = backend.componentEnabled(key)
 
@@ -329,8 +329,8 @@ Item {
             height: 24
             radius: 12
             color: toggle.checked
-                ? Qt.rgba(0.95, 0.65, 0.80, 0.88)
-                : Qt.rgba(1, 1, 1, 0.13)
+                ? Theme.selectedStrong
+                : Theme.controlHover
             border.width: 1
             border.color: Qt.rgba(1, 1, 1, 0.16)
 
@@ -345,8 +345,8 @@ Item {
                 x: toggle.checked ? 22 : 3
                 anchors.verticalCenter: parent.verticalCenter
                 color: toggle.checked
-                    ? "#6D4F6B"
-                    : Qt.rgba(1, 1, 1, 0.82)
+                    ? Theme.accentText
+                    : Theme.text
 
                 Behavior on x {
                     NumberAnimation {

@@ -42,16 +42,13 @@ Item {
                 ? currentSeconds / totalSeconds
                 : 0
 
-        property color textColor: "#FFFFFF"
+        property color textColor: Theme.text
 
-        property color glassColor:
-            Qt.rgba(0.22, 0.17, 0.25, 0.84)
+        property color glassColor: Theme.cardSurface
 
-        property color borderColor:
-            Qt.rgba(1, 1, 1, 0.24)
+        property color borderColor: Theme.cardBorder
 
-        property color accentColor:
-            "#F3A5CD"
+        property color accentColor: Theme.accent
 
         property real cornerRadius: 24
         property real rimStrength: 0.20
@@ -247,12 +244,12 @@ Item {
             gradient: Gradient {
                 GradientStop {
                     position: 0
-                    color: "#efb1d2"
+                    color: Theme.light ? "#B8DCEB" : "#efb1d2"
                 }
 
                 GradientStop {
                     position: 1
-                    color: "#9377b3"
+                    color: Theme.light ? "#5B96B8" : "#9377b3"
                 }
             }
 
@@ -493,7 +490,7 @@ Item {
                     anchors.verticalCenter:
                         parent.verticalCenter
 
-                    color: "#F8B6D7"
+                    color: Theme.light ? Theme.accent : "#F8B6D7"
 
                     x:
                         Math.max(
@@ -745,7 +742,7 @@ Item {
                             width: 4
                             height: 15
                             radius: 1.5
-                            color: "#584158"
+                            color: Theme.light ? Theme.accentText : "#584158"
                         }
 
                         Rectangle {
@@ -754,7 +751,7 @@ Item {
                             width: 4
                             height: 15
                             radius: 1.5
-                            color: "#584158"
+                            color: Theme.light ? Theme.accentText : "#584158"
                         }
                     }
 
@@ -764,10 +761,13 @@ Item {
                         height: 20
                         visible: !card.playing
 
+                        readonly property color themePaintColor: Theme.light ? Theme.accentText : "#584158"
+                        onThemePaintColorChanged: requestPaint()
+
                         onPaint: {
                             var ctx = getContext("2d")
                             ctx.reset()
-                            ctx.fillStyle = "#584158"
+                            ctx.fillStyle = themePaintColor
 
                             ctx.beginPath()
                             ctx.moveTo(4, 3)

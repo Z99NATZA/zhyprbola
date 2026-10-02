@@ -7,12 +7,12 @@ Item {
     property bool standalone: false
     property string activeTab: "networks"
     readonly property string family: Qt.application.font.family
-    readonly property color glassColor: Qt.rgba(0.08, 0.06, 0.11, 0.92)
-    readonly property color borderColor: Qt.rgba(1, 1, 1, 0.18)
-    readonly property color textColor: "#FFFFFF"
+    readonly property color glassColor: Theme.panelSurface
+    readonly property color borderColor: Theme.panelBorder
+    readonly property color textColor: Theme.text
     readonly property color dimTextColor: Qt.alpha(textColor, 0.68)
-    readonly property color accentColor: "#F3A5CD"
-    readonly property color accentTextColor: "#6D4F6B"
+    readonly property color accentColor: Theme.accent
+    readonly property color accentTextColor: Theme.accentText
 
     signal closeRequested()
 
@@ -129,9 +129,9 @@ Item {
                 width: parent.width
                 height: 148
                 radius: 14
-                color: Qt.rgba(1, 1, 1, 0.075)
+                color: Theme.control
                 border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.10)
+                border.color: Theme.controlBorder
 
                 SignalOrb {
                     id: signalOrb
@@ -358,12 +358,12 @@ Item {
         height: 48
         radius: 9
         color: active
-            ? Qt.rgba(0.95, 0.65, 0.80, 0.18)
-            : (rowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.105) : Qt.rgba(1, 1, 1, 0.06))
+            ? Theme.selected
+            : (rowMouse.containsMouse ? Theme.controlHover : Theme.control)
         border.width: 1
         border.color: active
-            ? Qt.rgba(0.95, 0.65, 0.80, 0.34)
-            : Qt.rgba(1, 1, 1, 0.08)
+            ? Theme.selectedBorder
+            : Theme.control
 
         Behavior on color {
             ColorAnimation { duration: 120 }
@@ -456,9 +456,9 @@ Item {
         width: parent.width
         height: 40
         radius: 9
-        color: Qt.rgba(1, 1, 1, 0.06)
+        color: Theme.control
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.08)
+        border.color: Theme.control
 
         Text {
             anchors {
@@ -502,9 +502,9 @@ Item {
         width: pillText.width + 18
         height: 22
         radius: 11
-        color: active ? Qt.rgba(0.95, 0.65, 0.80, 0.18) : Qt.rgba(1, 1, 1, 0.08)
+        color: active ? Theme.selected : Theme.control
         border.width: 1
-        border.color: active ? Qt.rgba(0.95, 0.65, 0.80, 0.26) : Qt.rgba(1, 1, 1, 0.08)
+        border.color: active ? Theme.selectedBorder : Theme.control
 
         Text {
             id: pillText
@@ -533,9 +533,9 @@ Item {
             radius: 9
             color: button.active
                 ? panelRoot.accentColor
-                : (buttonMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.13) : Qt.rgba(1, 1, 1, 0.075))
+                : (buttonMouse.containsMouse ? Theme.controlHover : Theme.control)
             border.width: button.active ? 0 : 1
-            border.color: Qt.rgba(1, 1, 1, 0.10)
+            border.color: Theme.controlBorder
 
             Behavior on color {
                 ColorAnimation { duration: 120 }
@@ -574,10 +574,10 @@ Item {
             anchors.fill: parent
             radius: 9
             color: buttonMouse.containsMouse
-                ? Qt.rgba(1, 1, 1, 0.14)
-                : Qt.rgba(1, 1, 1, 0.08)
+                ? Theme.controlHover
+                : Theme.control
             border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.10)
+            border.color: Theme.controlBorder
 
             Behavior on color {
                 ColorAnimation { duration: 120 }
@@ -617,10 +617,10 @@ Item {
             anchors.fill: parent
             radius: 8
             color: buttonMouse.containsMouse
-                ? Qt.rgba(1, 1, 1, 0.14)
-                : Qt.rgba(1, 1, 1, 0.08)
+                ? Theme.controlHover
+                : Theme.control
             border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.10)
+            border.color: Theme.controlBorder
         }
 
         Text {
@@ -657,9 +657,9 @@ Item {
             radius: width / 2
             color: control.checked
                 ? panelRoot.accentColor
-                : Qt.rgba(1, 1, 1, powerMouse.containsMouse ? 0.16 : 0.10)
+                : (powerMouse.containsMouse ? Theme.controlHover : Theme.control)
             border.width: control.checked ? 0 : 1
-            border.color: Qt.rgba(1, 1, 1, 0.12)
+            border.color: Theme.controlBorder
 
             Behavior on color {
                 ColorAnimation { duration: 160 }
@@ -668,6 +668,8 @@ Item {
 
         Canvas {
             anchors.centerIn: parent
+            readonly property color themePaintColor: Theme.text
+            onThemePaintColorChanged: requestPaint()
             width: 22
             height: 22
             onPaint: {
@@ -697,6 +699,8 @@ Item {
 
     component WifiGlyphSmall: Canvas {
         id: glyph
+        readonly property color themePaintColor: Theme.text
+        onThemePaintColorChanged: requestPaint()
 
         property int strength: 0
         property bool active: false
@@ -745,6 +749,8 @@ Item {
 
         Canvas {
             id: orbCanvas
+            readonly property color themePaintColor: Theme.text
+            onThemePaintColorChanged: requestPaint()
 
             anchors.fill: parent
             onPaint: {
@@ -758,12 +764,12 @@ Item {
                 ctx.reset()
                 ctx.lineWidth = 7
                 ctx.lineCap = "round"
-                ctx.strokeStyle = "rgba(255, 255, 255, 0.13)"
+                ctx.strokeStyle = Theme.track
                 ctx.beginPath()
                 ctx.arc(center, center, radius, 0, Math.PI * 2)
                 ctx.stroke()
 
-                ctx.strokeStyle = orb.connected ? panelRoot.accentColor : "rgba(255, 255, 255, 0.34)"
+                ctx.strokeStyle = orb.connected ? panelRoot.accentColor : Theme.mutedText
                 ctx.beginPath()
                 ctx.arc(center, center, radius, start, orb.connected ? end : start + Math.PI * 0.35)
                 ctx.stroke()

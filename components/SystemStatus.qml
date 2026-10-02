@@ -21,14 +21,14 @@ Item {
         property string title: "CPU"
         property int value: 0
         property string detail: "Ryzen 5 5600"
-        property color accentColor: "#F2A1C6"
+        property color accentColor: Theme.accent
 
         width: 118
         height: 128
 
-        readonly property color textColor: "#FFFFFF"
+        readonly property color textColor: Theme.text
         readonly property color dimColor: Qt.alpha(textColor, 0.72)
-        readonly property color trackColor: Qt.rgba(1, 1, 1, 0.15)
+        readonly property color trackColor: Theme.track
         readonly property string family: Qt.application.font.family
 
         Item {
@@ -85,6 +85,10 @@ Item {
                     }
 
                     function onAccentColorChanged() {
+                        ring.requestPaint()
+                    }
+
+                    function onTrackColorChanged() {
                         ring.requestPaint()
                     }
                 }
@@ -201,8 +205,8 @@ Item {
         width: implicitWidth
         height: implicitHeight + 10
 
-        property color glassColor: Qt.rgba(0.22, 0.17, 0.25, 0.84)
-        property color borderColor: Qt.rgba(1, 1, 1, 0.24)
+        property color glassColor: Theme.cardSurface
+        property color borderColor: Theme.cardBorder
         property real cornerRadius: 24
         property real rimStrength: 0.20
         property int rimSize: 4
@@ -327,21 +331,21 @@ Item {
                 title: "CPU"
                 value: backend.cpuPercent
                 detail: backend.cpuDetail
-                accentColor: "#F2A1C6"
+                accentColor: Theme.light ? "#6DA6C4" : "#F2A1C6"
             }
 
             RingStat {
                 title: "RAM"
                 value: backend.ramPercent
                 detail: backend.ramDetail
-                accentColor: "#B675FF"
+                accentColor: Theme.light ? "#4D86A9" : "#B675FF"
             }
 
             RingStat {
                 title: "Disk"
                 value: backend.diskPercent
                 detail: backend.diskDetail
-                accentColor: "#6CC7FF"
+                accentColor: Theme.light ? "#78B8D3" : "#6CC7FF"
             }
         }
     }

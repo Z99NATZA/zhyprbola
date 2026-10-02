@@ -4,6 +4,7 @@ import St from 'gi://St';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 const DockPosition = Object.freeze({
     LEFT: 'left',
@@ -19,12 +20,21 @@ const DOCK_CONFIG = Object.freeze({
     spacing: 8,
 });
 
+const THEMES = [
+    {name: 'current', label: 'Current · Dark'},
+    {name: 'white', label: 'White glass'},
+];
+
 export default class ZhyprbolaExtension extends Extension {
     enable() {
         this._dock = null;
         this._layoutIdleId = 0;
+        this._themePath = GLib.build_filenamev([
+            GLib.get_user_config_dir(), 'zhyprbola', 'theme']);
+        this._themeName = this._readTheme();
 
         this._createDock();
+        this._applyTheme();
         this._queueLayout();
 
         global.display.connectObject('workareas-changed', () => this._queueLayout(), this);
@@ -34,6 +44,14 @@ export default class ZhyprbolaExtension extends Extension {
     disable() {
         global.display.disconnectObject(this);
         Main.layoutManager.disconnectObject(this);
+
+        if (this._themeMenu) {
+            this._menuManager.removeMenu(this._themeMenu);
+            this._themeMenu.destroy();
+            this._themeMenu = null;
+        }
+        this._themeItems = null;
+        this._menuManager = null;
 
         if (this._layoutIdleId) {
             GLib.source_remove(this._layoutIdleId);
@@ -62,8 +80,86 @@ export default class ZhyprbolaExtension extends Extension {
             accessibleName: 'Bluetooth',
             panelName: 'bluetooth',
         }));
+        this._dock.add_child(this._createThemeButton());
 
         Main.layoutManager.addTopChrome(this._dock, {trackFullscreen: true});
+    }
+
+    _createThemeButton() {
+        const icon = new St.Icon({
+            icon_name: 'preferences-desktop-theme-symbolic',
+            style_class: 'zhyprbola-dock-icon',
+        });
+        const button = new St.Button({
+            style_class: 'zhyprbola-dock-button',
+            child: icon,
+            can_focus: true,
+            reactive: true,
+            track_hover: true,
+            accessible_name: 'Choose theme',
+        });
+
+        const side = {
+            [DockPosition.LEFT]: St.Side.RIGHT,
+            [DockPosition.RIGHT]: St.Side.LEFT,
+            [DockPosition.TOP]: St.Side.BOTTOM,
+            [DockPosition.BOTTOM]: St.Side.TOP,
+        }[DOCK_CONFIG.position];
+        this._themeMenu = new PopupMenu.PopupMenu(button, 0.5, side);
+        this._themeMenu.actor.add_style_class_name('zhyprbola-theme-menu');
+        Main.uiGroup.add_child(this._themeMenu.actor);
+        this._menuManager = new PopupMenu.PopupMenuManager(button);
+        this._menuManager.addMenu(this._themeMenu);
+        this._themeItems = new Map();
+
+        for (const theme of THEMES) {
+            const item = new PopupMenu.PopupMenuItem(theme.label);
+            item.connect('activate', () => this._setTheme(theme.name));
+            this._themeMenu.addMenuItem(item);
+            this._themeItems.set(theme.name, item);
+        }
+
+        button.connect('clicked', () => this._themeMenu.toggle());
+        return button;
+    }
+
+    _readTheme() {
+        try {
+            const [, contents] = GLib.file_get_contents(this._themePath);
+            const name = new TextDecoder().decode(contents).trim();
+            return THEMES.some(theme => theme.name === name) ? name : 'current';
+        } catch (_) {
+            return 'current';
+        }
+    }
+
+    _setTheme(name) {
+        if (!THEMES.some(theme => theme.name === name))
+            return;
+
+        try {
+            GLib.mkdir_with_parents(GLib.path_get_dirname(this._themePath), 0o700);
+            GLib.file_set_contents(this._themePath, `${name}\n`);
+            this._themeName = name;
+            this._applyTheme();
+        } catch (error) {
+            logError(error, 'Failed to save Zhyprbola theme');
+        }
+    }
+
+    _applyTheme() {
+        if (this._themeName === 'white') {
+            this._dock.add_style_class_name('zhyprbola-dock-white');
+            this._themeMenu.actor.add_style_class_name('zhyprbola-theme-menu-white');
+        } else {
+            this._dock.remove_style_class_name('zhyprbola-dock-white');
+            this._themeMenu.actor.remove_style_class_name('zhyprbola-theme-menu-white');
+        }
+
+        for (const [name, item] of this._themeItems)
+            item.setOrnament(name === this._themeName
+                ? PopupMenu.Ornament.CHECK
+                : PopupMenu.Ornament.NONE);
     }
 
     _createPanelButton({iconName, accessibleName, panelName}) {

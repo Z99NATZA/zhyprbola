@@ -25,20 +25,16 @@ Item {
         width: 360
         height: 280
 
-        property color textColor: "#FFFFFF"
+        property color textColor: Theme.text
         property color dimColor: Qt.alpha(textColor, 0.72)
 
-        property color glassColor:
-            Qt.rgba(0.22, 0.17, 0.25, 0.84)
+        property color glassColor: Theme.cardSurface
 
-        property color borderColor:
-            Qt.rgba(1, 1, 1, 0.24)
+        property color borderColor: Theme.cardBorder
 
-        property color accentColor:
-            "#F3A5CD"
+        property color accentColor: Theme.accent
 
-        property color checkedTextColor:
-            "#F0B4D1"
+        property color checkedTextColor: Theme.checkedText
 
         property real cornerRadius: 26
         property real rimStrength: 0.20
@@ -295,7 +291,7 @@ Item {
 
                 text: "+"
 
-                color: "#674b68"
+                color: Theme.light ? Theme.accentText : "#674b68"
 
                 font {
                     family: card.family
@@ -429,7 +425,7 @@ Item {
 
                 text: "✓"
 
-                color: "#684a67"
+                color: Theme.light ? Theme.accentText : "#684a67"
 
                 font {
                     family: card.family

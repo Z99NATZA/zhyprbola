@@ -37,17 +37,13 @@ Item {
         // Same values as ClockWeatherCard
         // --------------------------------------------------
 
-        property color textColor:
-            "#FFFFFF"
+        property color textColor: Theme.text
 
-        property color glassColor:
-            Qt.rgba(0.22, 0.17, 0.25, 0.84)
+        property color glassColor: Theme.cardSurface
 
-        property color borderColor:
-            Qt.rgba(1, 1, 1, 0.24)
+        property color borderColor: Theme.cardBorder
 
-        property color accentColor:
-            "#F3A5CD"
+        property color accentColor: Theme.accent
 
         property color dimColor:
             Qt.alpha(textColor, 0.75)

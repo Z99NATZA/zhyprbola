@@ -143,6 +143,12 @@ QString bluetoothInfoValue(const QString &info, const QString &key) {
 }
 
 Backend::Backend(QObject *parent) : QObject(parent) {
+    connect(&m_themeWatcher, &QFileSystemWatcher::directoryChanged,
+        this, &Backend::refreshTheme);
+    connect(&m_themeWatcher, &QFileSystemWatcher::fileChanged,
+        this, &Backend::refreshTheme);
+    refreshTheme();
+
     m_location = qEnvironmentVariable("ZPOLA_LOCATION", "Bangkok");
     m_userName = qEnvironmentVariable("USER", "User");
 
@@ -175,6 +181,29 @@ Backend::Backend(QObject *parent) : QObject(parent) {
         && QFileInfo::exists(config)) {
         connect(&m_cava, &QProcess::readyReadStandardOutput, this, &Backend::readSpectrum);
         m_cava.start(QStringLiteral("cava"), {QStringLiteral("-p"), config});
+    }
+}
+
+void Backend::refreshTheme() {
+    const QString configRoot = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
+    QDir().mkpath(configRoot);
+    const QString themeDir = QDir(configRoot).filePath(QStringLiteral("zhyprbola"));
+    const QString themeFile = QDir(themeDir).filePath(QStringLiteral("theme"));
+    for (const QString &path : {configRoot, themeDir, themeFile}) {
+        if (QFileInfo::exists(path) && !m_themeWatcher.files().contains(path)
+            && !m_themeWatcher.directories().contains(path))
+            m_themeWatcher.addPath(path);
+    }
+
+    QFile file(themeFile);
+    QString name = QStringLiteral("current");
+    if (file.open(QIODevice::ReadOnly)) {
+        const QString value = QString::fromUtf8(file.readAll()).trimmed();
+        if (value == QLatin1String("white")) name = value;
+    }
+    if (name != m_themeName) {
+        m_themeName = name;
+        emit themeChanged();
     }
 }
 

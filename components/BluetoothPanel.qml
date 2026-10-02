@@ -7,12 +7,12 @@ Item {
     property bool standalone: false
     property string activeTab: "devices"
     readonly property string family: Qt.application.font.family
-    readonly property color glassColor: Qt.rgba(0.08, 0.06, 0.11, 0.92)
-    readonly property color borderColor: Qt.rgba(1, 1, 1, 0.18)
-    readonly property color textColor: "#FFFFFF"
+    readonly property color glassColor: Theme.panelSurface
+    readonly property color borderColor: Theme.panelBorder
+    readonly property color textColor: Theme.text
     readonly property color dimTextColor: Qt.alpha(textColor, 0.68)
-    readonly property color accentColor: "#F3A5CD"
-    readonly property color accentTextColor: "#6D4F6B"
+    readonly property color accentColor: Theme.accent
+    readonly property color accentTextColor: Theme.accentText
 
     signal closeRequested()
 
@@ -127,9 +127,9 @@ Item {
                 width: parent.width
                 height: 138
                 radius: 14
-                color: Qt.rgba(1, 1, 1, 0.075)
+                color: Theme.control
                 border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.10)
+                border.color: Theme.controlBorder
 
                 BluetoothOrb {
                     id: bluetoothOrb
@@ -357,12 +357,12 @@ Item {
         height: 50
         radius: 9
         color: connected
-            ? Qt.rgba(0.95, 0.65, 0.80, 0.18)
-            : (rowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.105) : Qt.rgba(1, 1, 1, 0.06))
+            ? Theme.selected
+            : (rowMouse.containsMouse ? Theme.controlHover : Theme.control)
         border.width: 1
         border.color: connected
-            ? Qt.rgba(0.95, 0.65, 0.80, 0.34)
-            : Qt.rgba(1, 1, 1, 0.08)
+            ? Theme.selectedBorder
+            : Theme.control
 
         Behavior on color {
             ColorAnimation { duration: 120 }
@@ -459,9 +459,9 @@ Item {
         width: parent.width
         height: 40
         radius: 9
-        color: Qt.rgba(1, 1, 1, 0.06)
+        color: Theme.control
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.08)
+        border.color: Theme.control
 
         Text {
             anchors {
@@ -505,9 +505,9 @@ Item {
         width: pillText.width + 18
         height: 22
         radius: 11
-        color: active ? Qt.rgba(0.95, 0.65, 0.80, 0.18) : Qt.rgba(1, 1, 1, 0.08)
+        color: active ? Theme.selected : Theme.control
         border.width: 1
-        border.color: active ? Qt.rgba(0.95, 0.65, 0.80, 0.26) : Qt.rgba(1, 1, 1, 0.08)
+        border.color: active ? Theme.selectedBorder : Theme.control
 
         Text {
             id: pillText
@@ -536,9 +536,9 @@ Item {
             radius: 9
             color: button.active
                 ? panelRoot.accentColor
-                : (buttonMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.13) : Qt.rgba(1, 1, 1, 0.075))
+                : (buttonMouse.containsMouse ? Theme.controlHover : Theme.control)
             border.width: button.active ? 0 : 1
-            border.color: Qt.rgba(1, 1, 1, 0.10)
+            border.color: Theme.controlBorder
         }
 
         Text {
@@ -573,10 +573,10 @@ Item {
             anchors.fill: parent
             radius: 9
             color: buttonMouse.containsMouse
-                ? Qt.rgba(1, 1, 1, 0.14)
-                : Qt.rgba(1, 1, 1, 0.08)
+                ? Theme.controlHover
+                : Theme.control
             border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.10)
+            border.color: Theme.controlBorder
 
             Behavior on color {
                 ColorAnimation { duration: 120 }
@@ -616,10 +616,10 @@ Item {
             anchors.fill: parent
             radius: 8
             color: buttonMouse.containsMouse
-                ? Qt.rgba(1, 1, 1, 0.14)
-                : Qt.rgba(1, 1, 1, 0.08)
+                ? Theme.controlHover
+                : Theme.control
             border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.10)
+            border.color: Theme.controlBorder
         }
 
         Text {
@@ -656,13 +656,15 @@ Item {
             radius: width / 2
             color: control.checked
                 ? panelRoot.accentColor
-                : Qt.rgba(1, 1, 1, powerMouse.containsMouse ? 0.16 : 0.10)
+                : (powerMouse.containsMouse ? Theme.controlHover : Theme.control)
             border.width: control.checked ? 0 : 1
-            border.color: Qt.rgba(1, 1, 1, 0.12)
+            border.color: Theme.controlBorder
         }
 
         Canvas {
             anchors.centerIn: parent
+            readonly property color themePaintColor: Theme.text
+            onThemePaintColorChanged: requestPaint()
             width: 22
             height: 22
             onPaint: {
@@ -692,6 +694,8 @@ Item {
 
     component DeviceGlyph: Canvas {
         id: glyph
+        readonly property color themePaintColor: Theme.text
+        onThemePaintColorChanged: requestPaint()
 
         property bool connected: false
         property string iconName: ""
@@ -735,12 +739,12 @@ Item {
             anchors.fill: parent
             radius: width / 2
             color: orb.connected
-                ? Qt.rgba(0.95, 0.65, 0.80, 0.16)
-                : Qt.rgba(1, 1, 1, 0.08)
+                ? Theme.selected
+                : Theme.control
             border.width: 1
             border.color: orb.connected
-                ? Qt.rgba(0.95, 0.65, 0.80, 0.36)
-                : Qt.rgba(1, 1, 1, 0.12)
+                ? Theme.selectedBorder
+                : Theme.controlBorder
         }
 
         DeviceGlyph {

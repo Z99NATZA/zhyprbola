@@ -37,11 +37,9 @@ Item {
         // Same glass style as ClockWeatherCard
         // --------------------------------------------------
 
-        property color glassColor:
-            Qt.rgba(0.22, 0.17, 0.25, 0.84)
+        property color glassColor: Theme.cardSurface
 
-        property color borderColor:
-            Qt.rgba(1, 1, 1, 0.24)
+        property color borderColor: Theme.cardBorder
 
         property real cornerRadius:
             22
@@ -390,7 +388,7 @@ Item {
                     4
 
                 color:
-                    "#F6ADB2"
+                    Theme.light ? "#A4CFE1" : "#F6ADB2"
             }
 
             // folder body
@@ -414,7 +412,7 @@ Item {
                             0.0
 
                         color:
-                            "#FFC0C0"
+                            Theme.light ? "#C2E1EC" : "#FFC0C0"
                     }
 
                     GradientStop {
@@ -422,7 +420,7 @@ Item {
                             1.0
 
                         color:
-                            "#EF858C"
+                            Theme.light ? "#6BA5C3" : "#EF858C"
                     }
                 }
             }

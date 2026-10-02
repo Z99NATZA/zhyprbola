@@ -24,3 +24,39 @@
     color: #f3a5cd;
     icon-size: 20px;
 }
+
+.zhyprbola-dock-white {
+    background-color: rgba(255, 255, 255, 0.94);
+    border-color: rgba(77, 122, 158, 0.23);
+}
+
+.zhyprbola-dock-white .zhyprbola-dock-button {
+    background-color: rgba(77, 122, 158, 0.09);
+    border-color: rgba(77, 122, 158, 0.15);
+    color: #263b4c;
+}
+
+.zhyprbola-dock-white .zhyprbola-dock-button:hover,
+.zhyprbola-dock-white .zhyprbola-dock-button:active {
+    background-color: rgba(70, 123, 157, 0.18);
+    border-color: rgba(70, 123, 157, 0.36);
+}
+
+.zhyprbola-dock-white .zhyprbola-dock-icon {
+    color: #467b9d;
+}
+
+.zhyprbola-theme-menu-white .popup-menu-content {
+    background-color: rgba(255, 255, 255, 0.97);
+    border: 1px solid rgba(77, 122, 158, 0.23);
+    color: #263b4c;
+}
+
+.zhyprbola-theme-menu-white .popup-menu-item {
+    color: #263b4c;
+}
+
+.zhyprbola-theme-menu-white .popup-menu-item:focus,
+.zhyprbola-theme-menu-white .popup-menu-item:hover {
+    background-color: rgba(70, 123, 157, 0.18);
+}
