@@ -34,21 +34,16 @@ Item {
         height: 72
 
         // --------------------------------------------------
-        // Same glass style as ClockWeatherCard
+        // Flat surface
         // --------------------------------------------------
 
-        property color glassColor: Theme.cardSurface
+        property color surfaceColor: Theme.cardSurface
 
-        property color borderColor: Theme.cardBorder
 
         property real cornerRadius:
             22
 
-        property real rimStrength:
-            0.20
 
-        property int rimSize:
-            4
 
         // ==================================================
         // Intro animation
@@ -108,203 +103,13 @@ Item {
         }
 
         // ==================================================
-        // Glass body
+        // Flat surface
         // ==================================================
 
         Rectangle {
             anchors.fill: parent
-
-            radius:
-                dock.cornerRadius
-
-            color:
-                dock.glassColor
-
-            border.width:
-                1
-
-            border.color:
-                dock.borderColor
-
-            // --------------------------------------------------
-            // Soft glass gradient
-            // --------------------------------------------------
-
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: 1
-
-                radius:
-                    parent.radius - 1
-
-                gradient: Gradient {
-                    GradientStop {
-                        position: 0.0
-
-                        color:
-                            Qt.rgba(
-                                1,
-                                1,
-                                1,
-                                0.07
-                            )
-                    }
-
-                    GradientStop {
-                        position: 0.50
-
-                        color:
-                            Qt.rgba(
-                                1,
-                                1,
-                                1,
-                                0.01
-                            )
-                    }
-
-                    GradientStop {
-                        position: 1.0
-
-                        color:
-                            Qt.rgba(
-                                1,
-                                1,
-                                1,
-                                0.03
-                            )
-                    }
-                }
-            }
-
-            // --------------------------------------------------
-            // Inner rim
-            // --------------------------------------------------
-
-            Repeater {
-                model:
-                    dock.rimSize
-
-                delegate: Rectangle {
-                    required property int index
-
-                    anchors.fill:
-                        parent
-
-                    anchors.margins:
-                        1 + index
-
-                    radius:
-                        Math.max(
-                            0,
-                            dock.cornerRadius
-                                - 1
-                                - index
-                        )
-
-                    color:
-                        "transparent"
-
-                    border.width:
-                        1
-
-                    border.color:
-                        Qt.rgba(
-                            1,
-                            1,
-                            1,
-                            dock.rimStrength
-                                * Math.pow(
-                                    1
-                                        - index
-                                        / dock.rimSize,
-                                    2
-                                )
-                        )
-                }
-            }
-
-            // --------------------------------------------------
-            // Moving sheen
-            // --------------------------------------------------
-
-            Rectangle {
-                id: sheen
-
-                property real p:
-                    0
-
-                anchors.fill:
-                    parent
-
-                anchors.margins:
-                    1
-
-                radius:
-                    parent.radius - 1
-
-                gradient: Gradient {
-                    orientation:
-                        Gradient.Horizontal
-
-                    GradientStop {
-                        position: 0.0
-
-                        color:
-                            "transparent"
-                    }
-
-                    GradientStop {
-                        position:
-                            Math.max(
-                                0.01,
-                                Math.min(
-                                    0.99,
-                                    sheen.p
-                                )
-                            )
-
-                        color:
-                            Qt.rgba(
-                                1,
-                                1,
-                                1,
-                                0.12
-                                    * Math.sin(
-                                        Math.PI
-                                            * sheen.p
-                                    )
-                            )
-                    }
-
-                    GradientStop {
-                        position: 1.0
-
-                        color:
-                            "transparent"
-                    }
-                }
-
-                SequentialAnimation on p {
-                    loops:
-                        Animation.Infinite
-
-                    PauseAnimation {
-                        duration:
-                            5000
-                    }
-
-                    NumberAnimation {
-                        from: 0
-                        to: 1
-
-                        duration:
-                            1800
-
-                        easing.type:
-                            Easing.InOutSine
-                    }
-                }
-            }
+            radius: dock.cornerRadius
+            color: dock.surfaceColor
         }
 
         // ==================================================
@@ -388,7 +193,7 @@ Item {
                     4
 
                 color:
-                    Theme.sky ? "#A9D5FA" : (Theme.light ? "#A4CFE1" : "#F6ADB2")
+                    Theme.accent
             }
 
             // folder body
@@ -406,47 +211,8 @@ Item {
                 radius:
                     7
 
-                gradient: Gradient {
-                    GradientStop {
-                        position:
-                            0.0
-
-                        color:
-                            Theme.sky ? "#D6EDFF" : (Theme.light ? "#C2E1EC" : "#FFC0C0")
-                    }
-
-                    GradientStop {
-                        position:
-                            1.0
-
-                        color:
-                            Theme.sky ? "#72B6F2" : (Theme.light ? "#6BA5C3" : "#EF858C")
-                    }
-                }
-            }
-
-            // subtle highlight
-
-            Rectangle {
-                x: 5
-                y: 10
-
-                width:
-                    30
-
-                height:
-                    2
-
-                radius:
-                    1
-
                 color:
-                    Qt.rgba(
-                        1,
-                        1,
-                        1,
-                        0.14
-                    )
+                    Theme.accent
             }
         }
 
@@ -521,16 +287,6 @@ Item {
                             0.82
                         )
 
-                    border.width:
-                        1
-
-                    border.color:
-                        Qt.rgba(
-                            1,
-                            1,
-                            1,
-                            0.14
-                        )
                 }
             }
         }

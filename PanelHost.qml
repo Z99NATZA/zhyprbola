@@ -19,7 +19,7 @@ Window {
     maximumHeight: panelHeight
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     color: "transparent"
-    title: "Zhyprbola Panel"
+    title: panelName === "wifi" ? "Zhyprbola Wi-Fi" : "Zhyprbola Bluetooth"
 
     Component.onCompleted: {
         if (panelName === "wifi") {

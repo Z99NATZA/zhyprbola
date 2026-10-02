@@ -1,6 +1,7 @@
 .zhyprbola-dock {
-    background-color: rgba(20, 15, 28, 0.78);
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    background-color: #28202d;
+    border: 0;
+    box-shadow: none;
     border-radius: 18px;
     padding: 9px;
 }
@@ -9,46 +10,57 @@
     width: 42px;
     height: 42px;
     border-radius: 13px;
-    background-color: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.09);
+    background-color: #875a82;
+    border: 0;
     color: #ffffff;
 }
 
 .zhyprbola-dock-button:hover,
 .zhyprbola-dock-button:active {
-    background-color: rgba(243, 165, 205, 0.24);
-    border-color: rgba(243, 165, 205, 0.42);
+    background-color: #996c94;
 }
 
 .zhyprbola-dock-icon {
-    color: #f3a5cd;
+    color: #ffffff;
     icon-size: 20px;
 }
 
+.zhyprbola-theme-menu .popup-menu-content {
+    background-color: #28202d;
+    border: 0;
+    box-shadow: none;
+    color: #ffffff;
+}
+
+.zhyprbola-theme-menu .popup-menu-item {
+    color: #ffffff;
+}
+
+.zhyprbola-theme-menu .popup-menu-item:focus,
+.zhyprbola-theme-menu .popup-menu-item:hover {
+    background-color: #3a2e40;
+}
+
 .zhyprbola-dock-white {
-    background-color: rgba(255, 255, 255, 0.94);
-    border-color: rgba(77, 122, 158, 0.23);
+    background-color: #fafcfd;
 }
 
 .zhyprbola-dock-white .zhyprbola-dock-button {
-    background-color: rgba(77, 122, 158, 0.09);
-    border-color: rgba(77, 122, 158, 0.15);
-    color: #263b4c;
+    background-color: #467b9d;
+    color: #ffffff;
 }
 
 .zhyprbola-dock-white .zhyprbola-dock-button:hover,
 .zhyprbola-dock-white .zhyprbola-dock-button:active {
-    background-color: rgba(70, 123, 157, 0.18);
-    border-color: rgba(70, 123, 157, 0.36);
+    background-color: #3c6d8c;
 }
 
 .zhyprbola-dock-white .zhyprbola-dock-icon {
-    color: #467b9d;
+    color: #ffffff;
 }
 
 .zhyprbola-theme-menu-white .popup-menu-content {
-    background-color: rgba(255, 255, 255, 0.97);
-    border: 1px solid rgba(77, 122, 158, 0.23);
+    background-color: #fafcfd;
     color: #263b4c;
 }
 
@@ -58,33 +70,29 @@
 
 .zhyprbola-theme-menu-white .popup-menu-item:focus,
 .zhyprbola-theme-menu-white .popup-menu-item:hover {
-    background-color: rgba(70, 123, 157, 0.18);
+    background-color: #eaf1f5;
 }
 
 .zhyprbola-dock-white-sky {
     background-color: #fcfdff;
-    border-color: #b9d8f3;
 }
 
 .zhyprbola-dock-white-sky .zhyprbola-dock-button {
-    background-color: #eaf4ff;
-    border-color: #c7dff6;
-    color: #174269;
+    background-color: #1e73e7;
+    color: #ffffff;
 }
 
 .zhyprbola-dock-white-sky .zhyprbola-dock-button:hover,
 .zhyprbola-dock-white-sky .zhyprbola-dock-button:active {
-    background-color: #dceeff;
-    border-color: #a9d0f7;
+    background-color: #1766cb;
 }
 
 .zhyprbola-dock-white-sky .zhyprbola-dock-icon {
-    color: #1e73e7;
+    color: #ffffff;
 }
 
 .zhyprbola-theme-menu-white-sky .popup-menu-content {
     background-color: #fcfdff;
-    border-color: #b9d8f3;
     color: #174269;
 }
 

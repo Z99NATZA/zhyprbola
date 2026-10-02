@@ -7,8 +7,7 @@ Item {
     property bool standalone: false
     property string activeTab: "devices"
     readonly property string family: Qt.application.font.family
-    readonly property color glassColor: Theme.panelSurface
-    readonly property color borderColor: Theme.panelBorder
+    readonly property color surfaceColor: Theme.panelSurface
     readonly property color textColor: Theme.text
     readonly property color dimTextColor: Qt.alpha(textColor, 0.68)
     readonly property color accentColor: Theme.accent
@@ -55,9 +54,7 @@ Item {
         width: panelRoot.standalone ? parent.width : 430
         height: panelRoot.standalone ? parent.height : 540
         radius: 18
-        color: panelRoot.glassColor
-        border.width: 1
-        border.color: panelRoot.borderColor
+        color: panelRoot.surfaceColor
 
         transform: Translate {
             y: panelRoot.opened ? 0 : -10
@@ -66,22 +63,6 @@ Item {
                 NumberAnimation {
                     duration: 160
                     easing.type: Easing.OutCubic
-                }
-            }
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: parent.radius - 1
-            gradient: Gradient {
-                GradientStop {
-                    position: 0
-                    color: Qt.rgba(1, 1, 1, 0.09)
-                }
-                GradientStop {
-                    position: 1
-                    color: Qt.rgba(1, 1, 1, 0.02)
                 }
             }
         }
@@ -127,9 +108,7 @@ Item {
                 width: parent.width
                 height: 138
                 radius: 14
-                color: Theme.control
-                border.width: 1
-                border.color: Theme.controlBorder
+                color: Theme.heroSurface
 
                 BluetoothOrb {
                     id: bluetoothOrb
@@ -157,7 +136,7 @@ Item {
                     Text {
                         width: parent.width
                         text: backend.bluetoothDeviceName
-                        color: panelRoot.textColor
+                        color: Theme.heroText
                         elide: Text.ElideRight
                         font {
                             family: panelRoot.family
@@ -169,7 +148,7 @@ Item {
                     Text {
                         width: parent.width
                         text: backend.bluetoothStatusText
-                        color: panelRoot.dimTextColor
+                        color: Theme.heroMutedText
                         elide: Text.ElideRight
                         font {
                             family: panelRoot.family
@@ -359,10 +338,6 @@ Item {
         color: connected
             ? Theme.selected
             : (rowMouse.containsMouse ? Theme.controlHover : Theme.control)
-        border.width: 1
-        border.color: connected
-            ? Theme.selectedBorder
-            : Theme.control
 
         Behavior on color {
             ColorAnimation { duration: 120 }
@@ -460,8 +435,6 @@ Item {
         height: 40
         radius: 9
         color: Theme.control
-        border.width: 1
-        border.color: Theme.control
 
         Text {
             anchors {
@@ -505,15 +478,13 @@ Item {
         width: pillText.width + 18
         height: 22
         radius: 11
-        color: active ? Theme.selected : Theme.control
-        border.width: 1
-        border.color: active ? Theme.selectedBorder : Theme.control
+        color: active ? Theme.heroControlHover : Theme.heroControl
 
         Text {
             id: pillText
             anchors.centerIn: parent
             text: parent.label
-            color: parent.active ? panelRoot.accentColor : panelRoot.dimTextColor
+            color: parent.active ? Theme.heroText : Theme.heroMutedText
             font {
                 family: panelRoot.family
                 pixelSize: 10
@@ -537,8 +508,6 @@ Item {
             color: button.active
                 ? panelRoot.accentColor
                 : (buttonMouse.containsMouse ? Theme.controlHover : Theme.control)
-            border.width: button.active ? 0 : 1
-            border.color: Theme.controlBorder
         }
 
         Text {
@@ -575,8 +544,6 @@ Item {
             color: buttonMouse.containsMouse
                 ? Theme.controlHover
                 : Theme.control
-            border.width: 1
-            border.color: Theme.controlBorder
 
             Behavior on color {
                 ColorAnimation { duration: 120 }
@@ -618,19 +585,14 @@ Item {
             color: buttonMouse.containsMouse
                 ? Theme.controlHover
                 : Theme.control
-            border.width: 1
-            border.color: Theme.controlBorder
         }
 
-        Text {
+        FlatIcon {
             anchors.centerIn: parent
-            text: button.label
-            color: panelRoot.textColor
-            font {
-                family: panelRoot.family
-                pixelSize: 14
-                weight: Font.DemiBold
-            }
+            width: 16
+            height: 16
+            name: "close"
+            ink: panelRoot.textColor
         }
 
         MouseArea {
@@ -654,33 +616,15 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: width / 2
-            color: control.checked
-                ? panelRoot.accentColor
-                : (powerMouse.containsMouse ? Theme.controlHover : Theme.control)
-            border.width: control.checked ? 0 : 1
-            border.color: Theme.controlBorder
+            color: powerMouse.containsMouse ? Theme.heroControlHover : Theme.heroControl
         }
 
-        Canvas {
+        FlatIcon {
             anchors.centerIn: parent
-            readonly property color themePaintColor: Theme.text
-            onThemePaintColorChanged: requestPaint()
             width: 22
             height: 22
-            onPaint: {
-                var ctx = getContext("2d")
-                ctx.reset()
-                ctx.strokeStyle = control.checked ? panelRoot.accentTextColor : panelRoot.textColor
-                ctx.lineWidth = 2.1
-                ctx.lineCap = "round"
-                ctx.beginPath()
-                ctx.moveTo(11, 3)
-                ctx.lineTo(11, 11)
-                ctx.stroke()
-                ctx.beginPath()
-                ctx.arc(11, 12, 7, -Math.PI * 0.72, Math.PI * 1.72)
-                ctx.stroke()
-            }
+            name: "power"
+            ink: Theme.heroText
         }
 
         MouseArea {
@@ -692,38 +636,14 @@ Item {
         }
     }
 
-    component DeviceGlyph: Canvas {
-        id: glyph
-        readonly property color themePaintColor: Theme.text
-        onThemePaintColorChanged: requestPaint()
-
+    component DeviceGlyph: FlatIcon {
         property bool connected: false
         property string iconName: ""
 
         width: 24
         height: 24
-
-        onConnectedChanged: requestPaint()
-
-        onPaint: {
-            var ctx = getContext("2d")
-            ctx.reset()
-            ctx.strokeStyle = connected ? panelRoot.accentColor : panelRoot.textColor
-            ctx.fillStyle = ctx.strokeStyle
-            ctx.globalAlpha = connected ? 1 : 0.82
-            ctx.lineWidth = 1.8
-            ctx.lineCap = "round"
-            ctx.lineJoin = "round"
-            ctx.scale(24 / 18, 24 / 18)
-            ctx.beginPath()
-            ctx.moveTo(7, 1)
-            ctx.lineTo(7, 17)
-            ctx.lineTo(12, 12)
-            ctx.lineTo(4, 9)
-            ctx.lineTo(12, 6)
-            ctx.lineTo(7, 1)
-            ctx.stroke()
-        }
+        name: "bluetooth"
+        ink: connected ? panelRoot.accentColor : panelRoot.textColor
     }
 
     component BluetoothOrb: Item {
@@ -739,19 +659,18 @@ Item {
             anchors.fill: parent
             radius: width / 2
             color: orb.connected
-                ? Theme.selected
-                : Theme.control
-            border.width: 1
-            border.color: orb.connected
-                ? Theme.selectedBorder
-                : Theme.controlBorder
+                ? Theme.heroControlHover
+                : Theme.heroControl
         }
 
         DeviceGlyph {
-            anchors.centerIn: parent
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            anchors.topMargin: 12
             width: 36
             height: 36
             connected: orb.powered
+            ink: Theme.heroText
         }
 
         Text {
@@ -761,7 +680,7 @@ Item {
                 bottomMargin: 17
             }
             text: orb.connected ? "Linked" : (orb.powered ? "On" : "Off")
-            color: panelRoot.dimTextColor
+            color: Theme.heroMutedText
             font {
                 family: panelRoot.family
                 pixelSize: 10

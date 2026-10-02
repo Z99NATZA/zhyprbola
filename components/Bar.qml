@@ -50,9 +50,8 @@ Item {
         // Style — same family as ClockWeather
         // --------------------------------------------------
 
-        property color glassColor: Theme.barSurface
+        property color surfaceColor: Theme.barSurface
 
-        property color borderColor: Theme.barBorder
 
         property color textColor: Theme.text
 
@@ -64,11 +63,7 @@ Item {
         property real cornerRadius:
             14
 
-        property real rimStrength:
-            0.20
 
-        property int rimSize:
-            4
 
         readonly property string family:
             Qt.application.font.family
@@ -131,205 +126,13 @@ Item {
         }
 
         // ==================================================
-        // Glass body
+        // Flat surface
         // ==================================================
 
         Rectangle {
             anchors.fill: parent
-
-            radius:
-                topBar.cornerRadius
-
-            color:
-                topBar.glassColor
-
-            border.width:
-                1
-
-            border.color:
-                topBar.borderColor
-
-            // --------------------------------------------------
-            // Soft glass gradient
-            // --------------------------------------------------
-
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: 1
-
-                radius:
-                    parent.radius - 1
-
-                gradient: Gradient {
-                    GradientStop {
-                        position: 0.0
-
-                        color:
-                            Qt.rgba(
-                                1,
-                                1,
-                                1,
-                                0.07
-                            )
-                    }
-
-                    GradientStop {
-                        position: 0.50
-
-                        color:
-                            Qt.rgba(
-                                1,
-                                1,
-                                1,
-                                0.01
-                            )
-                    }
-
-                    GradientStop {
-                        position: 1.0
-
-                        color:
-                            Qt.rgba(
-                                1,
-                                1,
-                                1,
-                                0.03
-                            )
-                    }
-                }
-            }
-
-            // --------------------------------------------------
-            // Inner rim
-            // --------------------------------------------------
-
-            Repeater {
-                model:
-                    topBar.rimSize
-
-                delegate: Rectangle {
-                    required property int index
-
-                    anchors.fill:
-                        parent
-
-                    anchors.margins:
-                        1 + index
-
-                    radius:
-                        Math.max(
-                            0,
-                            topBar.cornerRadius
-                                - 1
-                                - index
-                        )
-
-                    color:
-                        "transparent"
-
-                    border.width:
-                        1
-
-                    border.color:
-                        Qt.rgba(
-                            1,
-                            1,
-                            1,
-                            topBar.rimStrength
-                                * Math.pow(
-                                    1
-                                        - index
-                                        / topBar.rimSize,
-                                    2
-                                )
-                        )
-                }
-            }
-
-            // --------------------------------------------------
-            // Moving sheen
-            // --------------------------------------------------
-
-            Rectangle {
-                id: sheen
-
-                property real p:
-                    0
-
-                anchors.fill:
-                    parent
-
-                anchors.margins:
-                    1
-
-                radius:
-                    parent.radius - 1
-
-                gradient: Gradient {
-                    orientation:
-                        Gradient.Horizontal
-
-                    GradientStop {
-                        position:
-                            0.0
-
-                        color:
-                            "transparent"
-                    }
-
-                    GradientStop {
-                        position:
-                            Math.max(
-                                0.01,
-                                Math.min(
-                                    0.99,
-                                    sheen.p
-                                )
-                            )
-
-                        color:
-                            Qt.rgba(
-                                1,
-                                1,
-                                1,
-                                0.12
-                                    * Math.sin(
-                                        Math.PI
-                                            * sheen.p
-                                    )
-                            )
-                    }
-
-                    GradientStop {
-                        position:
-                            1.0
-
-                        color:
-                            "transparent"
-                    }
-                }
-
-                SequentialAnimation on p {
-                    loops:
-                        Animation.Infinite
-
-                    PauseAnimation {
-                        duration:
-                            5000
-                    }
-
-                    NumberAnimation {
-                        from: 0
-                        to: 1
-
-                        duration:
-                            1800
-
-                        easing.type:
-                            Easing.InOutSine
-                    }
-                }
-            }
+            radius: topBar.cornerRadius
+            color: topBar.surfaceColor
         }
 
         // ==================================================
@@ -386,17 +189,6 @@ Item {
                         color:
                             topBar.accentColor
 
-                        border.width:
-                            1
-
-                        border.color:
-                            Qt.rgba(
-                                1,
-                                1,
-                                1,
-                                0.18
-                            )
-
                         Canvas {
                             anchors.centerIn:
                                 parent
@@ -407,7 +199,7 @@ Item {
                             height:
                                 12
 
-                            readonly property color themePaintColor: Theme.light ? Theme.accentText : "#6E506C"
+                            readonly property color themePaintColor: Theme.accentText
                             onThemePaintColorChanged: requestPaint()
 
                             onPaint: {
@@ -547,9 +339,7 @@ Item {
             width: rightRow.width + 24
             height: 34
             radius: 11
-            color: Qt.rgba(0.02, 0.015, 0.04, 0.28)
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.10)
+            color: Theme.control
         }
 
         Row {
@@ -736,27 +526,7 @@ Item {
             color:
                 workspace.active
                     ? topBar.accentColor
-                    : Qt.rgba(
-                        1,
-                        1,
-                        1,
-                        workspaceHover.hovered
-                            ? 0.13
-                            : 0.08
-                    )
-
-            border.width:
-                workspace.active
-                    ? 0
-                    : 1
-
-            border.color:
-                Qt.rgba(
-                    1,
-                    1,
-                    1,
-                    0.08
-                )
+                    : (workspaceHover.hovered ? Theme.controlHover : Theme.control)
 
             Behavior on color {
                 ColorAnimation {
@@ -855,17 +625,8 @@ Item {
 
             color:
                 statusIcon.active
-                    ? (Theme.light
-                        ? Qt.rgba(0.30, 0.53, 0.66, statusHover.hovered ? 0.26 : 0.16)
-                        : Qt.rgba(0.95, 0.65, 0.80, statusHover.hovered ? 0.26 : 0.16))
-                    : Qt.rgba(
-                        1,
-                        1,
-                        1,
-                        statusHover.hovered
-                            ? 0.12
-                            : 0.0
-                    )
+                    ? Theme.selected
+                    : (statusHover.hovered ? Theme.controlHover : Theme.control)
 
             Behavior on color {
                 ColorAnimation {
@@ -924,12 +685,6 @@ Item {
 
                 color:
                     Theme.panelSurface
-
-                border.width:
-                    1
-
-                border.color:
-                    Theme.panelBorder
             }
 
             Column {
@@ -1043,23 +798,12 @@ Item {
                 3
 
             color:
-                Qt.rgba(
-                    1,
-                    1,
-                    1,
-                    0.12
-                )
+                Theme.control
 
             border.width:
                 1
 
-            border.color:
-                Qt.rgba(
-                    1,
-                    1,
-                    1,
-                    0.75
-                )
+            border.color: Theme.text
 
             Rectangle {
                 x: 2

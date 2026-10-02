@@ -7,8 +7,7 @@ Item {
     property bool standalone: false
     property string activeTab: "networks"
     readonly property string family: Qt.application.font.family
-    readonly property color glassColor: Theme.panelSurface
-    readonly property color borderColor: Theme.panelBorder
+    readonly property color surfaceColor: Theme.panelSurface
     readonly property color textColor: Theme.text
     readonly property color dimTextColor: Qt.alpha(textColor, 0.68)
     readonly property color accentColor: Theme.accent
@@ -55,9 +54,7 @@ Item {
         width: panelRoot.standalone ? parent.width : 430
         height: panelRoot.standalone ? parent.height : 560
         radius: 18
-        color: panelRoot.glassColor
-        border.width: 1
-        border.color: panelRoot.borderColor
+        color: panelRoot.surfaceColor
 
         transform: Translate {
             y: panelRoot.opened ? 0 : -10
@@ -66,22 +63,6 @@ Item {
                 NumberAnimation {
                     duration: 160
                     easing.type: Easing.OutCubic
-                }
-            }
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: parent.radius - 1
-            gradient: Gradient {
-                GradientStop {
-                    position: 0
-                    color: Qt.rgba(1, 1, 1, 0.09)
-                }
-                GradientStop {
-                    position: 1
-                    color: Qt.rgba(1, 1, 1, 0.02)
                 }
             }
         }
@@ -129,9 +110,7 @@ Item {
                 width: parent.width
                 height: 148
                 radius: 14
-                color: Theme.control
-                border.width: 1
-                border.color: Theme.controlBorder
+                color: Theme.heroSurface
 
                 SignalOrb {
                     id: signalOrb
@@ -160,7 +139,7 @@ Item {
                     Text {
                         width: parent.width
                         text: backend.wifiSsid
-                        color: panelRoot.textColor
+                        color: Theme.heroText
                         elide: Text.ElideRight
                         font {
                             family: panelRoot.family
@@ -172,7 +151,7 @@ Item {
                     Text {
                         width: parent.width
                         text: backend.wifiStatusText
-                        color: panelRoot.dimTextColor
+                        color: Theme.heroMutedText
                         elide: Text.ElideRight
                         font {
                             family: panelRoot.family
@@ -360,10 +339,6 @@ Item {
         color: active
             ? Theme.selected
             : (rowMouse.containsMouse ? Theme.controlHover : Theme.control)
-        border.width: 1
-        border.color: active
-            ? Theme.selectedBorder
-            : Theme.control
 
         Behavior on color {
             ColorAnimation { duration: 120 }
@@ -457,8 +432,6 @@ Item {
         height: 40
         radius: 9
         color: Theme.control
-        border.width: 1
-        border.color: Theme.control
 
         Text {
             anchors {
@@ -502,15 +475,13 @@ Item {
         width: pillText.width + 18
         height: 22
         radius: 11
-        color: active ? Theme.selected : Theme.control
-        border.width: 1
-        border.color: active ? Theme.selectedBorder : Theme.control
+        color: active ? Theme.heroControlHover : Theme.heroControl
 
         Text {
             id: pillText
             anchors.centerIn: parent
             text: parent.label
-            color: parent.active ? panelRoot.accentColor : panelRoot.dimTextColor
+            color: parent.active ? Theme.heroText : Theme.heroMutedText
             font {
                 family: panelRoot.family
                 pixelSize: 10
@@ -534,8 +505,6 @@ Item {
             color: button.active
                 ? panelRoot.accentColor
                 : (buttonMouse.containsMouse ? Theme.controlHover : Theme.control)
-            border.width: button.active ? 0 : 1
-            border.color: Theme.controlBorder
 
             Behavior on color {
                 ColorAnimation { duration: 120 }
@@ -576,8 +545,6 @@ Item {
             color: buttonMouse.containsMouse
                 ? Theme.controlHover
                 : Theme.control
-            border.width: 1
-            border.color: Theme.controlBorder
 
             Behavior on color {
                 ColorAnimation { duration: 120 }
@@ -619,19 +586,14 @@ Item {
             color: buttonMouse.containsMouse
                 ? Theme.controlHover
                 : Theme.control
-            border.width: 1
-            border.color: Theme.controlBorder
         }
 
-        Text {
+        FlatIcon {
             anchors.centerIn: parent
-            text: button.label
-            color: panelRoot.textColor
-            font {
-                family: panelRoot.family
-                pixelSize: 14
-                weight: Font.DemiBold
-            }
+            width: 16
+            height: 16
+            name: "close"
+            ink: panelRoot.textColor
         }
 
         MouseArea {
@@ -655,37 +617,19 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: width / 2
-            color: control.checked
-                ? panelRoot.accentColor
-                : (powerMouse.containsMouse ? Theme.controlHover : Theme.control)
-            border.width: control.checked ? 0 : 1
-            border.color: Theme.controlBorder
+            color: powerMouse.containsMouse ? Theme.heroControlHover : Theme.heroControl
 
             Behavior on color {
                 ColorAnimation { duration: 160 }
             }
         }
 
-        Canvas {
+        FlatIcon {
             anchors.centerIn: parent
-            readonly property color themePaintColor: Theme.text
-            onThemePaintColorChanged: requestPaint()
             width: 22
             height: 22
-            onPaint: {
-                var ctx = getContext("2d")
-                ctx.reset()
-                ctx.strokeStyle = control.checked ? panelRoot.accentTextColor : panelRoot.textColor
-                ctx.lineWidth = 2.1
-                ctx.lineCap = "round"
-                ctx.beginPath()
-                ctx.moveTo(11, 3)
-                ctx.lineTo(11, 11)
-                ctx.stroke()
-                ctx.beginPath()
-                ctx.arc(11, 12, 7, -Math.PI * 0.72, Math.PI * 1.72)
-                ctx.stroke()
-            }
+            name: "power"
+            ink: Theme.heroText
         }
 
         MouseArea {
@@ -697,44 +641,14 @@ Item {
         }
     }
 
-    component WifiGlyphSmall: Canvas {
-        id: glyph
-        readonly property color themePaintColor: Theme.text
-        onThemePaintColorChanged: requestPaint()
-
+    component WifiGlyphSmall: FlatIcon {
         property int strength: 0
         property bool active: false
 
         width: 22
         height: 22
-
-        onStrengthChanged: requestPaint()
-        onActiveChanged: requestPaint()
-
-        onPaint: {
-            var ctx = getContext("2d")
-            ctx.reset()
-            ctx.scale(22 / 18, 22 / 18)
-            ctx.strokeStyle = active ? panelRoot.accentColor : panelRoot.textColor
-            ctx.fillStyle = ctx.strokeStyle
-            ctx.globalAlpha = active ? 1 : 0.82
-            ctx.lineWidth = 1.6
-            ctx.lineCap = "round"
-
-            if (strength >= 55) {
-                ctx.beginPath()
-                ctx.arc(9, 15, 7, Math.PI * 1.20, Math.PI * 1.80, false)
-                ctx.stroke()
-            }
-            if (strength >= 28) {
-                ctx.beginPath()
-                ctx.arc(9, 15, 4.5, Math.PI * 1.22, Math.PI * 1.78, false)
-                ctx.stroke()
-            }
-            ctx.beginPath()
-            ctx.arc(9, 15, 1.2, 0, Math.PI * 2)
-            ctx.fill()
-        }
+        name: "wifi"
+        ink: active ? panelRoot.accentColor : panelRoot.textColor
     }
 
     component SignalOrb: Item {
@@ -747,50 +661,32 @@ Item {
         width: 86
         height: 86
 
-        Canvas {
-            id: orbCanvas
-            readonly property color themePaintColor: Theme.text
-            onThemePaintColorChanged: requestPaint()
-
+        Rectangle {
             anchors.fill: parent
-            onPaint: {
-                var ctx = getContext("2d")
-                var center = width / 2
-                var radius = 35
-                var start = -Math.PI / 2
-                var clamped = Math.max(0, Math.min(100, orb.strength))
-                var end = start + Math.PI * 2 * clamped / 100
+            radius: width / 2
+            color: orb.connected ? Theme.heroControlHover : Theme.heroControl
+        }
 
-                ctx.reset()
-                ctx.lineWidth = 7
-                ctx.lineCap = "round"
-                ctx.strokeStyle = Theme.track
-                ctx.beginPath()
-                ctx.arc(center, center, radius, 0, Math.PI * 2)
-                ctx.stroke()
-
-                ctx.strokeStyle = orb.connected ? panelRoot.accentColor : Theme.mutedText
-                ctx.beginPath()
-                ctx.arc(center, center, radius, start, orb.connected ? end : start + Math.PI * 0.35)
-                ctx.stroke()
-            }
-
-            Connections {
-                target: orb
-                function onStrengthChanged() { orbCanvas.requestPaint() }
-                function onConnectedChanged() { orbCanvas.requestPaint() }
-                function onPoweredChanged() { orbCanvas.requestPaint() }
-            }
+        FlatIcon {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            anchors.topMargin: 17
+            name: "wifi"
+            ink: Theme.heroText
+            width: 30
+            height: 30
         }
 
         Column {
-            anchors.centerIn: parent
-            spacing: -1
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 11
+            spacing: 0
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: orb.connected ? orb.strength + "%" : (orb.powered ? "--" : "Off")
-                color: panelRoot.textColor
+                color: Theme.heroText
                 font {
                     family: panelRoot.family
                     pixelSize: 15
@@ -801,7 +697,7 @@ Item {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Wi-Fi"
-                color: panelRoot.dimTextColor
+                color: Theme.heroMutedText
                 font {
                     family: panelRoot.family
                     pixelSize: 10

@@ -5,8 +5,7 @@ Item {
 
     property bool opened: false
     readonly property string family: Qt.application.font.family
-    readonly property color glassColor: Theme.managerSurface
-    readonly property color borderColor: Theme.panelBorder
+    readonly property color surfaceColor: Theme.managerSurface
     readonly property color textColor: Theme.text
     readonly property color dimTextColor: Qt.alpha(textColor, 0.70)
     readonly property color accentColor: Theme.accent
@@ -57,9 +56,7 @@ Item {
         width: 390
         height: 548
         radius: 18
-        color: manager.glassColor
-        border.width: 1
-        border.color: manager.borderColor
+        color: manager.surfaceColor
 
         transform: Translate {
             id: panelTransform
@@ -70,22 +67,6 @@ Item {
                 NumberAnimation {
                     duration: 160
                     easing.type: Easing.OutCubic
-                }
-            }
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: parent.radius - 1
-            gradient: Gradient {
-                GradientStop {
-                    position: 0
-                    color: Theme.control
-                }
-                GradientStop {
-                    position: 1
-                    color: Qt.rgba(1, 1, 1, 0.02)
                 }
             }
         }
@@ -175,8 +156,6 @@ Item {
             color: buttonMouse.containsMouse
                 ? Theme.controlHover
                 : Theme.control
-            border.width: 1
-            border.color: Theme.controlBorder
 
             Behavior on color {
                 ColorAnimation { duration: 120 }
@@ -218,23 +197,18 @@ Item {
             color: buttonMouse.containsMouse
                 ? Theme.controlHover
                 : Theme.control
-            border.width: 1
-            border.color: Theme.controlBorder
 
             Behavior on color {
                 ColorAnimation { duration: 120 }
             }
         }
 
-        Text {
+        FlatIcon {
             anchors.centerIn: parent
-            text: button.label
-            color: manager.textColor
-            font {
-                family: manager.family
-                pixelSize: 14
-                weight: Font.DemiBold
-            }
+            width: 16
+            height: 16
+            name: "close"
+            ink: manager.textColor
         }
 
         MouseArea {
@@ -259,10 +233,6 @@ Item {
         color: toggleMouse.containsMouse
             ? Theme.controlHover
             : Theme.control
-        border.width: 1
-        border.color: checked
-            ? Theme.selectedBorder
-            : Theme.controlBorder
 
         Component.onCompleted: checked = backend.componentEnabled(key)
 
@@ -274,10 +244,6 @@ Item {
         }
 
         Behavior on color {
-            ColorAnimation { duration: 120 }
-        }
-
-        Behavior on border.color {
             ColorAnimation { duration: 120 }
         }
 
@@ -331,8 +297,6 @@ Item {
             color: toggle.checked
                 ? Theme.selectedStrong
                 : Theme.controlHover
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.16)
 
             Behavior on color {
                 ColorAnimation { duration: 140 }

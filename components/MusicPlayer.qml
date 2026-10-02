@@ -44,15 +44,12 @@ Item {
 
         property color textColor: Theme.text
 
-        property color glassColor: Theme.cardSurface
+        property color surfaceColor: Theme.cardSurface
 
-        property color borderColor: Theme.cardBorder
 
         property color accentColor: Theme.accent
 
         property real cornerRadius: 24
-        property real rimStrength: 0.20
-        property int rimSize: 4
 
         readonly property color dimColor:
             Qt.alpha(textColor, 0.75)
@@ -88,136 +85,13 @@ Item {
         }
 
         // ==================================================
-        // Glass
+        // Flat surface
         // ==================================================
 
         Rectangle {
             anchors.fill: parent
-
             radius: card.cornerRadius
-            color: card.glassColor
-
-            border.width: 1
-            border.color: card.borderColor
-
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: 1
-
-                radius: parent.radius - 1
-
-                gradient: Gradient {
-                    GradientStop {
-                        position: 0
-                        color: Qt.rgba(1, 1, 1, 0.07)
-                    }
-
-                    GradientStop {
-                        position: 0.5
-                        color: Qt.rgba(1, 1, 1, 0.01)
-                    }
-
-                    GradientStop {
-                        position: 1
-                        color: Qt.rgba(1, 1, 1, 0.03)
-                    }
-                }
-            }
-
-            Repeater {
-                model: card.rimSize
-
-                delegate: Rectangle {
-                    required property int index
-
-                    anchors.fill: parent
-                    anchors.margins: index + 1
-
-                    radius:
-                        Math.max(
-                            0,
-                            card.cornerRadius - 1 - index
-                        )
-
-                    color: "transparent"
-
-                    border.width: 1
-
-                    border.color:
-                        Qt.rgba(
-                            1,
-                            1,
-                            1,
-                            card.rimStrength
-                                * Math.pow(
-                                    1 - index / card.rimSize,
-                                    2
-                                )
-                        )
-                }
-            }
-
-            Rectangle {
-                id: sheen
-
-                property real p: 0
-
-                anchors.fill: parent
-                anchors.margins: 1
-
-                radius: parent.radius - 1
-
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-
-                    GradientStop {
-                        position: 0
-                        color: "transparent"
-                    }
-
-                    GradientStop {
-                        position:
-                            Math.max(
-                                0.01,
-                                Math.min(0.99, sheen.p)
-                            )
-
-                        color:
-                            Qt.rgba(
-                                1,
-                                1,
-                                1,
-                                0.12
-                                    * Math.sin(
-                                        Math.PI * sheen.p
-                                    )
-                            )
-                    }
-
-                    GradientStop {
-                        position: 1
-                        color: "transparent"
-                    }
-                }
-
-                SequentialAnimation on p {
-                    loops: Animation.Infinite
-
-                    PauseAnimation {
-                        duration: 5000
-                    }
-
-                    NumberAnimation {
-                        from: 0
-                        to: 1
-
-                        duration: 1800
-
-                        easing.type:
-                            Easing.InOutSine
-                    }
-                }
-            }
+            color: card.surfaceColor
         }
 
         // ==================================================
@@ -240,18 +114,7 @@ Item {
 
             radius: 15
             clip: true
-
-            gradient: Gradient {
-                GradientStop {
-                    position: 0
-                    color: Theme.sky ? "#D7EEFF" : (Theme.light ? "#B8DCEB" : "#efb1d2")
-                }
-
-                GradientStop {
-                    position: 1
-                    color: Theme.sky ? "#70B5F3" : (Theme.light ? "#5B96B8" : "#9377b3")
-                }
-            }
+            color: Theme.accent
 
             Image {
                 anchors.fill: parent
@@ -267,53 +130,13 @@ Item {
                 smooth: true
             }
 
-            Repeater {
-                visible:
-                    card.coverSource === ""
-
-                model: 6
-
-                delegate: Rectangle {
-                    required property int index
-
-                    width: 17 + index * 2
-                    height: width
-
-                    radius: width / 2
-
-                    x: -5 + index * 16
-                    y: 68 - index * 12
-
-                    color: "#FFFFFF"
-                    opacity: 0.18
-                }
-            }
-
-            Text {
+            FlatIcon {
                 anchors.centerIn: parent
-
-                visible:
-                    card.coverSource === ""
-
-                text: "♪"
-
-                color: "#FFFFFF"
-
-                font {
-                    family: card.family
-                    pixelSize: 34
-                }
-            }
-
-            Rectangle {
-                anchors.fill: parent
-
-                radius: parent.radius
-
-                color: "transparent"
-
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.16)
+                width: 42
+                height: 42
+                visible: card.coverSource === ""
+                name: "music"
+                ink: Theme.accentText
             }
         }
 
@@ -490,7 +313,7 @@ Item {
                     anchors.verticalCenter:
                         parent.verticalCenter
 
-                    color: Theme.light ? Theme.accent : "#F8B6D7"
+                color: Theme.accent
 
                     x:
                         Math.max(
@@ -742,7 +565,7 @@ Item {
                             width: 4
                             height: 15
                             radius: 1.5
-                            color: Theme.light ? Theme.accentText : "#584158"
+                            color: Theme.accentText
                         }
 
                         Rectangle {
@@ -751,7 +574,7 @@ Item {
                             width: 4
                             height: 15
                             radius: 1.5
-                            color: Theme.light ? Theme.accentText : "#584158"
+                            color: Theme.accentText
                         }
                     }
 
@@ -761,7 +584,7 @@ Item {
                         height: 20
                         visible: !card.playing
 
-                        readonly property color themePaintColor: Theme.light ? Theme.accentText : "#584158"
+                        readonly property color themePaintColor: Theme.accentText
                         onThemePaintColorChanged: requestPaint()
 
                         onPaint: {

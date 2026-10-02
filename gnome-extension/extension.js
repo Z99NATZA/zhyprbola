@@ -26,10 +26,16 @@ const THEMES = [
     {name: 'white-sky', label: 'White Sky'},
 ];
 
+const PANEL_TITLES = Object.freeze({
+    bluetooth: 'Zhyprbola Bluetooth',
+    wifi: 'Zhyprbola Wi-Fi',
+});
+
 export default class ZhyprbolaExtension extends Extension {
     enable() {
         this._dock = null;
         this._layoutIdleId = 0;
+        this._pendingPanels = new Set();
         this._themePath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'theme']);
         this._themeName = this._readTheme();
@@ -191,6 +197,20 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _openPanel(panelName) {
+        const title = PANEL_TITLES[panelName];
+        const existingWindow = global.get_window_actors()
+            .map(actor => actor.meta_window)
+            .find(window => window && (window.get_title() === title ||
+                (panelName === 'bluetooth' && window.get_title() === 'Zhyprbola Panel')));
+
+        if (existingWindow) {
+            existingWindow.activate(global.get_current_time());
+            return;
+        }
+
+        if (this._pendingPanels.has(panelName))
+            return;
+
         const launcher = Gio.File.new_for_path(
             GLib.build_filenamev([this.path, 'panel-command.sh']));
 
@@ -199,14 +219,23 @@ export default class ZhyprbolaExtension extends Extension {
             return;
         }
 
+        const pendingPanels = this._pendingPanels;
+        pendingPanels.add(panelName);
         try {
-            GLib.spawn_async(
-                null,
+            const process = Gio.Subprocess.new(
                 ['bash', launcher.get_path(), panelName],
-                null,
-                GLib.SpawnFlags.SEARCH_PATH,
-                null);
+                Gio.SubprocessFlags.NONE);
+            process.wait_async(null, (source, result) => {
+                try {
+                    source.wait_finish(result);
+                } catch (error) {
+                    logError(error, `Failed to wait for Zhyprbola panel: ${panelName}`);
+                } finally {
+                    pendingPanels.delete(panelName);
+                }
+            });
         } catch (error) {
+            pendingPanels.delete(panelName);
             logError(error, `Failed to open Zhyprbola panel: ${panelName}`);
         }
     }
