@@ -199,7 +199,8 @@ void Backend::refreshTheme() {
     QString name = QStringLiteral("current");
     if (file.open(QIODevice::ReadOnly)) {
         const QString value = QString::fromUtf8(file.readAll()).trimmed();
-        if (value == QLatin1String("white") || value == QLatin1String("white-sky"))
+        if (value == QLatin1String("white") || value == QLatin1String("white-sky")
+            || value == QLatin1String("forest"))
             name = value;
     }
     if (name != m_themeName) {

@@ -1,5 +1,5 @@
 .zhyprbola-dock {
-    background-color: #28202d;
+    background-color: #fafcfd;
     border: 0;
     box-shadow: none;
     border-radius: 18px;
@@ -26,19 +26,19 @@
 }
 
 .zhyprbola-theme-menu .popup-menu-content {
-    background-color: #28202d;
+    background-color: #fafcfd;
     border: 0;
     box-shadow: none;
-    color: #ffffff;
+    color: #3f2b41;
 }
 
 .zhyprbola-theme-menu .popup-menu-item {
-    color: #ffffff;
+    color: #3f2b41;
 }
 
 .zhyprbola-theme-menu .popup-menu-item:focus,
 .zhyprbola-theme-menu .popup-menu-item:hover {
-    background-color: #3a2e40;
+    background-color: #e9dde9;
 }
 
 .zhyprbola-dock-white {
@@ -103,4 +103,36 @@
 .zhyprbola-theme-menu-white-sky .popup-menu-item:focus,
 .zhyprbola-theme-menu-white-sky .popup-menu-item:hover {
     background-color: #dceeff;
+}
+
+.zhyprbola-dock-forest {
+    background-color: #fafcfd;
+}
+
+.zhyprbola-dock-forest .zhyprbola-dock-button {
+    background-color: #477f6d;
+    color: #ffffff;
+}
+
+.zhyprbola-dock-forest .zhyprbola-dock-button:hover,
+.zhyprbola-dock-forest .zhyprbola-dock-button:active {
+    background-color: #3f7866;
+}
+
+.zhyprbola-dock-forest .zhyprbola-dock-icon {
+    color: #ffffff;
+}
+
+.zhyprbola-theme-menu-forest .popup-menu-content {
+    background-color: #fafcfd;
+    color: #194c3c;
+}
+
+.zhyprbola-theme-menu-forest .popup-menu-item {
+    color: #194c3c;
+}
+
+.zhyprbola-theme-menu-forest .popup-menu-item:focus,
+.zhyprbola-theme-menu-forest .popup-menu-item:hover {
+    background-color: #d9eae1;
 }

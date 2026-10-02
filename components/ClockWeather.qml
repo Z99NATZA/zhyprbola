@@ -390,7 +390,7 @@ Item {
                         width: 64
                         height: 58
                         name: "weather"
-                        ink: Theme.light ? card.accentColor : Theme.text
+                        ink: card.accentColor
                     }
 
                     // --------------------------------------

@@ -29,9 +29,10 @@ extension. `make dock` enables it for the next login automatically.
 
 The extension creates a configurable sidebar dock with Bluetooth and Theme
 buttons. Clicking Bluetooth again raises its existing panel instead of opening
-another copy. Theme opens a GNOME Shell menu with Purple Night, White Mist, and
-White Sky palettes. Each palette uses flat surfaces, one primary color, and white
-icons on primary controls. The choice is saved in `~/.config/zhyprbola/theme`
+another copy. Theme opens a GNOME Shell menu with Purple, White Mist,
+White Sky, and Forest Calm palettes. Each palette uses a white surface,
+a primary color, and pale secondary controls. The choice is saved in
+`~/.config/zhyprbola/theme`
 and updates open QML windows. The dock defaults to the right edge, but its
 placement is kept as a small config in `gnome-extension/extension.js` so it can
 later support left, right, top, and bottom positions.

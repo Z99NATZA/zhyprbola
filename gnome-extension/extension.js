@@ -21,9 +21,10 @@ const DOCK_CONFIG = Object.freeze({
 });
 
 const THEMES = [
-    {name: 'current', label: 'Purple Night'},
+    {name: 'current', label: 'Purple'},
     {name: 'white', label: 'White Mist'},
     {name: 'white-sky', label: 'White Sky'},
+    {name: 'forest', label: 'Forest Calm'},
 ];
 
 const PANEL_TITLES = Object.freeze({
@@ -169,6 +170,13 @@ export default class ZhyprbolaExtension extends Extension {
         } else {
             this._dock.remove_style_class_name('zhyprbola-dock-white-sky');
             this._themeMenu.actor.remove_style_class_name('zhyprbola-theme-menu-white-sky');
+        }
+        if (this._themeName === 'forest') {
+            this._dock.add_style_class_name('zhyprbola-dock-forest');
+            this._themeMenu.actor.add_style_class_name('zhyprbola-theme-menu-forest');
+        } else {
+            this._dock.remove_style_class_name('zhyprbola-dock-forest');
+            this._themeMenu.actor.remove_style_class_name('zhyprbola-theme-menu-forest');
         }
 
         for (const [name, item] of this._themeItems)
