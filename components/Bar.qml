@@ -9,6 +9,7 @@ Item {
 
     signal managerRequested()
     signal wifiRequested()
+    signal bluetoothRequested()
 
     Timer {
         interval: 30000
@@ -575,6 +576,18 @@ Item {
             }
 
             StatusIcon {
+                active:
+                    backend.bluetoothEnabled
+
+                tooltipTitle:
+                    backend.bluetoothDeviceName
+
+                tooltipDetail:
+                    backend.bluetoothStatusText
+
+                onClicked:
+                    win.bluetoothRequested()
+
                 glyph:
                     Component { BluetoothGlyph { } }
             }

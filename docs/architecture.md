@@ -93,7 +93,7 @@ IPC.
 
 First target:
 
-- show a right dock
+- show a configurable sidebar dock
 - include a Bluetooth icon
 - open the Bluetooth QML panel when clicked
 
@@ -247,7 +247,7 @@ The first QML panels should be designed to tolerate this limitation.
 The first architecture milestone is:
 
 ```text
-Click Bluetooth icon in a GNOME right dock
+Click Bluetooth icon in a GNOME sidebar dock
   -> open BluetoothPanel.qml
   -> show real Bluetooth power/device state
   -> allow scan/connect/disconnect where supported
@@ -274,6 +274,7 @@ This proves:
 1. Commit the current Bluetooth panel work.
 2. Keep `zpola` runnable as the current QML development host.
 3. Add a focused panel launch mode, starting with Bluetooth.
-4. Create a minimal GNOME extension with a right dock and Bluetooth icon.
+4. Create a minimal GNOME extension with a configurable sidebar dock and
+   Bluetooth icon.
 5. Connect the icon to the QML panel through a command bridge.
 6. Replace the command bridge with D-Bus when interaction needs grow.

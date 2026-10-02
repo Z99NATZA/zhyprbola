@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+UUID="zhyprbola@znnn.local"
+TARGET_DIR="${HOME}/.local/share/gnome-shell/extensions/${UUID}"
+PACK_DIR="${ROOT_DIR}/build/extension-pack"
+
+mkdir -p "$(dirname -- "$TARGET_DIR")"
+rm -rf "$TARGET_DIR" "$PACK_DIR"
+mkdir -p "$PACK_DIR"
+
+gnome-extensions pack "$ROOT_DIR/gnome-extension" \
+  --extra-source="$ROOT_DIR/gnome-extension/panel-command.sh" \
+  --force \
+  --out-dir "$PACK_DIR" >/dev/null
+gnome-extensions install --force "$PACK_DIR/${UUID}.shell-extension.zip"
+
+echo "Installed $UUID from $ROOT_DIR/gnome-extension"
+echo "Enable it with: gnome-extensions enable $UUID"

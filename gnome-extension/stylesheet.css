@@ -1,0 +1,26 @@
+.zhyprbola-dock {
+    background-color: rgba(20, 15, 28, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 18px;
+    padding: 9px;
+}
+
+.zhyprbola-dock-button {
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    background-color: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    color: #ffffff;
+}
+
+.zhyprbola-dock-button:hover,
+.zhyprbola-dock-button:active {
+    background-color: rgba(243, 165, 205, 0.24);
+    border-color: rgba(243, 165, 205, 0.42);
+}
+
+.zhyprbola-dock-icon {
+    color: #f3a5cd;
+    icon-size: 20px;
+}

@@ -22,6 +22,12 @@ class Backend : public QObject {
     Q_PROPERTY(int wifiSignalStrength READ wifiSignalStrength NOTIFY systemChanged)
     Q_PROPERTY(QString wifiStatusText READ wifiStatusText NOTIFY systemChanged)
     Q_PROPERTY(QVariantList wifiNetworks READ wifiNetworks NOTIFY wifiNetworksChanged)
+    Q_PROPERTY(bool bluetoothAvailable READ bluetoothAvailable NOTIFY systemChanged)
+    Q_PROPERTY(bool bluetoothEnabled READ bluetoothEnabled NOTIFY systemChanged)
+    Q_PROPERTY(bool bluetoothConnected READ bluetoothConnected NOTIFY systemChanged)
+    Q_PROPERTY(QString bluetoothDeviceName READ bluetoothDeviceName NOTIFY systemChanged)
+    Q_PROPERTY(QString bluetoothStatusText READ bluetoothStatusText NOTIFY systemChanged)
+    Q_PROPERTY(QVariantList bluetoothDevices READ bluetoothDevices NOTIFY bluetoothDevicesChanged)
     Q_PROPERTY(QString userName READ userName CONSTANT)
     Q_PROPERTY(bool weatherAvailable READ weatherAvailable NOTIFY weatherChanged)
     Q_PROPERTY(int temperature READ temperature NOTIFY weatherChanged)
@@ -56,6 +62,12 @@ public:
     int wifiSignalStrength() const { return m_wifiSignalStrength; }
     QString wifiStatusText() const { return m_wifiStatusText; }
     QVariantList wifiNetworks() const { return m_wifiNetworks; }
+    bool bluetoothAvailable() const { return m_bluetoothAvailable; }
+    bool bluetoothEnabled() const { return m_bluetoothEnabled; }
+    bool bluetoothConnected() const { return m_bluetoothConnected; }
+    QString bluetoothDeviceName() const { return m_bluetoothDeviceName; }
+    QString bluetoothStatusText() const { return m_bluetoothStatusText; }
+    QVariantList bluetoothDevices() const { return m_bluetoothDevices; }
     QString userName() const { return m_userName; }
     bool weatherAvailable() const { return m_weatherAvailable; }
     int temperature() const { return m_temperature; }
@@ -83,6 +95,11 @@ public:
     Q_INVOKABLE void setWifiEnabled(bool enabled);
     Q_INVOKABLE void scanWifiNetworks();
     Q_INVOKABLE void connectWifiNetwork(const QString &ssid);
+    Q_INVOKABLE void openBluetoothSettings();
+    Q_INVOKABLE void setBluetoothEnabled(bool enabled);
+    Q_INVOKABLE void scanBluetoothDevices();
+    Q_INVOKABLE void connectBluetoothDevice(const QString &address);
+    Q_INVOKABLE void disconnectBluetoothDevice(const QString &address);
     Q_INVOKABLE bool componentEnabled(const QString &key) const;
     Q_INVOKABLE void setComponentEnabled(const QString &key, bool enabled);
     Q_INVOKABLE void resetComponentSettings();
@@ -94,12 +111,14 @@ signals:
     void spectrumChanged();
     void componentSettingsChanged();
     void wifiNetworksChanged();
+    void bluetoothDevicesChanged();
 
 private:
     void refreshSystem();
     void refreshWeather();
     void refreshMusic();
     void refreshWifiNetworks();
+    void refreshBluetoothDevices();
     void readSpectrum();
     bool playerctlAvailable() const;
     QString playerctl(const QStringList &args) const;
@@ -127,6 +146,12 @@ private:
     int m_wifiSignalStrength = 0;
     QString m_wifiStatusText = QStringLiteral("Wi-Fi unavailable");
     QVariantList m_wifiNetworks;
+    bool m_bluetoothAvailable = false;
+    bool m_bluetoothEnabled = false;
+    bool m_bluetoothConnected = false;
+    QString m_bluetoothDeviceName = QStringLiteral("Bluetooth off");
+    QString m_bluetoothStatusText = QStringLiteral("Bluetooth unavailable");
+    QVariantList m_bluetoothDevices;
     QString m_userName;
     bool m_weatherAvailable = false;
     int m_temperature = 0;

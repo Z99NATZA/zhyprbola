@@ -1,0 +1,9 @@
+{
+    "uuid": "zhyprbola@znnn.local",
+    "name": "Zhyprbola",
+    "description": "A configurable sidebar dock for opening Zhyprbola panels.",
+    "shell-version": [
+        "50"
+    ],
+    "version": 1
+}

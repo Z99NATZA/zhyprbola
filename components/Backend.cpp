@@ -117,6 +117,29 @@ QList<QByteArray> splitNetworkRow(const QByteArray &row) {
     normalized.append(security);
     return normalized;
 }
+
+QString runBluetoothctl(const QStringList &args, int timeoutMs = 900) {
+    if (QStandardPaths::findExecutable(QStringLiteral("bluetoothctl")).isEmpty()) return {};
+
+    QProcess process;
+    process.start(QStringLiteral("bluetoothctl"), args);
+    if (!process.waitForFinished(timeoutMs)) {
+        process.kill();
+        process.waitForFinished(100);
+        return {};
+    }
+    return process.exitCode() == 0 ? QString::fromUtf8(process.readAllStandardOutput()).trimmed() : QString();
+}
+
+QString bluetoothInfoValue(const QString &info, const QString &key) {
+    const QString prefix = key + QStringLiteral(":");
+    for (const QString &line : info.split('\n')) {
+        const QString trimmed = line.trimmed();
+        if (trimmed.startsWith(prefix))
+            return trimmed.mid(prefix.size()).trimmed();
+    }
+    return {};
+}
 }
 
 Backend::Backend(QObject *parent) : QObject(parent) {
@@ -279,6 +302,8 @@ void Backend::refreshSystem() {
             }
         }
     }
+
+    refreshBluetoothDevices();
     emit systemChanged();
 }
 
@@ -592,6 +617,132 @@ void Backend::connectWifiNetwork(const QString &ssid) {
         refreshSystem();
         refreshWifiNetworks();
     });
+}
+
+void Backend::refreshBluetoothDevices() {
+    const bool available = !QStandardPaths::findExecutable(QStringLiteral("bluetoothctl")).isEmpty();
+    m_bluetoothAvailable = available;
+    m_bluetoothEnabled = false;
+    m_bluetoothConnected = false;
+    m_bluetoothDeviceName = QStringLiteral("Bluetooth off");
+    m_bluetoothStatusText = available ? QStringLiteral("Bluetooth off") : QStringLiteral("Bluetooth unavailable");
+
+    QVariantList devices;
+    if (!available) {
+        if (m_bluetoothDevices != devices) {
+            m_bluetoothDevices = devices;
+            emit bluetoothDevicesChanged();
+        }
+        return;
+    }
+
+    const QString show = runBluetoothctl({QStringLiteral("show")});
+    m_bluetoothEnabled = bluetoothInfoValue(show, QStringLiteral("Powered")) == QLatin1String("yes");
+    if (!m_bluetoothEnabled) {
+        const QString powerState = bluetoothInfoValue(show, QStringLiteral("PowerState"));
+        m_bluetoothStatusText = powerState.isEmpty()
+            ? QStringLiteral("Radio disabled")
+            : powerState;
+    }
+
+    const QString output = runBluetoothctl({QStringLiteral("devices")});
+    QList<QVariantMap> parsedDevices;
+    for (const QString &line : output.split('\n')) {
+        const QString trimmed = line.trimmed();
+        if (!trimmed.startsWith(QStringLiteral("Device "))) continue;
+
+        const QString address = trimmed.section(' ', 1, 1);
+        const QString fallbackName = trimmed.section(' ', 2).trimmed();
+        if (address.isEmpty()) continue;
+
+        const QString info = runBluetoothctl({QStringLiteral("info"), address});
+        const QString name = bluetoothInfoValue(info, QStringLiteral("Name"));
+        const bool paired = bluetoothInfoValue(info, QStringLiteral("Paired")) == QLatin1String("yes");
+        const bool trusted = bluetoothInfoValue(info, QStringLiteral("Trusted")) == QLatin1String("yes");
+        const bool connected = bluetoothInfoValue(info, QStringLiteral("Connected")) == QLatin1String("yes");
+        const QString icon = bluetoothInfoValue(info, QStringLiteral("Icon"));
+
+        QVariantMap device;
+        device.insert(QStringLiteral("address"), address);
+        device.insert(QStringLiteral("name"), name.isEmpty() ? fallbackName : name);
+        device.insert(QStringLiteral("paired"), paired);
+        device.insert(QStringLiteral("trusted"), trusted);
+        device.insert(QStringLiteral("connected"), connected);
+        device.insert(QStringLiteral("icon"), icon);
+        parsedDevices.append(device);
+
+        if (connected) {
+            m_bluetoothConnected = true;
+            m_bluetoothDeviceName = device.value(QStringLiteral("name")).toString();
+            m_bluetoothStatusText = QStringLiteral("Connected");
+        }
+    }
+
+    if (m_bluetoothEnabled && !m_bluetoothConnected) {
+        m_bluetoothDeviceName = QStringLiteral("Bluetooth on");
+        m_bluetoothStatusText = parsedDevices.isEmpty()
+            ? QStringLiteral("No devices")
+            : QStringLiteral("%1 device%2").arg(parsedDevices.size()).arg(parsedDevices.size() == 1 ? QString() : QStringLiteral("s"));
+    }
+
+    std::sort(parsedDevices.begin(), parsedDevices.end(), [](const QVariantMap &a, const QVariantMap &b) {
+        if (a.value(QStringLiteral("connected")).toBool() != b.value(QStringLiteral("connected")).toBool())
+            return a.value(QStringLiteral("connected")).toBool();
+        if (a.value(QStringLiteral("paired")).toBool() != b.value(QStringLiteral("paired")).toBool())
+            return a.value(QStringLiteral("paired")).toBool();
+        return a.value(QStringLiteral("name")).toString().localeAwareCompare(
+            b.value(QStringLiteral("name")).toString()) < 0;
+    });
+
+    for (const QVariantMap &device : parsedDevices)
+        devices.append(device);
+
+    if (m_bluetoothDevices != devices) {
+        m_bluetoothDevices = devices;
+        emit bluetoothDevicesChanged();
+    }
+}
+
+void Backend::openBluetoothSettings() {
+    QStringList command;
+    if (!QStandardPaths::findExecutable(QStringLiteral("gnome-control-center")).isEmpty()) {
+        command = {QStringLiteral("gnome-control-center"), QStringLiteral("bluetooth")};
+    } else if (!QStandardPaths::findExecutable(QStringLiteral("blueman-manager")).isEmpty()) {
+        command = {QStringLiteral("blueman-manager")};
+    }
+    if (!command.isEmpty()) QProcess::startDetached(command.first(), command.mid(1));
+}
+
+void Backend::setBluetoothEnabled(bool enabled) {
+    if (QStandardPaths::findExecutable(QStringLiteral("bluetoothctl")).isEmpty()) return;
+
+    QProcess::startDetached(QStringLiteral("bluetoothctl"),
+        {QStringLiteral("power"), enabled ? QStringLiteral("on") : QStringLiteral("off")});
+    QTimer::singleShot(900, this, &Backend::refreshSystem);
+}
+
+void Backend::scanBluetoothDevices() {
+    if (QStandardPaths::findExecutable(QStringLiteral("bluetoothctl")).isEmpty()) return;
+
+    refreshBluetoothDevices();
+    QProcess::startDetached(QStringLiteral("bluetoothctl"),
+        {QStringLiteral("--timeout"), QStringLiteral("5"), QStringLiteral("scan"), QStringLiteral("on")});
+    QTimer::singleShot(1400, this, &Backend::refreshBluetoothDevices);
+    QTimer::singleShot(5400, this, &Backend::refreshSystem);
+}
+
+void Backend::connectBluetoothDevice(const QString &address) {
+    if (address.isEmpty() || QStandardPaths::findExecutable(QStringLiteral("bluetoothctl")).isEmpty()) return;
+
+    QProcess::startDetached(QStringLiteral("bluetoothctl"), {QStringLiteral("connect"), address});
+    QTimer::singleShot(1600, this, &Backend::refreshSystem);
+}
+
+void Backend::disconnectBluetoothDevice(const QString &address) {
+    if (address.isEmpty() || QStandardPaths::findExecutable(QStringLiteral("bluetoothctl")).isEmpty()) return;
+
+    QProcess::startDetached(QStringLiteral("bluetoothctl"), {QStringLiteral("disconnect"), address});
+    QTimer::singleShot(1000, this, &Backend::refreshSystem);
 }
 
 bool Backend::componentEnabled(const QString &key) const {

@@ -62,6 +62,7 @@ Window {
                 width: stage.width
                 onManagerRequested: componentManager.opened = true
                 onWifiRequested: wifiPanel.opened = true
+                onBluetoothRequested: bluetoothPanel.opened = true
             }
 
             Item {
@@ -166,6 +167,12 @@ Window {
 
             WifiPanel {
                 id: wifiPanel
+                opened: false
+                onCloseRequested: opened = false
+            }
+
+            BluetoothPanel {
+                id: bluetoothPanel
                 opened: false
                 onCloseRequested: opened = false
             }

@@ -10,6 +10,26 @@ enables the audio spectrum:
 make run
 ```
 
+Run the focused panel host used by the GNOME sidebar dock MVP:
+
+```sh
+make run-panel
+./scripts/run-panel bluetooth
+./scripts/run-panel wifi
+```
+
+Install the local GNOME extension during development:
+
+```sh
+./scripts/install-extension
+gnome-extensions enable zhyprbola@znnn.local
+```
+
+The extension currently creates a configurable sidebar dock with a Bluetooth
+button. The dock defaults to the right edge, but its placement is intentionally
+kept as a small config in `gnome-extension/extension.js` so it can later support
+left, right, top, and bottom positions.
+
 `Main.qml` places the bar and cards in a transparent, maximized window so the
 desktop wallpaper remains visible behind them. The dock component is kept in
 `components/` but is hidden from this layout. The component files are local
@@ -22,7 +42,7 @@ CPU, memory, and disk data come from the local system. Weather comes from
 weather location. The music card follows the active MPRIS player and uses
 `playerctl` when it is available; its playback, track, and seek controls work
 when a player is available. The top bar reads Wi-Fi status from NetworkManager
-through `nmcli` and opens the system Wi-Fi settings. Available app icons launch
-local programs. Todo and Calendar retain their existing behavior. The full-width
-spectrum along the bottom reads live audio levels from `cava`; when it is
-unavailable, it stays at a quiet baseline.
+through `nmcli` and Bluetooth status from BlueZ through `bluetoothctl`.
+Available app icons launch local programs. Todo and Calendar retain their
+existing behavior. The full-width spectrum along the bottom reads live audio
+levels from `cava`; when it is unavailable, it stays at a quiet baseline.
