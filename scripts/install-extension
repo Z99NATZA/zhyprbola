@@ -10,11 +10,13 @@ mkdir -p "$(dirname -- "$TARGET_DIR")"
 rm -rf "$TARGET_DIR" "$PACK_DIR"
 mkdir -p "$PACK_DIR"
 
+printf '#!/usr/bin/env bash\nexec %q/scripts/run-panel "$@"\n' "$ROOT_DIR" > "$PACK_DIR/panel-command.sh"
+chmod +x "$PACK_DIR/panel-command.sh"
+
 gnome-extensions pack "$ROOT_DIR/gnome-extension" \
-  --extra-source="$ROOT_DIR/gnome-extension/panel-command.sh" \
+  --extra-source="$PACK_DIR/panel-command.sh" \
   --force \
   --out-dir "$PACK_DIR" >/dev/null
 gnome-extensions install --force "$PACK_DIR/${UUID}.shell-extension.zip"
 
 echo "Installed $UUID from $ROOT_DIR/gnome-extension"
-echo "Enable it with: gnome-extensions enable $UUID"

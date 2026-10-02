@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+UUID="zhyprbola@znnn.local"
+
+if gnome-extensions info "$UUID" >/dev/null 2>&1; then
+  gnome-extensions enable "$UUID"
+  echo "Enabled $UUID"
+  exit 0
+fi
+
+enabled="$(gsettings get org.gnome.shell enabled-extensions)"
+if [[ "$enabled" != *"'$UUID'"* ]]; then
+  case "$enabled" in
+    '@as []'|'[]') enabled="['$UUID']" ;;
+    *']') enabled="${enabled%]}, '$UUID']" ;;
+    *) echo "Unexpected GNOME enabled-extensions value: $enabled" >&2; exit 1 ;;
+  esac
+  gsettings set org.gnome.shell enabled-extensions "$enabled"
+fi
+
+echo "Installed and set to enable $UUID. Log out and back in to load the dock."

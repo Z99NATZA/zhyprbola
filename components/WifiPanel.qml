@@ -4,6 +4,7 @@ Item {
     id: panelRoot
 
     property bool opened: false
+    property bool standalone: false
     property string activeTab: "networks"
     readonly property string family: Qt.application.font.family
     readonly property color glassColor: Qt.rgba(0.08, 0.06, 0.11, 0.92)
@@ -33,11 +34,13 @@ Item {
     }
 
     Rectangle {
+        visible: !panelRoot.standalone
         anchors.fill: parent
         color: Qt.rgba(0, 0, 0, 0.18)
     }
 
     MouseArea {
+        visible: !panelRoot.standalone
         anchors.fill: parent
         onClicked: panelRoot.closeRequested()
     }
@@ -45,15 +48,12 @@ Item {
     Rectangle {
         id: panel
 
-        anchors {
-            right: parent.right
-            top: parent.top
-            rightMargin: 34
-            topMargin: 84
-        }
-
-        width: 430
-        height: 560
+        anchors.right: panelRoot.standalone ? undefined : parent.right
+        anchors.top: panelRoot.standalone ? undefined : parent.top
+        anchors.rightMargin: panelRoot.standalone ? 0 : 34
+        anchors.topMargin: panelRoot.standalone ? 0 : 84
+        width: panelRoot.standalone ? parent.width : 430
+        height: panelRoot.standalone ? parent.height : 560
         radius: 18
         color: panelRoot.glassColor
         border.width: 1

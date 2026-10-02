@@ -18,12 +18,14 @@ make run-panel
 ./scripts/run-panel wifi
 ```
 
-Install the local GNOME extension during development:
+Build, install, and enable the local GNOME dock extension:
 
 ```sh
-./scripts/install-extension
-gnome-extensions enable zhyprbola@znnn.local
+make dock
 ```
+
+On a first install, GNOME may need a logout and login before it recognizes the
+extension. `make dock` enables it for the next login automatically.
 
 The extension currently creates a configurable sidebar dock with a Bluetooth
 button. The dock defaults to the right edge, but its placement is intentionally

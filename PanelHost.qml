@@ -7,8 +7,8 @@ Window {
 
     property string requestedPanel: "bluetooth"
     readonly property string panelName: requestedPanel
-    readonly property int panelWidth: 500
-    readonly property int panelHeight: panelName === "wifi" ? 640 : 620
+    readonly property int panelWidth: 430
+    readonly property int panelHeight: panelName === "wifi" ? 576 : 548
 
     visible: true
     width: panelWidth
@@ -29,14 +29,10 @@ Window {
         }
     }
 
-    Rectangle {
-        anchors.fill: parent
-        color: "transparent"
-    }
-
     BluetoothPanel {
         id: bluetoothPanel
         anchors.fill: parent
+        standalone: true
         opened: false
         onCloseRequested: Qt.quit()
     }
@@ -44,6 +40,7 @@ Window {
     WifiPanel {
         id: wifiPanel
         anchors.fill: parent
+        standalone: true
         opened: false
         onCloseRequested: Qt.quit()
     }
