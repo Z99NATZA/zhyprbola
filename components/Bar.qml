@@ -8,6 +8,7 @@ Item {
     property date currentTime: new Date()
 
     signal managerRequested()
+    signal wifiRequested()
 
     Timer {
         interval: 30000
@@ -589,7 +590,7 @@ Item {
                     backend.wifiStatusText
 
                 onClicked:
-                    backend.openWifiSettings()
+                    win.wifiRequested()
 
                 glyph:
                     Component {

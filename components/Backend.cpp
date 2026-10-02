@@ -228,10 +228,18 @@ void Backend::refreshSystem() {
     }
 
     m_wifiConnected = false;
+    m_wifiEnabled = false;
     m_wifiSsid = QStringLiteral("Wi-Fi off");
     m_wifiSignalStrength = 0;
     m_wifiStatusText = QStringLiteral("Wi-Fi unavailable");
     if (!QStandardPaths::findExecutable(QStringLiteral("nmcli")).isEmpty()) {
+        QProcess radio;
+        radio.start(QStringLiteral("nmcli"), {QStringLiteral("-t"), QStringLiteral("radio"), QStringLiteral("wifi")});
+        if (radio.waitForFinished(500) && radio.exitCode() == 0) {
+            m_wifiEnabled = QString::fromUtf8(radio.readAllStandardOutput()).trimmed()
+                == QLatin1String("enabled");
+        }
+
         QProcess nmcli;
         nmcli.start(QStringLiteral("nmcli"),
             {QStringLiteral("-t"), QStringLiteral("-f"),
@@ -246,11 +254,11 @@ void Backend::refreshSystem() {
                 m_wifiConnected = state.startsWith(QStringLiteral("connected"));
                 m_wifiSsid = m_wifiConnected && !connection.isEmpty()
                     ? connection
-                    : QStringLiteral("Wi-Fi disconnected");
+                    : (m_wifiEnabled ? QStringLiteral("Wi-Fi disconnected") : QStringLiteral("Wi-Fi off"));
                 m_wifiSignalStrength = m_wifiConnected ? wifiSignalFromProc() : 0;
                 m_wifiStatusText = m_wifiConnected
                     ? QStringLiteral("%1% signal").arg(m_wifiSignalStrength)
-                    : state;
+                    : (m_wifiEnabled ? state : QStringLiteral("Radio disabled"));
                 break;
             }
         }
@@ -467,6 +475,19 @@ void Backend::openWifiSettings() {
         command = {QStringLiteral("nm-connection-editor")};
     }
     if (!command.isEmpty()) QProcess::startDetached(command.first(), command.mid(1));
+}
+
+void Backend::refreshStatus() {
+    refreshSystem();
+}
+
+void Backend::setWifiEnabled(bool enabled) {
+    if (QStandardPaths::findExecutable(QStringLiteral("nmcli")).isEmpty()) return;
+
+    QProcess::startDetached(QStringLiteral("nmcli"),
+        {QStringLiteral("radio"), QStringLiteral("wifi"),
+         enabled ? QStringLiteral("on") : QStringLiteral("off")});
+    QTimer::singleShot(800, this, &Backend::refreshSystem);
 }
 
 bool Backend::componentEnabled(const QString &key) const {

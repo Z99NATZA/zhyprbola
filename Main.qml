@@ -61,6 +61,7 @@ Window {
                 y: 0
                 width: stage.width
                 onManagerRequested: componentManager.opened = true
+                onWifiRequested: wifiPanel.opened = true
             }
 
             Item {
@@ -159,6 +160,12 @@ Window {
 
             ComponentManager {
                 id: componentManager
+                opened: false
+                onCloseRequested: opened = false
+            }
+
+            WifiPanel {
+                id: wifiPanel
                 opened: false
                 onCloseRequested: opened = false
             }

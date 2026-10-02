@@ -17,6 +17,7 @@ class Backend : public QObject {
     Q_PROPERTY(bool batteryAvailable READ batteryAvailable NOTIFY systemChanged)
     Q_PROPERTY(int batteryPercent READ batteryPercent NOTIFY systemChanged)
     Q_PROPERTY(bool wifiConnected READ wifiConnected NOTIFY systemChanged)
+    Q_PROPERTY(bool wifiEnabled READ wifiEnabled NOTIFY systemChanged)
     Q_PROPERTY(QString wifiSsid READ wifiSsid NOTIFY systemChanged)
     Q_PROPERTY(int wifiSignalStrength READ wifiSignalStrength NOTIFY systemChanged)
     Q_PROPERTY(QString wifiStatusText READ wifiStatusText NOTIFY systemChanged)
@@ -49,6 +50,7 @@ public:
     bool batteryAvailable() const { return m_batteryAvailable; }
     int batteryPercent() const { return m_batteryPercent; }
     bool wifiConnected() const { return m_wifiConnected; }
+    bool wifiEnabled() const { return m_wifiEnabled; }
     QString wifiSsid() const { return m_wifiSsid; }
     int wifiSignalStrength() const { return m_wifiSignalStrength; }
     QString wifiStatusText() const { return m_wifiStatusText; }
@@ -75,6 +77,8 @@ public:
     Q_INVOKABLE bool appAvailable(const QString &name) const;
     Q_INVOKABLE void launchApp(const QString &name);
     Q_INVOKABLE void openWifiSettings();
+    Q_INVOKABLE void refreshStatus();
+    Q_INVOKABLE void setWifiEnabled(bool enabled);
     Q_INVOKABLE bool componentEnabled(const QString &key) const;
     Q_INVOKABLE void setComponentEnabled(const QString &key, bool enabled);
     Q_INVOKABLE void resetComponentSettings();
@@ -112,6 +116,7 @@ private:
     bool m_batteryAvailable = false;
     int m_batteryPercent = 0;
     bool m_wifiConnected = false;
+    bool m_wifiEnabled = false;
     QString m_wifiSsid = QStringLiteral("Wi-Fi off");
     int m_wifiSignalStrength = 0;
     QString m_wifiStatusText = QStringLiteral("Wi-Fi unavailable");
