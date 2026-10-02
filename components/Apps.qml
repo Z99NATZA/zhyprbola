@@ -6,6 +6,8 @@ Item {
     width: 420
     height: 245
 
+    signal settingsRequested()
+
 
     // ==================================================
     // Background
@@ -382,7 +384,7 @@ Item {
 
         property string name:
             "App"
-        readonly property bool available: backend.appAvailable(name)
+        readonly property bool available: name === "Settings" || backend.appAvailable(name)
 
         opacity: available ? 1 : 0.45
 
@@ -515,7 +517,13 @@ Item {
             enabled: app.available
             cursorShape:
                 Qt.PointingHandCursor
-            onClicked: backend.launchApp(app.name)
+            onClicked: {
+                if (app.name === "Settings") {
+                    win.settingsRequested()
+                } else {
+                    backend.launchApp(app.name)
+                }
+            }
         }
     }
 }

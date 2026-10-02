@@ -16,6 +16,10 @@ class Backend : public QObject {
     Q_PROPERTY(QString diskDetail READ diskDetail NOTIFY systemChanged)
     Q_PROPERTY(bool batteryAvailable READ batteryAvailable NOTIFY systemChanged)
     Q_PROPERTY(int batteryPercent READ batteryPercent NOTIFY systemChanged)
+    Q_PROPERTY(bool wifiConnected READ wifiConnected NOTIFY systemChanged)
+    Q_PROPERTY(QString wifiSsid READ wifiSsid NOTIFY systemChanged)
+    Q_PROPERTY(int wifiSignalStrength READ wifiSignalStrength NOTIFY systemChanged)
+    Q_PROPERTY(QString wifiStatusText READ wifiStatusText NOTIFY systemChanged)
     Q_PROPERTY(QString userName READ userName CONSTANT)
     Q_PROPERTY(bool weatherAvailable READ weatherAvailable NOTIFY weatherChanged)
     Q_PROPERTY(int temperature READ temperature NOTIFY weatherChanged)
@@ -44,6 +48,10 @@ public:
     QString diskDetail() const { return m_diskDetail; }
     bool batteryAvailable() const { return m_batteryAvailable; }
     int batteryPercent() const { return m_batteryPercent; }
+    bool wifiConnected() const { return m_wifiConnected; }
+    QString wifiSsid() const { return m_wifiSsid; }
+    int wifiSignalStrength() const { return m_wifiSignalStrength; }
+    QString wifiStatusText() const { return m_wifiStatusText; }
     QString userName() const { return m_userName; }
     bool weatherAvailable() const { return m_weatherAvailable; }
     int temperature() const { return m_temperature; }
@@ -66,12 +74,17 @@ public:
     Q_INVOKABLE void seek(int seconds);
     Q_INVOKABLE bool appAvailable(const QString &name) const;
     Q_INVOKABLE void launchApp(const QString &name);
+    Q_INVOKABLE void openWifiSettings();
+    Q_INVOKABLE bool componentEnabled(const QString &key) const;
+    Q_INVOKABLE void setComponentEnabled(const QString &key, bool enabled);
+    Q_INVOKABLE void resetComponentSettings();
 
 signals:
     void systemChanged();
     void weatherChanged();
     void musicChanged();
     void spectrumChanged();
+    void componentSettingsChanged();
 
 private:
     void refreshSystem();
@@ -98,6 +111,10 @@ private:
     QString m_diskDetail;
     bool m_batteryAvailable = false;
     int m_batteryPercent = 0;
+    bool m_wifiConnected = false;
+    QString m_wifiSsid = QStringLiteral("Wi-Fi off");
+    int m_wifiSignalStrength = 0;
+    QString m_wifiStatusText = QStringLiteral("Wi-Fi unavailable");
     QString m_userName;
     bool m_weatherAvailable = false;
     int m_temperature = 0;

@@ -7,6 +7,8 @@ Item {
     height: 80
     property date currentTime: new Date()
 
+    signal managerRequested()
+
     Timer {
         interval: 30000
         running: true
@@ -577,8 +579,28 @@ Item {
             }
 
             StatusIcon {
+                active:
+                    backend.wifiConnected
+
+                tooltipTitle:
+                    backend.wifiSsid
+
+                tooltipDetail:
+                    backend.wifiStatusText
+
+                onClicked:
+                    backend.openWifiSettings()
+
                 glyph:
-                    Component { WifiGlyph { } }
+                    Component {
+                        WifiGlyph {
+                            connected:
+                                backend.wifiConnected
+
+                            strength:
+                                backend.wifiSignalStrength
+                        }
+                    }
             }
 
             Item {
@@ -627,6 +649,20 @@ Item {
                 width: 1
                 height: 17
                 color: Qt.rgba(1, 1, 1, 0.17)
+            }
+
+            StatusIcon {
+                tooltipTitle:
+                    "Components"
+
+                tooltipDetail:
+                    "Manage desktop modules"
+
+                onClicked:
+                    win.managerRequested()
+
+                glyph:
+                    Component { ManagerGlyph { } }
             }
 
             StatusIcon {
@@ -762,6 +798,16 @@ Item {
         id: statusIcon
 
         property Component glyph
+        property bool active:
+            false
+
+        property string tooltipTitle:
+            ""
+
+        property string tooltipDetail:
+            ""
+
+        signal clicked()
 
         width:
             24
@@ -795,14 +841,16 @@ Item {
                 9
 
             color:
-                Qt.rgba(
-                    1,
-                    1,
-                    1,
-                    statusHover.hovered
-                        ? 0.12
-                        : 0.0
-                )
+                statusIcon.active
+                    ? Qt.rgba(0.95, 0.65, 0.80, statusHover.hovered ? 0.26 : 0.16)
+                    : Qt.rgba(
+                        1,
+                        1,
+                        1,
+                        statusHover.hovered
+                            ? 0.12
+                            : 0.0
+                    )
 
             Behavior on color {
                 ColorAnimation {
@@ -820,6 +868,122 @@ Item {
                 statusIcon.glyph
         }
 
+        Item {
+            z:
+                40
+
+            visible:
+                statusHover.hovered
+                    && statusIcon.tooltipTitle !== ""
+
+            opacity:
+                visible
+                    ? 1
+                    : 0
+
+            anchors.horizontalCenter:
+                parent.horizontalCenter
+
+            y:
+                34
+
+            width:
+                172
+
+            height:
+                58
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration:
+                        120
+                }
+            }
+
+            Rectangle {
+                anchors.fill:
+                    parent
+
+                radius:
+                    14
+
+                color:
+                    Qt.rgba(0.08, 0.06, 0.11, 0.88)
+
+                border.width:
+                    1
+
+                border.color:
+                    Qt.rgba(1, 1, 1, 0.18)
+            }
+
+            Column {
+                anchors {
+                    left:
+                        parent.left
+
+                    right:
+                        parent.right
+
+                    verticalCenter:
+                        parent.verticalCenter
+
+                    margins:
+                        14
+                }
+
+                spacing:
+                    3
+
+                Text {
+                    width:
+                        parent.width
+
+                    text:
+                        statusIcon.tooltipTitle
+
+                    color:
+                        topBar.textColor
+
+                    elide:
+                        Text.ElideRight
+
+                    font {
+                        family:
+                            topBar.family
+
+                        pixelSize:
+                            13
+
+                        weight:
+                            Font.DemiBold
+                    }
+                }
+
+                Text {
+                    width:
+                        parent.width
+
+                    text:
+                        statusIcon.tooltipDetail
+
+                    color:
+                        topBar.dimTextColor
+
+                    elide:
+                        Text.ElideRight
+
+                    font {
+                        family:
+                            topBar.family
+
+                        pixelSize:
+                            11
+                    }
+                }
+            }
+        }
+
         HoverHandler {
             id: statusHover
         }
@@ -833,6 +997,9 @@ Item {
 
             cursorShape:
                 Qt.PointingHandCursor
+
+            onClicked:
+                statusIcon.clicked()
         }
     }
 
@@ -1087,11 +1254,23 @@ Item {
     // ==================================================
 
     component WifiGlyph: Canvas {
+        property bool connected:
+            true
+
+        property int strength:
+            100
+
         width:
             20
 
         height:
             20
+
+        onConnectedChanged:
+            requestPaint()
+
+        onStrengthChanged:
+            requestPaint()
 
         onPaint: {
             var ctx =
@@ -1101,7 +1280,9 @@ Item {
             ctx.scale(20 / 18, 20 / 18)
 
             ctx.strokeStyle =
-                "#FFFFFF"
+                connected
+                    ? "#FFFFFF"
+                    : "rgba(255, 255, 255, 0.42)"
 
             ctx.lineWidth =
                 1.6
@@ -1109,31 +1290,35 @@ Item {
             ctx.lineCap =
                 "round"
 
-            ctx.beginPath()
+            if (connected && strength >= 55) {
+                ctx.beginPath()
 
-            ctx.arc(
-                9,
-                15,
-                7,
-                Math.PI * 1.20,
-                Math.PI * 1.80,
-                false
-            )
+                ctx.arc(
+                    9,
+                    15,
+                    7,
+                    Math.PI * 1.20,
+                    Math.PI * 1.80,
+                    false
+                )
 
-            ctx.stroke()
+                ctx.stroke()
+            }
 
-            ctx.beginPath()
+            if (connected && strength >= 28) {
+                ctx.beginPath()
 
-            ctx.arc(
-                9,
-                15,
-                4.5,
-                Math.PI * 1.22,
-                Math.PI * 1.78,
-                false
-            )
+                ctx.arc(
+                    9,
+                    15,
+                    4.5,
+                    Math.PI * 1.22,
+                    Math.PI * 1.78,
+                    false
+                )
 
-            ctx.stroke()
+                ctx.stroke()
+            }
 
             ctx.beginPath()
 
@@ -1162,6 +1347,90 @@ Item {
             )
 
             ctx.fill()
+
+            if (!connected) {
+                ctx.strokeStyle =
+                    "rgba(255, 255, 255, 0.72)"
+
+                ctx.lineWidth =
+                    1.7
+
+                ctx.beginPath()
+
+                ctx.moveTo(
+                    4,
+                    4
+                )
+
+                ctx.lineTo(
+                    14,
+                    14
+                )
+
+                ctx.stroke()
+            }
+        }
+    }
+
+    // ==================================================
+    // Manager
+    // ==================================================
+
+    component ManagerGlyph: Canvas {
+        width:
+            20
+
+        height:
+            20
+
+        onPaint: {
+            var ctx =
+                getContext("2d")
+
+            ctx.reset()
+            ctx.scale(20 / 18, 20 / 18)
+
+            ctx.strokeStyle =
+                "#FFFFFF"
+
+            ctx.fillStyle =
+                "#FFFFFF"
+
+            ctx.lineWidth =
+                1.7
+
+            ctx.lineCap =
+                "round"
+
+            ctx.lineJoin =
+                "round"
+
+            ctx.beginPath()
+
+            ctx.arc(
+                9,
+                9,
+                3,
+                0,
+                Math.PI * 2
+            )
+
+            ctx.stroke()
+
+            for (var i = 0; i < 8; ++i) {
+                var angle = i * Math.PI / 4
+                var inner = 5.4
+                var outer = 7.2
+                var x1 = 9 + Math.cos(angle) * inner
+                var y1 = 9 + Math.sin(angle) * inner
+                var x2 = 9 + Math.cos(angle) * outer
+                var y2 = 9 + Math.sin(angle) * outer
+
+                ctx.beginPath()
+                ctx.moveTo(x1, y1)
+                ctx.lineTo(x2, y2)
+                ctx.stroke()
+            }
         }
     }
 

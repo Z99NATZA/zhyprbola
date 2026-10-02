@@ -8,6 +8,8 @@
 
 int main(int argc, char *argv[]) {
     QGuiApplication app(argc, argv);
+    app.setOrganizationName(QStringLiteral("zpola"));
+    app.setApplicationName(QStringLiteral("Zpola Desktop"));
     Backend backend;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);

@@ -19,8 +19,10 @@ Narrow windows can scroll to reach every card.
 CPU, memory, and disk data come from the local system. Weather comes from
 [Open-Meteo](https://open-meteo.com/en/docs) and defaults to Bangkok. Set
 `ZPOLA_LATITUDE`, `ZPOLA_LONGITUDE`, and `ZPOLA_LOCATION` to change the
-weather location. The music card follows the active MPRIS player through
-`playerctl`; its playback, track, and seek controls work when a player is
-available. Available app icons launch local programs. Todo and Calendar retain
-their existing behavior. The full-width spectrum along the bottom reads live
-audio levels from `cava`; when it is unavailable, it stays at a quiet baseline.
+weather location. The music card follows the active MPRIS player and uses
+`playerctl` when it is available; its playback, track, and seek controls work
+when a player is available. The top bar reads Wi-Fi status from NetworkManager
+through `nmcli` and opens the system Wi-Fi settings. Available app icons launch
+local programs. Todo and Calendar retain their existing behavior. The full-width
+spectrum along the bottom reads live audio levels from `cava`; when it is
+unavailable, it stays at a quiet baseline.

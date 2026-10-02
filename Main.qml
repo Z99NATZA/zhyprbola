@@ -29,11 +29,38 @@ Window {
                 Math.min((width - 1500) / 548, (height - 900) / 252)))
             readonly property real leftScale: 1 + 0.28 * layoutProgress
             readonly property real rightScale: 1 + 0.15 * layoutProgress
+            property bool clockEnabled: true
+            property bool musicEnabled: true
+            property bool appsEnabled: true
+            property bool systemEnabled: true
+            property bool todoEnabled: true
+            property bool calendarEnabled: true
+            property bool spectrumEnabled: true
+
+            function loadComponentSettings() {
+                clockEnabled = backend.componentEnabled("clock")
+                musicEnabled = backend.componentEnabled("music")
+                appsEnabled = backend.componentEnabled("apps")
+                systemEnabled = backend.componentEnabled("system")
+                todoEnabled = backend.componentEnabled("todo")
+                calendarEnabled = backend.componentEnabled("calendar")
+                spectrumEnabled = backend.componentEnabled("spectrum")
+            }
+
+            Component.onCompleted: loadComponentSettings()
+
+            Connections {
+                target: backend
+                function onComponentSettingsChanged() {
+                    stage.loadComponentSettings()
+                }
+            }
 
             Bar {
                 x: 0
                 y: 0
                 width: stage.width
+                onManagerRequested: componentManager.opened = true
             }
 
             Item {
@@ -41,6 +68,8 @@ Window {
                 y: 100 + 5 * stage.layoutProgress
                 width: 440 * stage.leftScale
                 height: 172 * stage.leftScale
+                visible: stage.clockEnabled
+                enabled: visible
 
                 ClockWeather {
                     scale: stage.leftScale
@@ -53,6 +82,8 @@ Window {
                 y: 310 + 60 * stage.layoutProgress
                 width: 390 * stage.leftScale
                 height: 230 * stage.leftScale
+                visible: stage.musicEnabled
+                enabled: visible
 
                 MusicPlayer {
                     scale: stage.leftScale
@@ -65,10 +96,13 @@ Window {
                 y: 550 + 210 * stage.layoutProgress
                 width: 420 * stage.leftScale
                 height: 245 * stage.leftScale
+                visible: stage.appsEnabled
+                enabled: visible
 
                 Apps {
                     scale: stage.leftScale
                     transformOrigin: Item.TopLeft
+                    onSettingsRequested: componentManager.opened = true
                 }
             }
 
@@ -78,6 +112,8 @@ Window {
                 y: 100 + 5 * stage.layoutProgress
                 width: 430
                 height: 150
+                visible: stage.systemEnabled
+                enabled: visible
 
                 SystemStatus { }
             }
@@ -88,6 +124,8 @@ Window {
                 y: 270 + 30 * stage.layoutProgress
                 width: 360 * stage.rightScale
                 height: 280 * stage.rightScale
+                visible: stage.todoEnabled
+                enabled: visible
 
                 Todo {
                     scale: stage.rightScale
@@ -101,6 +139,8 @@ Window {
                 y: 565 + 100 * stage.layoutProgress
                 width: 360 * stage.rightScale
                 height: 290 * stage.rightScale
+                visible: stage.calendarEnabled
+                enabled: visible
 
                 Calendar {
                     scale: stage.rightScale
@@ -113,6 +153,14 @@ Window {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: Math.min(200, Math.max(72, stage.height - 1080))
+                visible: stage.spectrumEnabled
+                enabled: visible
+            }
+
+            ComponentManager {
+                id: componentManager
+                opened: false
+                onCloseRequested: opened = false
             }
 
         }

@@ -10,6 +10,7 @@
 #include <QNetworkRequest>
 #include <QCoreApplication>
 #include <QProcess>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QStorageInfo>
 #include <QUrlQuery>
@@ -65,6 +66,40 @@ QStringList commandForApp(const QString &name) {
     }
     if (name == QLatin1String("Settings")) return {QStringLiteral("gnome-control-center")};
     return {};
+}
+
+int wifiSignalFromProc() {
+    QFile wireless(QStringLiteral("/proc/net/wireless"));
+    if (!wireless.open(QIODevice::ReadOnly)) return 0;
+
+    for (const QByteArray &line : wireless.readAll().split('\n')) {
+        const int colon = line.indexOf(':');
+        if (colon < 0) continue;
+
+        const QList<QByteArray> fields = line.mid(colon + 1).simplified().split(' ');
+        if (fields.size() < 2) continue;
+
+        bool valid = false;
+        const double linkQuality = fields.at(1).toDouble(&valid);
+        if (valid) return qBound(0, qRound(linkQuality * 100.0 / 70.0), 100);
+    }
+    return 0;
+}
+
+QStringList componentKeys() {
+    return {
+        QStringLiteral("clock"),
+        QStringLiteral("music"),
+        QStringLiteral("apps"),
+        QStringLiteral("system"),
+        QStringLiteral("todo"),
+        QStringLiteral("calendar"),
+        QStringLiteral("spectrum")
+    };
+}
+
+bool validComponentKey(const QString &key) {
+    return componentKeys().contains(key);
 }
 }
 
@@ -187,6 +222,35 @@ void Backend::refreshSystem() {
             if (valid) {
                 m_batteryAvailable = true;
                 m_batteryPercent = qBound(0, percent, 100);
+                break;
+            }
+        }
+    }
+
+    m_wifiConnected = false;
+    m_wifiSsid = QStringLiteral("Wi-Fi off");
+    m_wifiSignalStrength = 0;
+    m_wifiStatusText = QStringLiteral("Wi-Fi unavailable");
+    if (!QStandardPaths::findExecutable(QStringLiteral("nmcli")).isEmpty()) {
+        QProcess nmcli;
+        nmcli.start(QStringLiteral("nmcli"),
+            {QStringLiteral("-t"), QStringLiteral("-f"),
+             QStringLiteral("TYPE,STATE,CONNECTION"), QStringLiteral("dev"), QStringLiteral("status")});
+        if (nmcli.waitForFinished(500) && nmcli.exitCode() == 0) {
+            for (const QByteArray &row : nmcli.readAllStandardOutput().split('\n')) {
+                const QList<QByteArray> fields = row.split(':');
+                if (fields.size() < 3 || fields.at(0) != "wifi") continue;
+
+                const QString state = QString::fromUtf8(fields.at(1)).trimmed();
+                const QString connection = QString::fromUtf8(fields.mid(2).join(":")).trimmed();
+                m_wifiConnected = state.startsWith(QStringLiteral("connected"));
+                m_wifiSsid = m_wifiConnected && !connection.isEmpty()
+                    ? connection
+                    : QStringLiteral("Wi-Fi disconnected");
+                m_wifiSignalStrength = m_wifiConnected ? wifiSignalFromProc() : 0;
+                m_wifiStatusText = m_wifiConnected
+                    ? QStringLiteral("%1% signal").arg(m_wifiSignalStrength)
+                    : state;
                 break;
             }
         }
@@ -393,4 +457,36 @@ void Backend::launchApp(const QString &name) {
     const QStringList command = commandForApp(name);
     if (command.isEmpty() || !appAvailable(name)) return;
     QProcess::startDetached(command.first(), command.mid(1));
+}
+
+void Backend::openWifiSettings() {
+    QStringList command;
+    if (!QStandardPaths::findExecutable(QStringLiteral("gnome-control-center")).isEmpty()) {
+        command = {QStringLiteral("gnome-control-center"), QStringLiteral("wifi")};
+    } else if (!QStandardPaths::findExecutable(QStringLiteral("nm-connection-editor")).isEmpty()) {
+        command = {QStringLiteral("nm-connection-editor")};
+    }
+    if (!command.isEmpty()) QProcess::startDetached(command.first(), command.mid(1));
+}
+
+bool Backend::componentEnabled(const QString &key) const {
+    if (!validComponentKey(key)) return true;
+
+    QSettings settings;
+    return settings.value(QStringLiteral("components/%1").arg(key), true).toBool();
+}
+
+void Backend::setComponentEnabled(const QString &key, bool enabled) {
+    if (!validComponentKey(key) || componentEnabled(key) == enabled) return;
+
+    QSettings settings;
+    settings.setValue(QStringLiteral("components/%1").arg(key), enabled);
+    emit componentSettingsChanged();
+}
+
+void Backend::resetComponentSettings() {
+    QSettings settings;
+    for (const QString &key : componentKeys())
+        settings.remove(QStringLiteral("components/%1").arg(key));
+    emit componentSettingsChanged();
 }
