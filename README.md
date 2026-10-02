@@ -27,15 +27,19 @@ make dock
 On a first install, GNOME may need a logout and login before it recognizes the
 extension. `make dock` enables it for the next login automatically.
 
-The extension creates a configurable sidebar dock with Bluetooth and Theme
-buttons. Clicking Bluetooth again raises its existing panel instead of opening
-another copy. Theme opens a GNOME Shell menu with Purple, White Mist,
+The extension creates a configurable sidebar dock with Bluetooth, Wi-Fi, and
+Theme buttons. Clicking a panel button again raises its existing window instead
+of opening another copy. Theme opens a GNOME Shell menu with Purple, White Mist,
 White Sky, and Forest Calm palettes. Each palette uses a white surface,
 a primary color, and pale secondary controls. The choice is saved in
 `~/.config/zhyprbola/theme`
 and updates open QML windows. The dock defaults to the right edge, but its
 placement is kept as a small config in `gnome-extension/extension.js` so it can
 later support left, right, top, and bottom positions.
+
+Wi-Fi networks connect or disconnect through explicit buttons. Saved networks reuse their
+NetworkManager profile; new secured networks ask for a password in the panel.
+Enterprise networks open the system Wi-Fi settings for setup.
 
 `Main.qml` places the bar and cards in a transparent, maximized window so the
 desktop wallpaper remains visible behind them. The dock component is kept in

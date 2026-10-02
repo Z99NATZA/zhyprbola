@@ -88,6 +88,11 @@ export default class ZhyprbolaExtension extends Extension {
             accessibleName: 'Bluetooth',
             panelName: 'bluetooth',
         }));
+        this._dock.add_child(this._createPanelButton({
+            iconName: 'network-wireless-symbolic',
+            accessibleName: 'Wi-Fi',
+            panelName: 'wifi',
+        }));
         this._dock.add_child(this._createThemeButton());
 
         Main.layoutManager.addTopChrome(this._dock, {trackFullscreen: true});

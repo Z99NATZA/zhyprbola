@@ -97,7 +97,9 @@ public:
     Q_INVOKABLE void refreshStatus();
     Q_INVOKABLE void setWifiEnabled(bool enabled);
     Q_INVOKABLE void scanWifiNetworks();
-    Q_INVOKABLE void connectWifiNetwork(const QString &ssid);
+    Q_INVOKABLE void connectWifiNetwork(const QString &ssid, bool secure, bool saved,
+        const QString &password);
+    Q_INVOKABLE void disconnectWifiNetwork(const QString &ssid);
     Q_INVOKABLE void openBluetoothSettings();
     Q_INVOKABLE void setBluetoothEnabled(bool enabled);
     Q_INVOKABLE void scanBluetoothDevices();
@@ -114,6 +116,8 @@ signals:
     void spectrumChanged();
     void componentSettingsChanged();
     void wifiNetworksChanged();
+    void wifiConnectionFinished(const QString &ssid, bool success, bool needsPassword);
+    void wifiDisconnectionFinished(const QString &ssid, bool success);
     void bluetoothDevicesChanged();
     void themeChanged();
 

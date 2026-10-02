@@ -11,6 +11,7 @@
 #include <QCoreApplication>
 #include <QProcess>
 #include <QSettings>
+#include <QSet>
 #include <QStandardPaths>
 #include <QStorageInfo>
 #include <QVariantMap>
@@ -581,6 +582,22 @@ void Backend::refreshWifiNetworks() {
          QStringLiteral("--rescan"), QStringLiteral("no")});
     if (!nmcli.waitForFinished(900) || nmcli.exitCode() != 0) return;
 
+    QSet<QString> savedSsids;
+    QProcess profiles;
+    profiles.start(QStringLiteral("nmcli"),
+        {QStringLiteral("-t"), QStringLiteral("--escape"), QStringLiteral("no"),
+         QStringLiteral("-f"), QStringLiteral("NAME,TYPE"),
+         QStringLiteral("connection"), QStringLiteral("show")});
+    if (profiles.waitForFinished(900) && profiles.exitCode() == 0) {
+        for (const QByteArray &line : profiles.readAllStandardOutput().split('\n')) {
+            const int separator = line.lastIndexOf(':');
+            if (separator < 0) continue;
+            const QByteArray type = line.mid(separator + 1).trimmed();
+            if (type == "wifi" || type == "802-11-wireless")
+                savedSsids.insert(QString::fromUtf8(line.left(separator)));
+        }
+    }
+
     QMap<QString, QVariantMap> bySsid;
     for (const QByteArray &row : nmcli.readAllStandardOutput().split('\n')) {
         if (row.trimmed().isEmpty()) continue;
@@ -595,14 +612,16 @@ void Backend::refreshWifiNetworks() {
         const int signal = QString::fromUtf8(fields.at(2)).trimmed().toInt(&validSignal);
         const bool active = fields.at(0).trimmed() == "yes";
         const QString security = QString::fromUtf8(fields.at(3)).trimmed();
+        const bool secure = !security.isEmpty() && security != QLatin1String("--");
 
         QVariantMap entry = bySsid.value(ssid);
         const int existingSignal = entry.value(QStringLiteral("signal")).toInt();
         if (entry.isEmpty() || active || (validSignal && signal > existingSignal)) {
             entry.insert(QStringLiteral("ssid"), ssid);
             entry.insert(QStringLiteral("signal"), validSignal ? qBound(0, signal, 100) : 0);
-            entry.insert(QStringLiteral("secure"), !security.isEmpty());
-            entry.insert(QStringLiteral("security"), security.isEmpty() ? QStringLiteral("Open") : security);
+            entry.insert(QStringLiteral("secure"), secure);
+            entry.insert(QStringLiteral("saved"), savedSsids.contains(ssid));
+            entry.insert(QStringLiteral("security"), secure ? security : QStringLiteral("Open"));
             entry.insert(QStringLiteral("active"), active);
             bySsid.insert(ssid, entry);
         }
@@ -639,15 +658,63 @@ void Backend::scanWifiNetworks() {
     });
 }
 
-void Backend::connectWifiNetwork(const QString &ssid) {
+void Backend::connectWifiNetwork(const QString &ssid, bool secure, bool saved,
+    const QString &password) {
     if (ssid.isEmpty() || QStandardPaths::findExecutable(QStringLiteral("nmcli")).isEmpty()) return;
 
-    QProcess::startDetached(QStringLiteral("nmcli"),
-        {QStringLiteral("connection"), QStringLiteral("up"), QStringLiteral("id"), ssid});
-    QTimer::singleShot(1400, this, [this]() {
+    QStringList arguments = {QStringLiteral("--wait"), QStringLiteral("20")};
+    if (saved && password.isEmpty())
+        arguments << QStringLiteral("connection") << QStringLiteral("up")
+                  << QStringLiteral("id") << ssid;
+    else
+        arguments << QStringLiteral("device") << QStringLiteral("wifi")
+                  << QStringLiteral("connect") << ssid;
+    if (!password.isEmpty())
+        arguments << QStringLiteral("password") << password;
+
+    auto *process = new QProcess(this);
+    const bool needsPasswordOnFailure = secure && password.isEmpty();
+    connect(process, &QProcess::finished, this,
+        [this, process, ssid, needsPasswordOnFailure](int exitCode, QProcess::ExitStatus status) {
+        const bool success = status == QProcess::NormalExit && exitCode == 0;
         refreshSystem();
         refreshWifiNetworks();
+        emit wifiConnectionFinished(ssid, success, !success && needsPasswordOnFailure);
+        process->deleteLater();
     });
+    connect(process, &QProcess::errorOccurred, this,
+        [this, process, ssid](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart) return;
+        emit wifiConnectionFinished(ssid, false, false);
+        process->deleteLater();
+    });
+    process->start(QStringLiteral("nmcli"), arguments);
+}
+
+void Backend::disconnectWifiNetwork(const QString &ssid) {
+    if (ssid.isEmpty() || !m_wifiConnected
+        || QStandardPaths::findExecutable(QStringLiteral("nmcli")).isEmpty()) return;
+
+    const QString profileName = m_wifiSsid;
+    auto *process = new QProcess(this);
+    connect(process, &QProcess::finished, this,
+        [this, process, ssid](int exitCode, QProcess::ExitStatus status) {
+        const bool success = status == QProcess::NormalExit && exitCode == 0;
+        refreshSystem();
+        refreshWifiNetworks();
+        emit wifiDisconnectionFinished(ssid, success);
+        process->deleteLater();
+    });
+    connect(process, &QProcess::errorOccurred, this,
+        [this, process, ssid](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart) return;
+        emit wifiDisconnectionFinished(ssid, false);
+        process->deleteLater();
+    });
+    process->start(QStringLiteral("nmcli"),
+        {QStringLiteral("--wait"), QStringLiteral("10"),
+         QStringLiteral("connection"), QStringLiteral("down"),
+         QStringLiteral("id"), profileName});
 }
 
 void Backend::refreshBluetoothDevices() {

@@ -6,6 +6,13 @@ Item {
     property bool opened: false
     property bool standalone: false
     property string activeTab: "networks"
+    property string connectingSsid: ""
+    property string disconnectingSsid: ""
+    property string passwordSsid: ""
+    property string passwordError: ""
+    property string failedSsid: ""
+    property string failureMessage: ""
+    readonly property bool actionBusy: connectingSsid.length > 0 || disconnectingSsid.length > 0
     readonly property string family: Qt.application.font.family
     readonly property color surfaceColor: Theme.panelSurface
     readonly property color textColor: Theme.text
@@ -15,6 +22,48 @@ Item {
 
     signal closeRequested()
 
+    function showPassword(ssid) {
+        passwordSsid = ssid
+        passwordError = ""
+        wifiPasswordInput.text = ""
+        wifiPasswordInput.forceActiveFocus()
+    }
+
+    function connectNetwork(ssid, secure, saved) {
+        if (!ssid || actionBusy || !backend.wifiEnabled)
+            return
+
+        failedSsid = ""
+        if (secure && !saved) {
+            showPassword(ssid)
+            return
+        }
+
+        connectingSsid = ssid
+        backend.connectWifiNetwork(ssid, secure, saved, "")
+    }
+
+    function disconnectNetwork(ssid) {
+        if (!ssid || actionBusy || !backend.wifiConnected)
+            return
+
+        failedSsid = ""
+        disconnectingSsid = ssid
+        backend.disconnectWifiNetwork(ssid)
+    }
+
+    function submitPassword() {
+        if (!passwordSsid || actionBusy || !wifiPasswordInput.text)
+            return
+
+        const ssid = passwordSsid
+        const password = wifiPasswordInput.text
+        wifiPasswordInput.text = ""
+        passwordError = ""
+        connectingSsid = ssid
+        backend.connectWifiNetwork(ssid, true, false, password)
+    }
+
     anchors.fill: parent
     visible: opened || opacity > 0
     opacity: opened ? 1 : 0
@@ -23,6 +72,39 @@ Item {
     onOpenedChanged: {
         if (opened)
             backend.scanWifiNetworks()
+    }
+
+    Connections {
+        target: backend
+        function onWifiConnectionFinished(ssid, success, needsPassword) {
+            if (ssid !== panelRoot.connectingSsid)
+                return
+
+            panelRoot.connectingSsid = ""
+            if (success) {
+                panelRoot.passwordSsid = ""
+                panelRoot.passwordError = ""
+                panelRoot.failedSsid = ""
+            } else if (needsPassword) {
+                panelRoot.showPassword(ssid)
+            } else if (panelRoot.passwordSsid === ssid) {
+                panelRoot.passwordError = "Could not connect. Check the password."
+            } else {
+                panelRoot.failedSsid = ssid
+                panelRoot.failureMessage = "Could not connect"
+            }
+        }
+
+        function onWifiDisconnectionFinished(ssid, success) {
+            if (ssid !== panelRoot.disconnectingSsid)
+                return
+
+            panelRoot.disconnectingSsid = ""
+            if (!success) {
+                panelRoot.failedSsid = ssid
+                panelRoot.failureMessage = "Could not disconnect"
+            }
+        }
     }
 
     Behavior on opacity {
@@ -215,41 +297,12 @@ Item {
                     anchors.fill: parent
                     visible: panelRoot.activeTab === "networks"
 
-                    Row {
-                        id: networkHeader
-
-                        width: parent.width
-                        height: 34
-                        spacing: 10
-
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width - scanButton.width - parent.spacing
-                            text: "Available networks"
-                            color: panelRoot.textColor
-                            elide: Text.ElideRight
-                            font {
-                                family: panelRoot.family
-                                pixelSize: 14
-                                weight: Font.DemiBold
-                            }
-                        }
-
-                        TextButton {
-                            id: scanButton
-                            width: 76
-                            label: "Scan"
-                            onClicked: backend.scanWifiNetworks()
-                        }
-                    }
-
                     ListView {
                         anchors {
                             left: parent.left
                             right: parent.right
-                            top: networkHeader.bottom
+                            top: parent.top
                             bottom: parent.bottom
-                            topMargin: 8
                         }
 
                         clip: true
@@ -262,6 +315,7 @@ Item {
                             signal: modelData["signal"] || 0
                             security: modelData["security"] || "Open"
                             secure: modelData["secure"] || false
+                            saved: modelData["saved"] || false
                             active: modelData["active"] || false
                         }
                     }
@@ -313,13 +367,151 @@ Item {
                 TextButton {
                     width: (parent.width - parent.spacing) / 2
                     label: "Refresh"
-                    onClicked: backend.refreshStatus()
+                    onClicked: backend.scanWifiNetworks()
                 }
 
                 TextButton {
                     width: (parent.width - parent.spacing) / 2
                     label: "Settings"
                     onClicked: backend.openWifiSettings()
+                }
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            visible: panelRoot.passwordSsid.length > 0
+            color: Qt.rgba(0, 0, 0, 0.24)
+            z: 2
+
+            MouseArea {
+                anchors.fill: parent
+            }
+
+            Rectangle {
+                width: parent.width - 40
+                height: panelRoot.passwordError ? 242 : 222
+                anchors.centerIn: parent
+                radius: 14
+                color: panelRoot.surfaceColor
+
+                Column {
+                    anchors.fill: parent
+                    anchors.margins: 20
+                    spacing: 10
+
+                    Text {
+                        width: parent.width
+                        text: "Connect to Wi-Fi"
+                        color: panelRoot.textColor
+                        font {
+                            family: panelRoot.family
+                            pixelSize: 18
+                            weight: Font.DemiBold
+                        }
+                    }
+
+                    Text {
+                        width: parent.width
+                        text: panelRoot.passwordSsid
+                        color: panelRoot.dimTextColor
+                        elide: Text.ElideRight
+                        font {
+                            family: panelRoot.family
+                            pixelSize: 13
+                        }
+                    }
+
+                    Text {
+                        text: "Password"
+                        color: panelRoot.textColor
+                        font {
+                            family: panelRoot.family
+                            pixelSize: 12
+                            weight: Font.DemiBold
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        height: 40
+                        radius: 9
+                        color: Theme.control
+
+                        TextInput {
+                            id: wifiPasswordInput
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: panelRoot.textColor
+                            echoMode: TextInput.Password
+                            inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText
+                            enabled: !panelRoot.connectingSsid
+                            font {
+                                family: panelRoot.family
+                                pixelSize: 14
+                            }
+                            Keys.onReturnPressed: panelRoot.submitPassword()
+                            Keys.onEscapePressed: {
+                                if (!panelRoot.connectingSsid)
+                                    panelRoot.passwordSsid = ""
+                            }
+                        }
+                    }
+
+                    Text {
+                        width: parent.width
+                        visible: panelRoot.passwordError.length > 0
+                        text: panelRoot.passwordError
+                        color: panelRoot.accentColor
+                        wrapMode: Text.WordWrap
+                        font {
+                            family: panelRoot.family
+                            pixelSize: 11
+                        }
+                    }
+
+                    Row {
+                        width: parent.width
+                        height: 36
+                        spacing: 10
+
+                        TextButton {
+                            width: (parent.width - parent.spacing) / 2
+                            label: "Cancel"
+                            onClicked: {
+                                if (!panelRoot.connectingSsid)
+                                    panelRoot.passwordSsid = ""
+                            }
+                        }
+
+                        Rectangle {
+                            width: (parent.width - parent.spacing) / 2
+                            height: 36
+                            radius: 9
+                            color: panelRoot.accentColor
+                            opacity: panelRoot.connectingSsid ? 0.6 : 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: panelRoot.connectingSsid ? "Connecting…" : "Connect"
+                                color: panelRoot.accentTextColor
+                                font {
+                                    family: panelRoot.family
+                                    pixelSize: 13
+                                    weight: Font.DemiBold
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: !panelRoot.connectingSsid
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: panelRoot.submitPassword()
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -332,13 +524,14 @@ Item {
         property int signal: 0
         property string security: ""
         property bool secure: false
+        property bool saved: false
         property bool active: false
+        readonly property bool enterpriseSetup: !saved
+            && (security.indexOf("802.1X") >= 0 || security.indexOf("EAP") >= 0)
 
         height: 48
         radius: 9
-        color: active
-            ? Theme.selected
-            : (rowMouse.containsMouse ? Theme.controlHover : Theme.control)
+        color: active ? Theme.selected : Theme.control
 
         Behavior on color {
             ColorAnimation { duration: 120 }
@@ -358,7 +551,7 @@ Item {
         Column {
             anchors {
                 left: rowIcon.right
-                right: actionLabel.left
+                right: actionButton.left
                 verticalCenter: parent.verticalCenter
                 leftMargin: 12
                 rightMargin: 10
@@ -380,7 +573,13 @@ Item {
 
             Text {
                 width: parent.width
-                text: row.signal + "%  " + (row.secure ? row.security : "Open")
+                text: panelRoot.connectingSsid === row.ssid
+                    ? "Connecting…"
+                    : panelRoot.disconnectingSsid === row.ssid
+                        ? "Disconnecting…"
+                        : panelRoot.failedSsid === row.ssid
+                            ? panelRoot.failureMessage
+                            : row.signal + "%  " + (row.secure ? row.security : "Open")
                 color: panelRoot.dimTextColor
                 elide: Text.ElideRight
                 font {
@@ -390,34 +589,51 @@ Item {
             }
         }
 
-        Text {
-            id: actionLabel
+        Rectangle {
+            id: actionButton
             anchors {
                 right: parent.right
                 verticalCenter: parent.verticalCenter
                 rightMargin: 12
             }
 
-            width: 68
-            horizontalAlignment: Text.AlignRight
-            text: row.active ? "Current" : (rowMouse.containsMouse ? "Connect" : (row.secure ? "Locked" : "Open"))
-            color: row.active ? panelRoot.accentColor : panelRoot.dimTextColor
-            elide: Text.ElideRight
-            font {
-                family: panelRoot.family
-                pixelSize: 11
-                weight: Font.DemiBold
-            }
-        }
+            width: 94
+            height: 30
+            radius: 8
+            opacity: panelRoot.actionBusy || !backend.wifiEnabled ? 0.6 : 1
+            color: row.active
+                ? (actionMouse.containsMouse ? Theme.controlHover : Theme.control)
+                : (actionMouse.containsMouse
+                    ? Qt.lighter(panelRoot.accentColor, 1.1)
+                    : panelRoot.accentColor)
 
-        MouseArea {
-            id: rowMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: row.active ? Qt.ArrowCursor : Qt.PointingHandCursor
-            onClicked: {
-                if (!row.active)
-                    backend.connectWifiNetwork(row.ssid)
+            Text {
+                anchors.centerIn: parent
+                text: panelRoot.connectingSsid === row.ssid
+                    || panelRoot.disconnectingSsid === row.ssid
+                    ? "Wait…" : (row.active ? "Disconnect" : (row.enterpriseSetup ? "Settings" : "Connect"))
+                color: row.active ? panelRoot.textColor : panelRoot.accentTextColor
+                font {
+                    family: panelRoot.family
+                    pixelSize: 11
+                    weight: Font.DemiBold
+                }
+            }
+
+            MouseArea {
+                id: actionMouse
+                anchors.fill: parent
+                enabled: !panelRoot.actionBusy && backend.wifiEnabled
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    if (row.active)
+                        panelRoot.disconnectNetwork(row.ssid)
+                    else if (row.enterpriseSetup)
+                        backend.openWifiSettings()
+                    else
+                        panelRoot.connectNetwork(row.ssid, row.secure, row.saved)
+                }
             }
         }
     }
@@ -668,41 +884,11 @@ Item {
         }
 
         FlatIcon {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.top
-            anchors.topMargin: 17
+            anchors.centerIn: parent
             name: "wifi"
             ink: Theme.heroText
-            width: 30
-            height: 30
-        }
-
-        Column {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 11
-            spacing: 0
-
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: orb.connected ? orb.strength + "%" : (orb.powered ? "--" : "Off")
-                color: Theme.heroText
-                font {
-                    family: panelRoot.family
-                    pixelSize: 15
-                    weight: Font.DemiBold
-                }
-            }
-
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "Wi-Fi"
-                color: Theme.heroMutedText
-                font {
-                    family: panelRoot.family
-                    pixelSize: 10
-                }
-            }
+            width: 36
+            height: 36
         }
     }
 }
