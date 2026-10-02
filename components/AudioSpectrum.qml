@@ -7,6 +7,7 @@ Item {
 
     readonly property int barCount: Math.max(24, Math.round(width / 16))
     readonly property int minimumBarHeight: 6
+    readonly property int transitionDuration: 1
     property real sensitivity: 1.25
     property color barColor: "#F3A5CD"
 
@@ -31,7 +32,10 @@ Item {
                         const levels = backend.spectrum
                         if (levels.length === 0)
                             return visualizer.minimumBarHeight
-                        const sample = Math.floor(index * levels.length / visualizer.barCount)
+                        const center = (visualizer.barCount - 1) / 2
+                        const distance = Math.abs(index - center) / Math.max(1, center)
+                        const sample = Math.min(levels.length - 1,
+                            Math.floor(distance * levels.length))
                         const level = Math.min(1,
                             Math.sqrt(Math.max(0, levels[sample])) * visualizer.sensitivity)
                         return visualizer.minimumBarHeight
@@ -42,7 +46,10 @@ Item {
                     opacity: 0.8
 
                     Behavior on height {
-                        NumberAnimation { duration: 75 }
+                        NumberAnimation {
+                            duration: visualizer.transitionDuration
+                            easing.type: Easing.Linear
+                        }
                     }
                 }
             }

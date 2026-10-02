@@ -2,8 +2,9 @@
 
 A single Qt Quick window assembled from the QML components in `../zqmlcomponents`.
 
-Run with Qt 6 development packages and `qmake6` installed. `playerctl` enables
-music integration; `cava` enables the audio spectrum:
+Run with Qt 6 development packages and `qmake6` installed. Music integration
+uses MPRIS over DBus and can also use `playerctl` when it is installed; `cava`
+enables the audio spectrum:
 
 ```sh
 make run

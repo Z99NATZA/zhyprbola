@@ -78,7 +78,10 @@ private:
     void refreshWeather();
     void refreshMusic();
     void readSpectrum();
+    bool playerctlAvailable() const;
     QString playerctl(const QStringList &args) const;
+    QStringList mprisPlayers() const;
+    QVariant mprisProperty(const QString &service, const QString &property) const;
     void playerCommand(const QStringList &args);
 
     QNetworkAccessManager m_network;
@@ -103,6 +106,8 @@ private:
     QString m_condition = QStringLiteral("Loading weather");
     QString m_location;
     QString m_player;
+    QString m_trackId;
+    bool m_playerUsesDbus = false;
     QString m_songTitle = QStringLiteral("No music playing");
     QString m_artist = QStringLiteral("Open a music app");
     QString m_coverSource;

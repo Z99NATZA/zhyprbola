@@ -14,6 +14,12 @@
 #include <QStorageInfo>
 #include <QUrlQuery>
 #include <QtMath>
+#include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QDBusInterface>
+#include <QDBusObjectPath>
+#include <QDBusReply>
+#include <QDBusVariant>
 
 namespace {
 QString formatGiB(quint64 bytes) {
@@ -229,6 +235,7 @@ void Backend::refreshWeather() {
 }
 
 QString Backend::playerctl(const QStringList &args) const {
+    if (!playerctlAvailable()) return {};
     QProcess process;
     process.start(QStringLiteral("playerctl"), args);
     if (!process.waitForFinished(700)) {
@@ -239,8 +246,41 @@ QString Backend::playerctl(const QStringList &args) const {
     return process.exitCode() == 0 ? QString::fromUtf8(process.readAllStandardOutput()).trimmed() : QString();
 }
 
+bool Backend::playerctlAvailable() const {
+    return !QStandardPaths::findExecutable(QStringLiteral("playerctl")).isEmpty();
+}
+
+QStringList Backend::mprisPlayers() const {
+    QDBusConnectionInterface *interface = QDBusConnection::sessionBus().interface();
+    if (!interface) return {};
+
+    const QDBusReply<QStringList> reply = interface->registeredServiceNames();
+    if (!reply.isValid()) return {};
+
+    QStringList players;
+    for (const QString &service : reply.value()) {
+        if (service.startsWith(QStringLiteral("org.mpris.MediaPlayer2.")))
+            players.append(service);
+    }
+    return players;
+}
+
+QVariant Backend::mprisProperty(const QString &service, const QString &property) const {
+    QDBusInterface properties(service,
+        QStringLiteral("/org/mpris/MediaPlayer2"),
+        QStringLiteral("org.freedesktop.DBus.Properties"),
+        QDBusConnection::sessionBus());
+    if (!properties.isValid()) return {};
+
+    const QDBusReply<QDBusVariant> reply = properties.call(QStringLiteral("Get"),
+        QStringLiteral("org.mpris.MediaPlayer2.Player"), property);
+    return reply.isValid() ? reply.value().variant() : QVariant();
+}
+
 void Backend::refreshMusic() {
-    const QStringList players = playerctl({QStringLiteral("-l")}).split('\n', Qt::SkipEmptyParts);
+    const QStringList players = playerctlAvailable()
+        ? playerctl({QStringLiteral("-l")}).split('\n', Qt::SkipEmptyParts)
+        : QStringList();
     QString selected;
     for (const QString &player : players) {
         if (playerctl({QStringLiteral("-p"), player, QStringLiteral("status")}) == QLatin1String("Playing")) {
@@ -249,14 +289,49 @@ void Backend::refreshMusic() {
         }
     }
     if (selected.isEmpty() && !players.isEmpty()) selected = players.first();
-    m_player = selected;
+
+    if (!selected.isEmpty()) {
+        m_player = selected;
+        m_trackId.clear();
+        m_playerUsesDbus = false;
+    } else {
+        const QStringList dbusPlayers = mprisPlayers();
+        for (const QString &player : dbusPlayers) {
+            if (mprisProperty(player, QStringLiteral("PlaybackStatus")).toString() == QLatin1String("Playing")) {
+                selected = player;
+                break;
+            }
+        }
+        if (selected.isEmpty() && !dbusPlayers.isEmpty()) selected = dbusPlayers.first();
+        m_player = selected;
+        m_playerUsesDbus = !selected.isEmpty();
+    }
+
     if (selected.isEmpty()) {
         m_songTitle = QStringLiteral("No music playing");
         m_artist = QStringLiteral("Open a music app");
         m_coverSource.clear();
+        m_trackId.clear();
         m_positionSeconds = 0;
         m_durationSeconds = 0;
         m_playing = false;
+        emit musicChanged();
+        return;
+    }
+
+    if (m_playerUsesDbus) {
+        const QVariantMap metadata = qdbus_cast<QVariantMap>(mprisProperty(selected, QStringLiteral("Metadata")));
+        const QStringList artists = metadata.value(QStringLiteral("xesam:artist")).toStringList();
+        const QDBusObjectPath trackPath = metadata.value(QStringLiteral("mpris:trackid")).value<QDBusObjectPath>();
+
+        m_songTitle = metadata.value(QStringLiteral("xesam:title")).toString();
+        if (m_songTitle.isEmpty()) m_songTitle = QStringLiteral("Unknown track");
+        m_artist = artists.isEmpty() ? selected.section('.', -1) : artists.join(QStringLiteral(", "));
+        m_durationSeconds = qMax(0, int(metadata.value(QStringLiteral("mpris:length")).toLongLong() / 1000000));
+        m_coverSource = metadata.value(QStringLiteral("mpris:artUrl")).toString();
+        m_trackId = trackPath.path();
+        m_positionSeconds = qMax(0, int(mprisProperty(selected, QStringLiteral("Position")).toLongLong() / 1000000));
+        m_playing = mprisProperty(selected, QStringLiteral("PlaybackStatus")).toString() == QLatin1String("Playing");
         emit musicChanged();
         return;
     }
@@ -275,6 +350,29 @@ void Backend::refreshMusic() {
 
 void Backend::playerCommand(const QStringList &args) {
     if (m_player.isEmpty()) return;
+    if (m_playerUsesDbus) {
+        QDBusInterface player(m_player,
+            QStringLiteral("/org/mpris/MediaPlayer2"),
+            QStringLiteral("org.mpris.MediaPlayer2.Player"),
+            QDBusConnection::sessionBus());
+        if (!player.isValid()) return;
+
+        const QString command = args.value(0);
+        if (command == QLatin1String("play-pause")) {
+            player.asyncCall(QStringLiteral("PlayPause"));
+        } else if (command == QLatin1String("next")) {
+            player.asyncCall(QStringLiteral("Next"));
+        } else if (command == QLatin1String("previous")) {
+            player.asyncCall(QStringLiteral("Previous"));
+        } else if (command == QLatin1String("position") && !m_trackId.isEmpty()) {
+            player.asyncCall(QStringLiteral("SetPosition"),
+                QVariant::fromValue(QDBusObjectPath(m_trackId)),
+                qlonglong(qMax(0, args.value(1).toInt()) * 1000000));
+        }
+        QTimer::singleShot(350, this, &Backend::refreshMusic);
+        return;
+    }
+
     QStringList command = {QStringLiteral("-p"), m_player};
     command.append(args);
     QProcess::startDetached(QStringLiteral("playerctl"), command);
