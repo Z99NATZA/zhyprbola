@@ -212,41 +212,12 @@ Item {
                     anchors.fill: parent
                     visible: panelRoot.activeTab === "devices"
 
-                    Row {
-                        id: deviceHeader
-
-                        width: parent.width
-                        height: 34
-                        spacing: 10
-
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width - scanButton.width - parent.spacing
-                            text: "Nearby and paired devices"
-                            color: panelRoot.textColor
-                            elide: Text.ElideRight
-                            font {
-                                family: panelRoot.family
-                                pixelSize: 14
-                                weight: Font.DemiBold
-                            }
-                        }
-
-                        TextButton {
-                            id: scanButton
-                            width: 76
-                            label: "Scan"
-                            onClicked: backend.scanBluetoothDevices()
-                        }
-                    }
-
                     ListView {
                         anchors {
                             left: parent.left
                             right: parent.right
-                            top: deviceHeader.bottom
+                            top: parent.top
                             bottom: parent.bottom
-                            topMargin: 8
                         }
 
                         clip: true
@@ -664,28 +635,11 @@ Item {
         }
 
         DeviceGlyph {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.top
-            anchors.topMargin: 12
+            anchors.centerIn: parent
             width: 36
             height: 36
             connected: orb.powered
             ink: Theme.heroText
-        }
-
-        Text {
-            anchors {
-                horizontalCenter: parent.horizontalCenter
-                bottom: parent.bottom
-                bottomMargin: 17
-            }
-            text: orb.connected ? "Linked" : (orb.powered ? "On" : "Off")
-            color: Theme.heroMutedText
-            font {
-                family: panelRoot.family
-                pixelSize: 10
-                weight: Font.DemiBold
-            }
         }
     }
 }
