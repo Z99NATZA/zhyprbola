@@ -21,6 +21,7 @@ class Backend : public QObject {
     Q_PROPERTY(QString wifiSsid READ wifiSsid NOTIFY systemChanged)
     Q_PROPERTY(int wifiSignalStrength READ wifiSignalStrength NOTIFY systemChanged)
     Q_PROPERTY(QString wifiStatusText READ wifiStatusText NOTIFY systemChanged)
+    Q_PROPERTY(QVariantList wifiNetworks READ wifiNetworks NOTIFY wifiNetworksChanged)
     Q_PROPERTY(QString userName READ userName CONSTANT)
     Q_PROPERTY(bool weatherAvailable READ weatherAvailable NOTIFY weatherChanged)
     Q_PROPERTY(int temperature READ temperature NOTIFY weatherChanged)
@@ -54,6 +55,7 @@ public:
     QString wifiSsid() const { return m_wifiSsid; }
     int wifiSignalStrength() const { return m_wifiSignalStrength; }
     QString wifiStatusText() const { return m_wifiStatusText; }
+    QVariantList wifiNetworks() const { return m_wifiNetworks; }
     QString userName() const { return m_userName; }
     bool weatherAvailable() const { return m_weatherAvailable; }
     int temperature() const { return m_temperature; }
@@ -79,6 +81,8 @@ public:
     Q_INVOKABLE void openWifiSettings();
     Q_INVOKABLE void refreshStatus();
     Q_INVOKABLE void setWifiEnabled(bool enabled);
+    Q_INVOKABLE void scanWifiNetworks();
+    Q_INVOKABLE void connectWifiNetwork(const QString &ssid);
     Q_INVOKABLE bool componentEnabled(const QString &key) const;
     Q_INVOKABLE void setComponentEnabled(const QString &key, bool enabled);
     Q_INVOKABLE void resetComponentSettings();
@@ -89,11 +93,13 @@ signals:
     void musicChanged();
     void spectrumChanged();
     void componentSettingsChanged();
+    void wifiNetworksChanged();
 
 private:
     void refreshSystem();
     void refreshWeather();
     void refreshMusic();
+    void refreshWifiNetworks();
     void readSpectrum();
     bool playerctlAvailable() const;
     QString playerctl(const QStringList &args) const;
@@ -120,6 +126,7 @@ private:
     QString m_wifiSsid = QStringLiteral("Wi-Fi off");
     int m_wifiSignalStrength = 0;
     QString m_wifiStatusText = QStringLiteral("Wi-Fi unavailable");
+    QVariantList m_wifiNetworks;
     QString m_userName;
     bool m_weatherAvailable = false;
     int m_temperature = 0;

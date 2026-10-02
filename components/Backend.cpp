@@ -13,6 +13,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QStorageInfo>
+#include <QVariantMap>
 #include <QUrlQuery>
 #include <QtMath>
 #include <QDBusConnection>
@@ -21,6 +22,7 @@
 #include <QDBusObjectPath>
 #include <QDBusReply>
 #include <QDBusVariant>
+#include <algorithm>
 
 namespace {
 QString formatGiB(quint64 bytes) {
@@ -100,6 +102,20 @@ QStringList componentKeys() {
 
 bool validComponentKey(const QString &key) {
     return componentKeys().contains(key);
+}
+
+QList<QByteArray> splitNetworkRow(const QByteArray &row) {
+    QList<QByteArray> fields = row.split(':');
+    if (fields.size() <= 4) return fields;
+
+    QList<QByteArray> normalized;
+    normalized.append(fields.takeFirst());
+    const QByteArray security = fields.takeLast();
+    const QByteArray signal = fields.takeLast();
+    normalized.append(fields.join(":"));
+    normalized.append(signal);
+    normalized.append(security);
+    return normalized;
 }
 }
 
@@ -479,6 +495,7 @@ void Backend::openWifiSettings() {
 
 void Backend::refreshStatus() {
     refreshSystem();
+    refreshWifiNetworks();
 }
 
 void Backend::setWifiEnabled(bool enabled) {
@@ -488,6 +505,93 @@ void Backend::setWifiEnabled(bool enabled) {
         {QStringLiteral("radio"), QStringLiteral("wifi"),
          enabled ? QStringLiteral("on") : QStringLiteral("off")});
     QTimer::singleShot(800, this, &Backend::refreshSystem);
+}
+
+void Backend::refreshWifiNetworks() {
+    QVariantList networks;
+    if (QStandardPaths::findExecutable(QStringLiteral("nmcli")).isEmpty()) {
+        if (m_wifiNetworks != networks) {
+            m_wifiNetworks = networks;
+            emit wifiNetworksChanged();
+        }
+        return;
+    }
+
+    QProcess nmcli;
+    nmcli.start(QStringLiteral("nmcli"),
+        {QStringLiteral("-t"), QStringLiteral("-f"),
+         QStringLiteral("ACTIVE,SSID,SIGNAL,SECURITY"),
+         QStringLiteral("dev"), QStringLiteral("wifi"), QStringLiteral("list"),
+         QStringLiteral("--rescan"), QStringLiteral("no")});
+    if (!nmcli.waitForFinished(900) || nmcli.exitCode() != 0) return;
+
+    QMap<QString, QVariantMap> bySsid;
+    for (const QByteArray &row : nmcli.readAllStandardOutput().split('\n')) {
+        if (row.trimmed().isEmpty()) continue;
+
+        const QList<QByteArray> fields = splitNetworkRow(row);
+        if (fields.size() < 4) continue;
+
+        const QString ssid = QString::fromUtf8(fields.at(1)).trimmed();
+        if (ssid.isEmpty()) continue;
+
+        bool validSignal = false;
+        const int signal = QString::fromUtf8(fields.at(2)).trimmed().toInt(&validSignal);
+        const bool active = fields.at(0).trimmed() == "yes";
+        const QString security = QString::fromUtf8(fields.at(3)).trimmed();
+
+        QVariantMap entry = bySsid.value(ssid);
+        const int existingSignal = entry.value(QStringLiteral("signal")).toInt();
+        if (entry.isEmpty() || active || (validSignal && signal > existingSignal)) {
+            entry.insert(QStringLiteral("ssid"), ssid);
+            entry.insert(QStringLiteral("signal"), validSignal ? qBound(0, signal, 100) : 0);
+            entry.insert(QStringLiteral("secure"), !security.isEmpty());
+            entry.insert(QStringLiteral("security"), security.isEmpty() ? QStringLiteral("Open") : security);
+            entry.insert(QStringLiteral("active"), active);
+            bySsid.insert(ssid, entry);
+        }
+    }
+
+    QList<QVariantMap> sorted;
+    for (const QVariantMap &entry : bySsid)
+        sorted.append(entry);
+    std::sort(sorted.begin(), sorted.end(), [](const QVariantMap &a, const QVariantMap &b) {
+        if (a.value(QStringLiteral("active")).toBool() != b.value(QStringLiteral("active")).toBool())
+            return a.value(QStringLiteral("active")).toBool();
+        return a.value(QStringLiteral("signal")).toInt() > b.value(QStringLiteral("signal")).toInt();
+    });
+
+    for (const QVariantMap &entry : sorted)
+        networks.append(entry);
+
+    if (m_wifiNetworks != networks) {
+        m_wifiNetworks = networks;
+        emit wifiNetworksChanged();
+    }
+}
+
+void Backend::scanWifiNetworks() {
+    if (QStandardPaths::findExecutable(QStringLiteral("nmcli")).isEmpty()) return;
+
+    refreshSystem();
+    refreshWifiNetworks();
+    QProcess::startDetached(QStringLiteral("nmcli"),
+        {QStringLiteral("dev"), QStringLiteral("wifi"), QStringLiteral("rescan")});
+    QTimer::singleShot(1400, this, [this]() {
+        refreshSystem();
+        refreshWifiNetworks();
+    });
+}
+
+void Backend::connectWifiNetwork(const QString &ssid) {
+    if (ssid.isEmpty() || QStandardPaths::findExecutable(QStringLiteral("nmcli")).isEmpty()) return;
+
+    QProcess::startDetached(QStringLiteral("nmcli"),
+        {QStringLiteral("connection"), QStringLiteral("up"), QStringLiteral("id"), ssid});
+    QTimer::singleShot(1400, this, [this]() {
+        refreshSystem();
+        refreshWifiNetworks();
+    });
 }
 
 bool Backend::componentEnabled(const QString &key) const {
