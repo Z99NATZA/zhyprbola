@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 
 Item {
     id: win
@@ -27,20 +28,59 @@ Item {
 
         property string songTitle: backend.songTitle
         property string artist: backend.artist
-        property string coverSource: backend.coverSource
 
         property bool liked: false
         property bool playing: backend.playing
         property bool shuffle: false
         property bool repeat: false
 
-        property int currentSeconds: backend.positionSeconds
-        property int totalSeconds: backend.durationSeconds
+        property real displayedPositionMs: 0
+        property real lastTickMs: Date.now()
+        property string sampledTrack: ""
+        readonly property real totalMs: backend.durationMs
+        readonly property int currentSeconds: Math.floor(displayedPositionMs / 1000)
+        readonly property int totalSeconds: Math.floor(totalMs / 1000)
 
         readonly property real progress:
-            totalSeconds > 0
-                ? currentSeconds / totalSeconds
+            totalMs > 0
+                ? Math.max(0, Math.min(1, displayedPositionMs / totalMs))
                 : 0
+
+        function syncPosition() {
+            const measured = Math.max(0, Math.min(totalMs, backend.positionMs))
+            const track = [backend.songTitle, backend.artist, totalMs].join("\u001f")
+            if (track !== sampledTrack || !backend.playing
+                    || Math.abs(measured - displayedPositionMs) > 1000) {
+                displayedPositionMs = measured
+            } else {
+                displayedPositionMs += (measured - displayedPositionMs) * 0.2
+            }
+            sampledTrack = track
+            lastTickMs = Date.now()
+        }
+
+        function advancePosition() {
+            const now = Date.now()
+            displayedPositionMs = Math.min(totalMs,
+                displayedPositionMs + Math.max(0, now - lastTickMs))
+            lastTickMs = now
+        }
+
+        Component.onCompleted: syncPosition()
+
+        Connections {
+            target: backend
+            function onMusicChanged() { card.syncPosition() }
+        }
+
+        Timer {
+            interval: 16
+            repeat: true
+            running: card.playing && backend.hasPlayer && card.totalMs > 0
+                && win.visible && (!win.Window.window
+                    || win.Window.window.visibility !== Window.Minimized)
+            onTriggered: card.advancePosition()
+        }
 
         property color textColor: Theme.text
 
@@ -65,23 +105,6 @@ Item {
                 + ":"
                 + (second < 10 ? "0" : "")
                 + second
-        }
-
-        scale:
-            hover.hovered
-                ? 1.02
-                : 1.0
-
-        Behavior on scale {
-            SpringAnimation {
-                spring: 3
-                damping: 0.28
-                epsilon: 0.001
-            }
-        }
-
-        HoverHandler {
-            id: hover
         }
 
         // ==================================================
@@ -116,25 +139,10 @@ Item {
             clip: true
             color: Theme.accent
 
-            Image {
-                anchors.fill: parent
-
-                source: card.coverSource
-
-                visible:
-                    card.coverSource !== ""
-
-                fillMode:
-                    Image.PreserveAspectCrop
-
-                smooth: true
-            }
-
             MusicIcon {
                 anchors.centerIn: parent
                 width: 42
                 height: 42
-                visible: card.coverSource === ""
             }
         }
 
@@ -327,16 +335,16 @@ Item {
 
                 MouseArea {
                     anchors.fill: parent
-                    enabled: backend.hasPlayer && card.totalSeconds > 0
+                    enabled: backend.hasPlayer && card.totalMs > 0
 
                     cursorShape:
                         Qt.PointingHandCursor
 
                     onClicked: function(mouse) {
-                        var p =
-                            mouse.x / width
-
-                        backend.seek(Math.round(card.totalSeconds * p))
+                        const p = Math.max(0, Math.min(1, mouse.x / width))
+                        card.displayedPositionMs = card.totalMs * p
+                        card.lastTickMs = Date.now()
+                        backend.seek(Math.round(card.totalMs * p / 1000))
                     }
                 }
             }

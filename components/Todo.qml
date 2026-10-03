@@ -43,22 +43,6 @@ Item {
         property int completedCount: 2
         property int totalCount: 5
 
-        scale:
-            hover.hovered
-                ? 1.015
-                : 1.0
-
-        Behavior on scale {
-            SpringAnimation {
-                spring: 3
-                damping: 0.28
-            }
-        }
-
-        HoverHandler {
-            id: hover
-        }
-
         // ==================================================
         // Flat surface
         // ==================================================

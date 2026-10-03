@@ -509,10 +509,9 @@ void Backend::refreshMusic() {
     if (selected.isEmpty()) {
         m_songTitle = QStringLiteral("No music playing");
         m_artist = QStringLiteral("Open a music app");
-        m_coverSource.clear();
         m_trackId.clear();
-        m_positionSeconds = 0;
-        m_durationSeconds = 0;
+        m_positionMs = 0;
+        m_durationMs = 0;
         m_playing = false;
         emit musicChanged();
         return;
@@ -526,23 +525,21 @@ void Backend::refreshMusic() {
         m_songTitle = metadata.value(QStringLiteral("xesam:title")).toString();
         if (m_songTitle.isEmpty()) m_songTitle = QStringLiteral("Unknown track");
         m_artist = artists.isEmpty() ? selected.section('.', -1) : artists.join(QStringLiteral(", "));
-        m_durationSeconds = qMax(0, int(metadata.value(QStringLiteral("mpris:length")).toLongLong() / 1000000));
-        m_coverSource = metadata.value(QStringLiteral("mpris:artUrl")).toString();
+        m_durationMs = qMax<qint64>(0, metadata.value(QStringLiteral("mpris:length")).toLongLong() / 1000);
         m_trackId = trackPath.path();
-        m_positionSeconds = qMax(0, int(mprisProperty(selected, QStringLiteral("Position")).toLongLong() / 1000000));
+        m_positionMs = qMax<qint64>(0, mprisProperty(selected, QStringLiteral("Position")).toLongLong() / 1000);
         m_playing = mprisProperty(selected, QStringLiteral("PlaybackStatus")).toString() == QLatin1String("Playing");
         emit musicChanged();
         return;
     }
 
     const QString metadata = playerctl({QStringLiteral("-p"), selected, QStringLiteral("metadata"),
-        QStringLiteral("--format"), QStringLiteral("{{title}}\x1f{{artist}}\x1f{{mpris:length}}\x1f{{mpris:artUrl}}")});
+        QStringLiteral("--format"), QStringLiteral("{{title}}\x1f{{artist}}\x1f{{mpris:length}}")});
     const QStringList fields = metadata.split(QChar(0x1f));
     m_songTitle = fields.value(0).isEmpty() ? QStringLiteral("Unknown track") : fields.value(0);
     m_artist = fields.value(1).isEmpty() ? selected.section('.', 0, 0) : fields.value(1);
-    m_durationSeconds = qMax(0, int(fields.value(2).toLongLong() / 1000000));
-    m_coverSource = fields.value(3);
-    m_positionSeconds = qMax(0, qRound(playerctl({QStringLiteral("-p"), selected, QStringLiteral("position")}).toDouble()));
+    m_durationMs = qMax<qint64>(0, fields.value(2).toLongLong() / 1000);
+    m_positionMs = qMax<qint64>(0, qRound64(playerctl({QStringLiteral("-p"), selected, QStringLiteral("position")}).toDouble() * 1000));
     m_playing = playerctl({QStringLiteral("-p"), selected, QStringLiteral("status")}) == QLatin1String("Playing");
     emit musicChanged();
 }

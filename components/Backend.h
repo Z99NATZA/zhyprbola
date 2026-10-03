@@ -39,9 +39,8 @@ class Backend : public QObject {
     Q_PROPERTY(bool hasPlayer READ hasPlayer NOTIFY musicChanged)
     Q_PROPERTY(QString songTitle READ songTitle NOTIFY musicChanged)
     Q_PROPERTY(QString artist READ artist NOTIFY musicChanged)
-    Q_PROPERTY(QString coverSource READ coverSource NOTIFY musicChanged)
-    Q_PROPERTY(int positionSeconds READ positionSeconds NOTIFY musicChanged)
-    Q_PROPERTY(int durationSeconds READ durationSeconds NOTIFY musicChanged)
+    Q_PROPERTY(qint64 positionMs READ positionMs NOTIFY musicChanged)
+    Q_PROPERTY(qint64 durationMs READ durationMs NOTIFY musicChanged)
     Q_PROPERTY(bool playing READ playing NOTIFY musicChanged)
     Q_PROPERTY(QVariantList spectrum READ spectrum NOTIFY spectrumChanged)
     Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
@@ -82,9 +81,8 @@ public:
     bool hasPlayer() const { return !m_player.isEmpty(); }
     QString songTitle() const { return m_songTitle; }
     QString artist() const { return m_artist; }
-    QString coverSource() const { return m_coverSource; }
-    int positionSeconds() const { return m_positionSeconds; }
-    int durationSeconds() const { return m_durationSeconds; }
+    qint64 positionMs() const { return m_positionMs; }
+    qint64 durationMs() const { return m_durationMs; }
     bool playing() const { return m_playing; }
     QVariantList spectrum() const { return m_spectrum; }
     QString themeName() const { return m_themeName; }
@@ -181,9 +179,8 @@ private:
     bool m_playerUsesDbus = false;
     QString m_songTitle = QStringLiteral("No music playing");
     QString m_artist = QStringLiteral("Open a music app");
-    QString m_coverSource;
-    int m_positionSeconds = 0;
-    int m_durationSeconds = 0;
+    qint64 m_positionMs = 0;
+    qint64 m_durationMs = 0;
     bool m_playing = false;
     QProcess m_cava;
     QByteArray m_cavaBuffer;
