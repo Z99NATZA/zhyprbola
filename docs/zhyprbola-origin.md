@@ -1,29 +1,31 @@
-# Zhyprbola Origin
-
 ```text
-zhyprbola = z + hypr + bola
-```
+# ไม่ใช่เอกสารในการสร้างระบบ (not a document)
+==========
 
-```text
-z:    znnn, the personal project mark
-hypr: Hyprland-inspired desktop direction
-bola: from pola, reshaped toward hyperbola
-```
+ก่อนหน้าผมหา Stack แทบพลิกแผ่นดิน ลองมาหลายแบบแต่ไม่ลงตัวสักที
+แล้ววันนี้ผมเพิ่งคิดได้ว่า ถ้าเอา GJS + QML เป็นไปได้ไหมนะ
 
-## Meaning
+เพราะก่อนหน้าผมเข้าใจว่า QT QML มันไม่เหมาะกับ GJS เพราะมันคนละอย่าง
+QML มันควรจะไปทาง Hyprland มากกว่า และถ้าผมยังใช้ GNOME อยู่
+ผมก็น่าจะสร้าง UI สวย ๆ ไม่ได้ เพราะ ShellCSS ของ GNOME ไม่ได้เก่งขนาดนั้น
+แต่ถ้าจะไป Hyprland + QML ผมก็ไม่ชอบกฎ Tilling
 
-```text
-GJS / GNOME Shell  <---- approaches ---->  QML panels
-```
+และผมไปลอง Plasma ก็หา UI ใช้รอในขณะพัฒนายาก แล็คบ้าง
+ต้อง Settings หลายอย่างบ้าง เลยทำให้มึนงงไปเลย จนผมคิดว่า
+หากสร้าง Shell เป็นของตัวเอง แล้วหาวิธีเอา CSS3 มารันจะเป็นยังไง
 
-```text
-The project keeps GNOME Shell integration and QML panels close enough to feel
-like one desktop layer, without forcing them into the same runtime.
-```
+จนได้ไปเจอว่า GTK มันทำได้ แต่ดันอยู่ภายใต้ GNOME
+ถ้าเราไม่อยากเริ่มสร้าง Shell เองละ
 
-## Boundary
+และเมื่อวานผมก็สร้าง Project ขึ้นมาด้วย QML แต่ยังรันระดับ App ทั่วไป
+เพื่อทดสอบว่า style จัดได้ดีแค่ไหน จากนั้นผมยังพยายามที่จะสร้าง Shell + QML
+เพื่อให้รันได้โดยไม่โดนกฎ Tilling และไม่ติด GNOME แต่ก็คิดไม่ออก
 
-```text
-Use current-behavior.md for what works now.
-Use architecture.md for the runtime split and next direction.
+แต่ในความโกลาหลของความคิด มันก็มีสิ่งที่แว๊บมาคือ อ้าว...
+แล้วทำไมเราไม่ให้ GJS ลองเรียก QML ดูละ แม้เรียกกันไม่ได้โดยตรง
+ก็น่าจะสามารถสร้างตัวกลางที่ทำให้มันสื่อสารกันได้นะ นี่คือความคิดตอนนั้น
+
+ก็เลยกลายเป็น Project ปัจจุบัน zhyprbola
+(Hyperbola สัญลักษณ์แห่งการจากลาที่สวยที่สุด)
+-- แม้เข้าใกล้กัน แต่ไม่มีวันได้สัมผัสกัน -- เหมือนกับ GJS + QML
 ```
