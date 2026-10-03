@@ -2,7 +2,7 @@
 
 ```text
 Flow: GNOME dock extension -> focused QML panels
-Panels: bluetooth, wifi, clock-weather, system-status
+Panels: bluetooth, wifi, clock-weather, system-status, audio-spectrum
 Theme: ~/.config/zhyprbola/theme
 Dock position: ~/.config/zhyprbola/dock-position
 Dock default: left
@@ -20,6 +20,7 @@ make dock
 ./scripts/run-panel wifi
 ./scripts/run-panel clock-weather
 ./scripts/run-panel system-status
+./scripts/run-panel audio-spectrum
 ```
 
 ## Integrations

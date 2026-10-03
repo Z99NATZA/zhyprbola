@@ -40,6 +40,7 @@ const PANEL_TITLES = Object.freeze({
     wifi: 'Zhyprbola Wi-Fi',
     'clock-weather': 'Zhyprbola Clock & Weather',
     'system-status': 'Zhyprbola System Status',
+    'audio-spectrum': 'Zhyprbola Audio Spectrum',
 });
 
 export default class ZhyprbolaExtension extends Extension {
@@ -114,6 +115,11 @@ export default class ZhyprbolaExtension extends Extension {
             iconName: 'utilities-system-monitor-symbolic',
             accessibleName: 'System Status',
             panelName: 'system-status',
+        }));
+        this._dock.add_child(this._createPanelButton({
+            iconName: 'audio-x-generic-symbolic',
+            accessibleName: 'Audio Spectrum',
+            panelName: 'audio-spectrum',
         }));
         this._dock.add_child(this._createSettingsButton());
 

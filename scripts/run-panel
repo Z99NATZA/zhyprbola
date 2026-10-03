@@ -5,7 +5,7 @@ ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 PANEL_NAME="${1:-bluetooth}"
 
 case "$PANEL_NAME" in
-  bluetooth|wifi|clock-weather|system-status)
+  bluetooth|wifi|clock-weather|system-status|audio-spectrum)
     ;;
   *)
     echo "Unsupported panel: $PANEL_NAME" >&2
