@@ -102,42 +102,42 @@ export default class ZhyprbolaExtension extends Extension {
         });
 
         this._dock.add_child(this._createPanelButton({
-            iconName: 'bluetooth-active-symbolic',
+            iconName: 'bluetooth',
             accessibleName: 'Bluetooth',
             panelName: 'bluetooth',
         }));
         this._dock.add_child(this._createPanelButton({
-            iconName: 'network-wireless-symbolic',
+            iconName: 'wifi',
             accessibleName: 'Wi-Fi',
             panelName: 'wifi',
         }));
         this._dock.add_child(this._createPanelButton({
-            iconName: 'weather-clear-symbolic',
+            iconName: 'clock-weather',
             accessibleName: 'Clock and Weather',
             panelName: 'clock-weather',
         }));
         this._dock.add_child(this._createPanelButton({
-            iconName: 'utilities-system-monitor-symbolic',
+            iconName: 'system-status',
             accessibleName: 'System Status',
             panelName: 'system-status',
         }));
         this._dock.add_child(this._createPanelButton({
-            iconName: 'audio-x-generic-symbolic',
+            iconName: 'audio-spectrum',
             accessibleName: 'Audio Spectrum',
             panelName: 'audio-spectrum',
         }));
         this._dock.add_child(this._createPanelButton({
-            iconName: 'media-playback-start-symbolic',
+            iconName: 'music',
             accessibleName: 'Music Player',
             panelName: 'music',
         }));
         this._dock.add_child(this._createPanelButton({
-            iconName: 'view-list-symbolic',
+            iconName: 'todo',
             accessibleName: 'Today',
             panelName: 'todo',
         }));
         this._dock.add_child(this._createPanelButton({
-            iconName: 'x-office-calendar-symbolic',
+            iconName: 'calendar',
             accessibleName: 'Calendar',
             panelName: 'calendar',
         }));
@@ -415,8 +415,9 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _createPanelButton({iconName, accessibleName, panelName}) {
+        const iconPath = GLib.build_filenamev([this.path, 'icons', `${iconName}.svg`]);
         const icon = new St.Icon({
-            icon_name: iconName,
+            gicon: new Gio.FileIcon({file: Gio.File.new_for_path(iconPath)}),
             style_class: 'zhyprbola-dock-icon',
         });
 
