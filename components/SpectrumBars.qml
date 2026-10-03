@@ -7,7 +7,8 @@ Item {
         Bottom,
         Top,
         Center,
-        Mirror
+        Mirror,
+        Inward
     }
 
     property var levels: backend.spectrum
@@ -18,6 +19,26 @@ Item {
     property real sensitivity: 1.25
     property real barOpacity: 0.82
     property color barColor: Theme.accent
+    property int smoothingDuration: 130
+    readonly property int inwardBarCount: Math.max(2, barCount - barCount % 2)
+    readonly property int inwardHalfCount: inwardBarCount / 2
+    readonly property real inwardBarWidth: Math.max(2,
+        (width - (inwardBarCount - 1) * gap) / inwardBarCount)
+
+    function inwardHeight(index) {
+        const source = levels || []
+        if (source.length === 0)
+            return minimumBarHeight
+
+        const mirroredIndex = Math.min(index, inwardBarCount - 1 - index)
+        const sourceT = inwardHalfCount === 1 ? 0
+            : 1 - mirroredIndex / (inwardHalfCount - 1)
+        const sample = Math.min(source.length - 1,
+            Math.floor(sourceT * (source.length - 1)))
+        const level = Math.min(1,
+            Math.sqrt(Math.max(0, source[sample])) * sensitivity)
+        return minimumBarHeight + (height - minimumBarHeight) * level
+    }
 
     readonly property string orientationLabel: {
         if (orientation === SpectrumBars.Top)
@@ -26,16 +47,25 @@ Item {
             return "Center"
         if (orientation === SpectrumBars.Mirror)
             return "Mirror"
+        if (orientation === SpectrumBars.Inward)
+            return "Inward"
         return "Bottom"
     }
 
     function cycleOrientation() {
-        orientation = (orientation + 1) % 4
+        orientation = (orientation + 1) % 5
         bars.requestPaint()
     }
 
-    onLevelsChanged: bars.requestPaint()
+    onLevelsChanged: {
+        if (orientation !== SpectrumBars.Inward)
+            bars.requestPaint()
+    }
     onOrientationChanged: bars.requestPaint()
+    onBarCountChanged: bars.requestPaint()
+    onGapChanged: bars.requestPaint()
+    onMinimumBarHeightChanged: bars.requestPaint()
+    onSensitivityChanged: bars.requestPaint()
     onBarColorChanged: bars.requestPaint()
     onBarOpacityChanged: bars.requestPaint()
     onWidthChanged: bars.requestPaint()
@@ -44,6 +74,7 @@ Item {
     Canvas {
         id: bars
         anchors.fill: parent
+        visible: visualizer.orientation !== SpectrumBars.Inward
 
         onPaint: {
             const ctx = getContext("2d")
@@ -87,6 +118,42 @@ Item {
                     y = (height - barHeight) / 2
 
                 ctx.fillRect(x, y, barWidth, barHeight)
+            }
+        }
+    }
+
+    Item {
+        id: inwardBars
+        anchors.fill: parent
+        visible: visualizer.orientation === SpectrumBars.Inward
+        opacity: visualizer.barOpacity
+
+        Repeater {
+            model: visualizer.inwardBarCount
+
+            delegate: Item {
+                id: bar
+                required property int index
+                readonly property real targetHeight: visualizer.inwardHeight(index)
+
+                x: index * (visualizer.inwardBarWidth + visualizer.gap)
+                width: visualizer.inwardBarWidth
+                height: inwardBars.height
+
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    width: bar.width
+                    height: bar.targetHeight
+                    radius: width / 2
+                    color: visualizer.barColor
+
+                    Behavior on height {
+                        NumberAnimation {
+                            duration: visualizer.smoothingDuration
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                }
             }
         }
     }
