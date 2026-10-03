@@ -13,12 +13,20 @@ const DockPosition = Object.freeze({
     BOTTOM: 'bottom',
 });
 
+const DEFAULT_DOCK_POSITION = DockPosition.LEFT;
+
 const DOCK_CONFIG = Object.freeze({
-    position: DockPosition.RIGHT,
     edgeMargin: 18,
     centerOffset: 0,
     spacing: 8,
 });
+
+const POSITION_OPTIONS = [
+    {name: DockPosition.LEFT, label: 'Dock: Left'},
+    {name: DockPosition.RIGHT, label: 'Dock: Right'},
+    {name: DockPosition.TOP, label: 'Dock: Top'},
+    {name: DockPosition.BOTTOM, label: 'Dock: Bottom'},
+];
 
 const THEMES = [
     {name: 'current', label: '1. Purple', wallpaper: '1.png'},
@@ -38,20 +46,25 @@ export default class ZhyprbolaExtension extends Extension {
     enable() {
         this._dock = null;
         this._layoutIdleId = 0;
+        this._wallpaperRefreshId = 0;
         this._pendingPanels = new Set();
         this._themePath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'theme']);
+        this._dockPositionPath = GLib.build_filenamev([
+            GLib.get_user_config_dir(), 'zhyprbola', 'dock-position']);
         this._useWallpaperPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'use-wallpaper']);
         this._themeName = this._readTheme();
+        this._dockPosition = this._readDockPosition();
         this._useWallpaper = this._readUseWallpaper();
         this._backgroundSettings = new Gio.Settings({
             schema_id: 'org.gnome.desktop.background',
         });
 
         this._createDock();
+        this._applyDockPosition();
         this._applyTheme();
-        this._applyWallpaper();
+        this._applyWallpaper(true);
         this._queueLayout();
 
         global.display.connectObject('workareas-changed', () => this._queueLayout(), this);
@@ -62,30 +75,19 @@ export default class ZhyprbolaExtension extends Extension {
         global.display.disconnectObject(this);
         Main.layoutManager.disconnectObject(this);
 
-        if (this._themeMenu) {
-            this._menuManager.removeMenu(this._themeMenu);
-            this._themeMenu.destroy();
-            this._themeMenu = null;
-        }
-        this._themeItems = null;
-        this._useWallpaperItem = null;
-        this._menuManager = null;
-        this._backgroundSettings = null;
-
         if (this._layoutIdleId) {
             GLib.source_remove(this._layoutIdleId);
             this._layoutIdleId = 0;
         }
 
-        if (this._dock) {
-            Main.layoutManager.removeChrome(this._dock);
-            this._dock.destroy();
-            this._dock = null;
-        }
+        this._cancelWallpaperRefresh();
+        this._destroySettingsMenu();
+        this._destroyDock();
+        this._backgroundSettings = null;
     }
 
     _createDock() {
-        const vertical = [DockPosition.LEFT, DockPosition.RIGHT].includes(DOCK_CONFIG.position);
+        const vertical = [DockPosition.LEFT, DockPosition.RIGHT].includes(this._dockPosition);
         this._dock = new St.BoxLayout({
             style_class: 'zhyprbola-dock',
             style: `spacing: ${DOCK_CONFIG.spacing}px;`,
@@ -114,12 +116,12 @@ export default class ZhyprbolaExtension extends Extension {
             accessibleName: 'System Status',
             panelName: 'system-status',
         }));
-        this._dock.add_child(this._createThemeButton());
+        this._dock.add_child(this._createSettingsButton());
 
         Main.layoutManager.addTopChrome(this._dock, {trackFullscreen: true});
     }
 
-    _createThemeButton() {
+    _createSettingsButton() {
         const icon = new St.Icon({
             icon_name: 'preferences-desktop-theme-symbolic',
             style_class: 'zhyprbola-dock-icon',
@@ -130,7 +132,7 @@ export default class ZhyprbolaExtension extends Extension {
             can_focus: true,
             reactive: true,
             track_hover: true,
-            accessible_name: 'Choose theme',
+            accessible_name: 'Zhyprbola settings',
         });
 
         const side = {
@@ -138,7 +140,7 @@ export default class ZhyprbolaExtension extends Extension {
             [DockPosition.RIGHT]: St.Side.LEFT,
             [DockPosition.TOP]: St.Side.BOTTOM,
             [DockPosition.BOTTOM]: St.Side.TOP,
-        }[DOCK_CONFIG.position];
+        }[this._dockPosition];
         this._themeMenu = new PopupMenu.PopupMenu(button, 0.5, side);
         this._themeMenu.actor.add_style_class_name('zhyprbola-theme-menu');
         this._themeMenu.actor.hide();
@@ -146,7 +148,16 @@ export default class ZhyprbolaExtension extends Extension {
         this._menuManager = new PopupMenu.PopupMenuManager(button);
         this._menuManager.addMenu(this._themeMenu);
         this._themeItems = new Map();
+        this._positionItems = new Map();
 
+        for (const position of POSITION_OPTIONS) {
+            const item = new PopupMenu.PopupMenuItem(position.label);
+            item.connect('activate', () => this._setDockPosition(position.name));
+            this._themeMenu.addMenuItem(item);
+            this._positionItems.set(position.name, item);
+        }
+
+        this._themeMenu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         for (const theme of THEMES) {
             const item = new PopupMenu.PopupMenuItem(theme.label);
             item.connect('activate', () => this._setTheme(theme.name));
@@ -175,12 +186,38 @@ export default class ZhyprbolaExtension extends Extension {
         }
     }
 
+    _readDockPosition() {
+        try {
+            const [, contents] = GLib.file_get_contents(this._dockPositionPath);
+            const name = new TextDecoder().decode(contents).trim();
+            return POSITION_OPTIONS.some(position => position.name === name)
+                ? name
+                : DEFAULT_DOCK_POSITION;
+        } catch (_) {
+            return DEFAULT_DOCK_POSITION;
+        }
+    }
+
     _readUseWallpaper() {
         try {
             const [, contents] = GLib.file_get_contents(this._useWallpaperPath);
             return new TextDecoder().decode(contents).trim() === 'true';
         } catch (_) {
             return false;
+        }
+    }
+
+    _setDockPosition(position) {
+        if (!POSITION_OPTIONS.some(item => item.name === position))
+            return;
+
+        try {
+            GLib.mkdir_with_parents(GLib.path_get_dirname(this._dockPositionPath), 0o700);
+            GLib.file_set_contents(this._dockPositionPath, `${position}\n`);
+            this._dockPosition = position;
+            this._rebuildDock();
+        } catch (error) {
+            logError(error, 'Failed to save Zhyprbola dock position');
         }
     }
 
@@ -204,7 +241,7 @@ export default class ZhyprbolaExtension extends Extension {
             GLib.mkdir_with_parents(GLib.path_get_dirname(this._useWallpaperPath), 0o700);
             GLib.file_set_contents(this._useWallpaperPath, enabled ? 'true\n' : 'false\n');
             this._useWallpaper = enabled;
-            this._applyWallpaper();
+            this._applyWallpaper(enabled);
         } catch (error) {
             logError(error, 'Failed to save Zhyprbola wallpaper setting');
         }
@@ -239,9 +276,50 @@ export default class ZhyprbolaExtension extends Extension {
                 : PopupMenu.Ornament.NONE);
     }
 
-    _applyWallpaper() {
-        if (!this._useWallpaper || !this._backgroundSettings)
+    _applyDockPosition() {
+        for (const [name, item] of this._positionItems)
+            item.setOrnament(name === this._dockPosition
+                ? PopupMenu.Ornament.CHECK
+                : PopupMenu.Ornament.NONE);
+
+        this._queueLayout();
+    }
+
+    _rebuildDock() {
+        this._destroySettingsMenu();
+        this._destroyDock();
+        this._createDock();
+        this._applyTheme();
+        this._applyDockPosition();
+    }
+
+    _destroySettingsMenu() {
+        if (this._themeMenu) {
+            this._menuManager?.removeMenu(this._themeMenu);
+            this._themeMenu.destroy();
+            this._themeMenu = null;
+        }
+
+        this._themeItems = null;
+        this._positionItems = null;
+        this._useWallpaperItem = null;
+        this._menuManager = null;
+    }
+
+    _destroyDock() {
+        if (!this._dock)
             return;
+
+        Main.layoutManager.removeChrome(this._dock);
+        this._dock.destroy();
+        this._dock = null;
+    }
+
+    _applyWallpaper(forceRefresh = false) {
+        if (!this._useWallpaper || !this._backgroundSettings) {
+            this._cancelWallpaperRefresh();
+            return;
+        }
 
         const theme = THEMES.find(item => item.name === this._themeName);
         if (!theme)
@@ -255,6 +333,41 @@ export default class ZhyprbolaExtension extends Extension {
         }
 
         const uri = file.get_uri();
+        if (forceRefresh &&
+            this._backgroundSettings.get_string('picture-uri') === uri &&
+            this._backgroundSettings.get_string('picture-uri-dark') === uri) {
+            this._backgroundSettings.set_string('picture-uri', '');
+            this._backgroundSettings.set_string('picture-uri-dark', '');
+            this._scheduleWallpaperSet(uri);
+            return;
+        }
+
+        this._cancelWallpaperRefresh();
+        this._setWallpaperUri(uri);
+    }
+
+    _scheduleWallpaperSet(uri) {
+        this._cancelWallpaperRefresh();
+
+        this._wallpaperRefreshId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
+            this._wallpaperRefreshId = 0;
+            this._setWallpaperUri(uri);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _cancelWallpaperRefresh() {
+        if (!this._wallpaperRefreshId)
+            return;
+
+        GLib.source_remove(this._wallpaperRefreshId);
+        this._wallpaperRefreshId = 0;
+    }
+
+    _setWallpaperUri(uri) {
+        if (!this._backgroundSettings)
+            return;
+
         this._backgroundSettings.set_string('picture-uri', uri);
         this._backgroundSettings.set_string('picture-uri-dark', uri);
         this._backgroundSettings.set_string('picture-options', 'zoom');
@@ -350,7 +463,7 @@ export default class ZhyprbolaExtension extends Extension {
         let x = monitor.x + Math.round((monitor.width - naturalWidth) / 2);
         let y = monitor.y + Math.round((monitor.height - naturalHeight) / 2);
 
-        switch (DOCK_CONFIG.position) {
+        switch (this._dockPosition) {
         case DockPosition.LEFT:
             x = monitor.x + margin;
             y += offset;
