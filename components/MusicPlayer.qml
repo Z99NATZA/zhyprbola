@@ -193,6 +193,21 @@ Item {
                     pixelSize: 14
                 }
             }
+
+            SpectrumBars {
+                width: 172
+                height: 18
+                visible: backend.hasPlayer
+                levels: card.playing && win.visible ? backend.spectrum : []
+                orientation: SpectrumBars.Inward
+                barCount: 24
+                gap: 3
+                minimumBarHeight: 2
+                sensitivity: 1.3
+                smoothingDuration: 160
+                barColor: Theme.accent
+                barOpacity: 0.85
+            }
         }
 
         // ==================================================
