@@ -150,7 +150,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
         this, &Backend::refreshTheme);
     refreshTheme();
 
-    m_location = qEnvironmentVariable("ZPOLA_LOCATION", "Bangkok");
+    m_location = qEnvironmentVariable("ZHYPRBOLA_LOCATION", "Bangkok");
     m_userName = qEnvironmentVariable("USER", "User");
 
     QFile cpuInfo(QStringLiteral("/proc/cpuinfo"));
@@ -345,8 +345,8 @@ void Backend::refreshSystem() {
 void Backend::refreshWeather() {
     QUrl url(QStringLiteral("https://api.open-meteo.com/v1/forecast"));
     QUrlQuery query;
-    query.addQueryItem(QStringLiteral("latitude"), qEnvironmentVariable("ZPOLA_LATITUDE", "13.7563"));
-    query.addQueryItem(QStringLiteral("longitude"), qEnvironmentVariable("ZPOLA_LONGITUDE", "100.5018"));
+    query.addQueryItem(QStringLiteral("latitude"), qEnvironmentVariable("ZHYPRBOLA_LATITUDE", "13.7563"));
+    query.addQueryItem(QStringLiteral("longitude"), qEnvironmentVariable("ZHYPRBOLA_LONGITUDE", "100.5018"));
     query.addQueryItem(QStringLiteral("current"), QStringLiteral("temperature_2m,weather_code"));
     query.addQueryItem(QStringLiteral("daily"), QStringLiteral("temperature_2m_max,temperature_2m_min"));
     query.addQueryItem(QStringLiteral("timezone"), QStringLiteral("auto"));

@@ -1,5 +1,5 @@
 QT += quick qml network dbus
 CONFIG += c++17
-TARGET = zpola
+TARGET = zhyprbola
 SOURCES += main.cpp components/Backend.cpp
 HEADERS += components/Backend.h

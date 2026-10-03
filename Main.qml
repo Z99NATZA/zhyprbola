@@ -10,7 +10,7 @@ Window {
     height: 900
     visibility: Window.Maximized
     flags: Qt.FramelessWindowHint
-    title: "Zpola Desktop"
+    title: "Zhyprbola Desktop"
     color: "transparent"
 
     Flickable {

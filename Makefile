@@ -4,10 +4,10 @@ QMLLINT := $(shell command -v qmllint || command -v /usr/lib/qt6/bin/qmllint)
 
 build:
 	@mkdir -p build
-	@cd build && qmake6 ../zpola.pro && $(MAKE)
+	@cd build && qmake6 ../zhyprbola.pro && $(MAKE)
 
 run: build
-	./build/zpola
+	./build/zhyprbola
 
 run-panel: build
 	./scripts/run-panel bluetooth

@@ -13,8 +13,8 @@ case "$PANEL_NAME" in
     ;;
 esac
 
-if [[ ! -x "$ROOT_DIR/build/zpola" ]]; then
+if [[ ! -x "$ROOT_DIR/build/zhyprbola" ]]; then
   make -C "$ROOT_DIR" build
 fi
 
-"$ROOT_DIR/build/zpola" --panel "$PANEL_NAME"
+"$ROOT_DIR/build/zhyprbola" --panel "$PANEL_NAME"

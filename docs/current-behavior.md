@@ -36,12 +36,12 @@ Weather:    Open-Meteo
 ## Wallpapers
 
 ```text
-Files: gnome-extension/wallpapers/1.png ... 5.png
+Files: gnome-extension/wallpapers/1.png ... 6.png
 Themes: 1. Purple -> 1.png, 2. White Mist -> 2.png, etc.
 ```
 
 ## Weather
 
 ```bash
-ZPOLA_LATITUDE=13.7563 ZPOLA_LONGITUDE=100.5018 ZPOLA_LOCATION=Bangkok make dock
+ZHYPRBOLA_LATITUDE=13.7563 ZHYPRBOLA_LONGITUDE=100.5018 ZHYPRBOLA_LOCATION=Bangkok make dock
 ```
