@@ -19,7 +19,7 @@ Window {
     minimumHeight: panelHeight
     maximumWidth: panelWidth
     maximumHeight: panelHeight
-    flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+    flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
     color: "transparent"
     title: panelName === "wifi"
         ? "Zhyprbola Wi-Fi"
