@@ -60,18 +60,6 @@ Canvas {
             ctx.beginPath()
             ctx.arc(12, 18.5, 1.5, 0, Math.PI * 2)
             ctx.fill()
-        } else if (name === "music") {
-            ctx.beginPath()
-            ctx.moveTo(10, 18)
-            ctx.lineTo(10, 5)
-            ctx.lineTo(18, 3)
-            ctx.lineTo(18, 15)
-            ctx.stroke()
-            ctx.beginPath()
-            ctx.arc(7, 18, 2.6, 0, Math.PI * 2)
-            ctx.moveTo(17.6, 15)
-            ctx.arc(15, 15, 2.6, 0, Math.PI * 2)
-            ctx.fill()
         } else if (name === "weather" || name === "weather-sun" || name === "weather-cloud") {
             if (name !== "weather-cloud") {
                 ctx.beginPath()

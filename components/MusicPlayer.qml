@@ -130,13 +130,11 @@ Item {
                 smooth: true
             }
 
-            FlatIcon {
+            MusicIcon {
                 anchors.centerIn: parent
                 width: 42
                 height: 42
                 visible: card.coverSource === ""
-                name: "music"
-                ink: Theme.accentText
             }
         }
 
