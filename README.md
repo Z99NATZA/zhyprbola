@@ -21,12 +21,14 @@ sudo apt install qml6-module-qtquick-controls playerctl cava network-manager blu
 
 ## Run
 
-```text
-make dock builds the QML panel host, installs the local GNOME extension,
-and enables the dock.
+```bash
+make dock
 
-The dock may appear immediately. If GNOME does not load the updated extension,
-log out and back in. Some sessions or machines may need that after each update.
+# Builds the QML panel host, installs the local GNOME extension,
+# and enables the dock.
+
+# The dock may appear immediately. If GNOME does not load the updated extension,
+# log out and back in. Some sessions or machines may need that after each update.
 ```
 
 ## Development
