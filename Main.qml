@@ -112,8 +112,8 @@ Window {
                 anchors.right: parent.right
                 anchors.rightMargin: 35 - 15 * stage.layoutProgress
                 y: 100 + 5 * stage.layoutProgress
-                width: 430
-                height: 150
+                width: 528
+                height: 195
                 visible: stage.systemEnabled
                 enabled: visible
 
@@ -123,7 +123,7 @@ Window {
             Item {
                 anchors.right: parent.right
                 anchors.rightMargin: 70 - 35 * stage.layoutProgress
-                y: 270 + 30 * stage.layoutProgress
+                y: 305 + 30 * stage.layoutProgress
                 width: 360 * stage.rightScale
                 height: 280 * stage.rightScale
                 visible: stage.todoEnabled
@@ -138,7 +138,7 @@ Window {
             Item {
                 anchors.right: parent.right
                 anchors.rightMargin: 70 - 35 * stage.layoutProgress
-                y: 565 + 100 * stage.layoutProgress
+                y: 600 + 100 * stage.layoutProgress
                 width: 360 * stage.rightScale
                 height: 290 * stage.rightScale
                 visible: stage.calendarEnabled

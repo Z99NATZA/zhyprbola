@@ -9,12 +9,12 @@ Window {
     readonly property string panelName: requestedPanel
     readonly property int panelWidth: panelName === "clock-weather" || panelName === "audio-spectrum"
         ? 440
-        : (panelName === "system-status" ? 430 : 430)
+        : (panelName === "system-status" ? 528 : 430)
     readonly property int panelHeight: panelName === "wifi"
         ? 576
         : (panelName === "clock-weather" || panelName === "audio-spectrum"
             ? 172
-            : (panelName === "system-status" ? 150 : 548))
+            : (panelName === "system-status" ? 195 : 548))
     readonly property string panelTitle: {
         if (panelName === "wifi")
             return "Zhyprbola Wi-Fi"

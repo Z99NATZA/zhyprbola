@@ -3,8 +3,8 @@ import QtQuick
 Item {
     id: win
 
-    width: 430
-    height: 150
+    width: 528
+    height: 195
     // ==================================================
     // Background
     // ==================================================
@@ -23,7 +23,7 @@ Item {
         property string detail: "Ryzen 5 5600"
         property color accentColor: Theme.accent
 
-        width: 118
+        width: 114
         height: 128
 
         readonly property color textColor: Theme.text
@@ -133,9 +133,12 @@ Item {
                 topMargin: 0
             }
 
-            width: 90
+            width: 114
             height: 18
             clip: true
+            readonly property real marqueeSpeed: 12 // pixels per second
+            readonly property int scrollDuration: Math.round(
+                Math.max(0, detailText.width - width) * 1000 / marqueeSpeed)
 
             Text {
                 id: detailText
@@ -165,8 +168,8 @@ Item {
 
                     NumberAnimation {
                         to: detailArea.width - detailText.width
-                        duration: 4000
-                        easing.type: Easing.InOutSine
+                        duration: detailArea.scrollDuration
+                        easing.type: Easing.Linear
                     }
 
                     PauseAnimation {
@@ -175,8 +178,8 @@ Item {
 
                     NumberAnimation {
                         to: 0
-                        duration: 4000
-                        easing.type: Easing.InOutSine
+                        duration: detailArea.scrollDuration
+                        easing.type: Easing.Linear
                     }
                 }
             }
@@ -191,8 +194,9 @@ Item {
         id: card
 
         anchors.centerIn: parent
+        scale: 1.3
 
-        property int paddingX: 18
+        property int paddingX: 22
         property int paddingY: 6
 
         implicitWidth: content.implicitWidth + paddingX * 2
@@ -203,20 +207,6 @@ Item {
 
         property color surfaceColor: Theme.cardSurface
         property real cornerRadius: 24
-
-        scale: hover.hovered ? 1.02 : 1.0
-
-        Behavior on scale {
-            SpringAnimation {
-                spring: 3
-                damping: 0.28
-                epsilon: 0.001
-            }
-        }
-
-        HoverHandler {
-            id: hover
-        }
 
         Rectangle {
             anchors.fill: parent
@@ -233,7 +223,7 @@ Item {
 
             x: card.paddingX
             y: card.paddingY
-            spacing: 18
+            spacing: 8
 
             RingStat {
                 title: "CPU"

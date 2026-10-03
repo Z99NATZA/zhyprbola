@@ -27,7 +27,7 @@
 
 namespace {
 QString formatGiB(quint64 bytes) {
-    return QString::number(double(bytes) / 1073741824.0, 'f', 1) + QStringLiteral(" GB");
+    return QString::number(double(bytes) / 1073741824.0, 'f', 1);
 }
 
 QString weatherDescription(int code) {
@@ -271,7 +271,8 @@ void Backend::refreshSystem() {
         if (totalKiB) {
             const quint64 used = totalKiB - qMin(totalKiB, availableKiB);
             m_ramPercent = qRound(double(used) * 100 / double(totalKiB));
-            m_ramDetail = formatGiB(used * 1024) + QStringLiteral(" / ") + formatGiB(totalKiB * 1024);
+            m_ramDetail = formatGiB(used * 1024) + QStringLiteral("/")
+                + formatGiB(totalKiB * 1024) + QStringLiteral("GB");
         }
     }
 
@@ -280,7 +281,8 @@ void Backend::refreshSystem() {
         const quint64 total = disk.bytesTotal();
         const quint64 used = total - disk.bytesAvailable();
         m_diskPercent = qRound(double(used) * 100 / double(total));
-        m_diskDetail = formatGiB(used) + QStringLiteral(" / ") + formatGiB(total);
+        m_diskDetail = formatGiB(used) + QStringLiteral("/")
+            + formatGiB(total) + QStringLiteral("GB");
     }
 
     m_batteryAvailable = false;

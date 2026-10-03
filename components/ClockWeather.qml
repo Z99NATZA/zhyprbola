@@ -124,7 +124,7 @@ Item {
         }
 
         // ----------------------------------------------
-        // Intro + hover animation
+        // Intro animation
         // ----------------------------------------------
 
         opacity: 0
@@ -158,22 +158,6 @@ Item {
                 Easing.OutCubic
 
             running: true
-        }
-
-        scale: hover.hovered
-            ? 1.025
-            : 1.0
-
-        Behavior on scale {
-            SpringAnimation {
-                spring: 3
-                damping: 0.28
-                epsilon: 0.001
-            }
-        }
-
-        HoverHandler {
-            id: hover
         }
 
         // --------------------------------------------------
@@ -369,6 +353,12 @@ Item {
                     leftMargin:
                         26
 
+                    right:
+                        parent.right
+
+                    rightMargin:
+                        24
+
                     verticalCenter:
                         parent.verticalCenter
                 }
@@ -380,6 +370,8 @@ Item {
                 // ------------------------------------------
 
                 Row {
+                    id: weatherSummary
+                    width: parent.width
                     spacing: 12
 
                     // --------------------------------------
@@ -387,6 +379,7 @@ Item {
                     // --------------------------------------
 
                     FlatIcon {
+                        id: weatherIcon
                         width: 64
                         height: 58
                         name: "weather"
@@ -400,6 +393,8 @@ Item {
                     Column {
                         anchors.verticalCenter:
                             parent.verticalCenter
+
+                        width: weatherSummary.width - weatherIcon.width - weatherSummary.spacing
 
                         spacing: 2
 
@@ -427,22 +422,45 @@ Item {
                             }
                         }
 
-                        PopText {
-                            animate:
-                                card.ready
+                        Item {
+                            id: conditionArea
+                            width: parent.width
+                            height: conditionText.implicitHeight
+                            clip: true
 
-                            text:
-                                card.condition
+                            PopText {
+                                id: conditionText
+                                animate: card.ready
+                                text: card.condition
+                                color: card.dimColor
 
-                            color:
-                                card.dimColor
+                                font {
+                                    family: card.family
+                                    pixelSize: 13
+                                }
 
-                            font {
-                                family:
-                                    card.family
+                                x: 0
 
-                                pixelSize:
-                                    13
+                                SequentialAnimation on x {
+                                    running: conditionText.width > conditionArea.width
+                                    loops: Animation.Infinite
+
+                                    PauseAnimation { duration: 1000 }
+
+                                    NumberAnimation {
+                                        to: conditionArea.width - conditionText.width
+                                        duration: 8000
+                                        easing.type: Easing.InOutSine
+                                    }
+
+                                    PauseAnimation { duration: 1000 }
+
+                                    NumberAnimation {
+                                        to: 0
+                                        duration: 8000
+                                        easing.type: Easing.InOutSine
+                                    }
+                                }
                             }
                         }
                     }
