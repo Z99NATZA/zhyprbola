@@ -40,9 +40,9 @@ make run-panel
 ./scripts/run-panel bluetooth
 ./scripts/run-panel wifi
 ./scripts/run-panel clock-weather
+./scripts/run-panel system-status
 
 # QML lint checks
 # make check currently exits successfully but may print existing qmllint warnings.
 make check
 ```
-

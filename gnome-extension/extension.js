@@ -31,6 +31,7 @@ const PANEL_TITLES = Object.freeze({
     bluetooth: 'Zhyprbola Bluetooth',
     wifi: 'Zhyprbola Wi-Fi',
     'clock-weather': 'Zhyprbola Clock & Weather',
+    'system-status': 'Zhyprbola System Status',
 });
 
 export default class ZhyprbolaExtension extends Extension {
@@ -98,6 +99,11 @@ export default class ZhyprbolaExtension extends Extension {
             iconName: 'weather-clear-symbolic',
             accessibleName: 'Clock and Weather',
             panelName: 'clock-weather',
+        }));
+        this._dock.add_child(this._createPanelButton({
+            iconName: 'utilities-system-monitor-symbolic',
+            accessibleName: 'System Status',
+            panelName: 'system-status',
         }));
         this._dock.add_child(this._createThemeButton());
 
