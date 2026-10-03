@@ -43,6 +43,9 @@ const PANEL_TITLES = Object.freeze({
     'clock-weather': 'Zhyprbola Clock & Weather',
     'system-status': 'Zhyprbola System Status',
     'audio-spectrum': 'Zhyprbola Audio Spectrum',
+    music: 'Zhyprbola Music Player',
+    todo: 'Zhyprbola Today',
+    calendar: 'Zhyprbola Calendar',
 });
 
 export default class ZhyprbolaExtension extends Extension {
@@ -122,6 +125,21 @@ export default class ZhyprbolaExtension extends Extension {
             iconName: 'audio-x-generic-symbolic',
             accessibleName: 'Audio Spectrum',
             panelName: 'audio-spectrum',
+        }));
+        this._dock.add_child(this._createPanelButton({
+            iconName: 'media-playback-start-symbolic',
+            accessibleName: 'Music Player',
+            panelName: 'music',
+        }));
+        this._dock.add_child(this._createPanelButton({
+            iconName: 'view-list-symbolic',
+            accessibleName: 'Today',
+            panelName: 'todo',
+        }));
+        this._dock.add_child(this._createPanelButton({
+            iconName: 'x-office-calendar-symbolic',
+            accessibleName: 'Calendar',
+            panelName: 'calendar',
         }));
         this._dock.add_child(this._createSettingsButton());
 

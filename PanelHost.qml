@@ -7,15 +7,29 @@ Window {
 
     property string requestedPanel: "bluetooth"
     readonly property string panelName: requestedPanel
-    readonly property int panelWidth: panelName === "clock-weather"
-        ? 480
-        : (panelName === "audio-spectrum" ? 440
-            : (panelName === "system-status" ? 528 : 430))
-    readonly property int panelHeight: panelName === "wifi"
-        ? 576
-        : (panelName === "clock-weather" || panelName === "audio-spectrum"
-            ? 172
-            : (panelName === "system-status" ? 195 : 548))
+    readonly property int panelWidth: {
+        switch (panelName) {
+        case "clock-weather": return 480
+        case "audio-spectrum": return 440
+        case "system-status": return 528
+        case "music": return 414
+        case "todo":
+        case "calendar": return 384
+        default: return 430
+        }
+    }
+    readonly property int panelHeight: {
+        switch (panelName) {
+        case "wifi": return 576
+        case "clock-weather":
+        case "audio-spectrum": return 172
+        case "system-status": return 195
+        case "music": return 254
+        case "todo": return 304
+        case "calendar": return 314
+        default: return 548
+        }
+    }
     readonly property string panelTitle: {
         if (panelName === "wifi")
             return "Zhyprbola Wi-Fi"
@@ -25,6 +39,12 @@ Window {
             return "Zhyprbola System Status"
         if (panelName === "audio-spectrum")
             return "Zhyprbola Audio Spectrum"
+        if (panelName === "music")
+            return "Zhyprbola Music Player"
+        if (panelName === "todo")
+            return "Zhyprbola Today"
+        if (panelName === "calendar")
+            return "Zhyprbola Calendar"
         return "Zhyprbola Bluetooth"
     }
 
@@ -78,12 +98,25 @@ Window {
         visible: host.panelName === "audio-spectrum"
     }
 
+    MusicPlayer {
+        anchors.centerIn: parent
+        visible: host.panelName === "music"
+    }
+
+    Todo {
+        anchors.centerIn: parent
+        visible: host.panelName === "todo"
+    }
+
+    Calendar {
+        anchors.centerIn: parent
+        visible: host.panelName === "calendar"
+    }
+
     Rectangle {
         anchors.fill: parent
         z: 200
-        visible: host.panelName !== "clock-weather"
-            && host.panelName !== "system-status"
-            && host.panelName !== "audio-spectrum"
+        visible: host.panelName === "bluetooth" || host.panelName === "wifi"
         radius: 18
         color: "transparent"
         border.color: Theme.secondary
