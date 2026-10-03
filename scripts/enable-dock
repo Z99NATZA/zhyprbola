@@ -4,8 +4,9 @@ set -euo pipefail
 UUID="zhyprbola@znnn.local"
 
 if gnome-extensions info "$UUID" >/dev/null 2>&1; then
+  gnome-extensions disable "$UUID" >/dev/null 2>&1 || true
   gnome-extensions enable "$UUID"
-  echo "Enabled $UUID"
+  echo "Reloaded and enabled $UUID"
   exit 0
 fi
 

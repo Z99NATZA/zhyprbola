@@ -17,7 +17,7 @@ dock: build
 	./scripts/enable-dock
 
 dock-enable:
-	gnome-extensions enable zhyprbola@znnn.local
+	./scripts/enable-dock
 
 check:
 	@for file in Main.qml PanelHost.qml components/*.qml; do $(QMLLINT) "$$file" || exit 1; done

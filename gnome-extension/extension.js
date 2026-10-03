@@ -30,6 +30,7 @@ const THEMES = [
 const PANEL_TITLES = Object.freeze({
     bluetooth: 'Zhyprbola Bluetooth',
     wifi: 'Zhyprbola Wi-Fi',
+    'clock-weather': 'Zhyprbola Clock & Weather',
 });
 
 export default class ZhyprbolaExtension extends Extension {
@@ -92,6 +93,11 @@ export default class ZhyprbolaExtension extends Extension {
             iconName: 'network-wireless-symbolic',
             accessibleName: 'Wi-Fi',
             panelName: 'wifi',
+        }));
+        this._dock.add_child(this._createPanelButton({
+            iconName: 'weather-clear-symbolic',
+            accessibleName: 'Clock and Weather',
+            panelName: 'clock-weather',
         }));
         this._dock.add_child(this._createThemeButton());
 

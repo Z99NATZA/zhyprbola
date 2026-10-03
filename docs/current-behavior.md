@@ -2,7 +2,7 @@
 
 ```text
 Flow: GNOME dock extension -> focused QML panels
-Panels: bluetooth, wifi
+Panels: bluetooth, wifi, clock-weather
 Theme: ~/.config/zhyprbola/theme
 ```
 
@@ -15,6 +15,7 @@ make dock
 # run panels directly while developing
 ./scripts/run-panel bluetooth
 ./scripts/run-panel wifi
+./scripts/run-panel clock-weather
 ```
 
 ## Integrations

@@ -20,6 +20,7 @@ QtObject {
     readonly property color selected: forest ? "#D9EAE1" : (sky ? "#DCEEFF" : (mist ? "#DCEAF1" : "#E9DDE9"))
     readonly property color selectedStrong: accent
     readonly property color track: forest ? "#CFE3D8" : (sky ? "#D1E7FA" : (mist ? "#D3E2EA" : "#E2D2E2"))
+    readonly property color secondary: track
 
     readonly property color heroSurface: accent
     readonly property color heroText: "#FFFFFF"
