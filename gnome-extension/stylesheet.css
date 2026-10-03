@@ -25,38 +25,6 @@
     icon-size: 20px;
 }
 
-.zhyprbola-theme-menu .popup-menu-content {
-    background-color: #fafcfd;
-    border: 0;
-    box-shadow: none;
-    color: #3f2b41;
-}
-
-.zhyprbola-theme-menu .popup-menu-item {
-    color: #3f2b41;
-}
-
-.zhyprbola-theme-menu .popup-menu-item:focus,
-.zhyprbola-theme-menu .popup-menu-item:hover {
-    background-color: #e9dde9;
-}
-
-.zhyprbola-theme-menu .toggle-switch,
-.zhyprbola-theme-menu .toggle-switch:hover {
-    background-color: #e9dde9;
-}
-
-.zhyprbola-theme-menu .toggle-switch:checked,
-.zhyprbola-theme-menu .toggle-switch:checked:hover {
-    background-color: #875a82;
-    color: #ffffff;
-}
-
-.zhyprbola-theme-menu .toggle-switch .handle {
-    background-color: #ffffff;
-    box-shadow: none;
-}
-
 .zhyprbola-dock-white {
     background-color: #fafcfd;
 }
@@ -73,30 +41,6 @@
 
 .zhyprbola-dock-white .zhyprbola-dock-icon {
     color: #ffffff;
-}
-
-.zhyprbola-theme-menu-white .popup-menu-content {
-    background-color: #fafcfd;
-    color: #263b4c;
-}
-
-.zhyprbola-theme-menu-white .popup-menu-item {
-    color: #263b4c;
-}
-
-.zhyprbola-theme-menu-white .popup-menu-item:focus,
-.zhyprbola-theme-menu-white .popup-menu-item:hover {
-    background-color: #eaf1f5;
-}
-
-.zhyprbola-theme-menu-white .toggle-switch,
-.zhyprbola-theme-menu-white .toggle-switch:hover {
-    background-color: #eaf1f5;
-}
-
-.zhyprbola-theme-menu-white .toggle-switch:checked,
-.zhyprbola-theme-menu-white .toggle-switch:checked:hover {
-    background-color: #467b9d;
 }
 
 .zhyprbola-dock-white-sky {
@@ -117,30 +61,6 @@
     color: #ffffff;
 }
 
-.zhyprbola-theme-menu-white-sky .popup-menu-content {
-    background-color: #fcfdff;
-    color: #174269;
-}
-
-.zhyprbola-theme-menu-white-sky .popup-menu-item {
-    color: #174269;
-}
-
-.zhyprbola-theme-menu-white-sky .popup-menu-item:focus,
-.zhyprbola-theme-menu-white-sky .popup-menu-item:hover {
-    background-color: #dceeff;
-}
-
-.zhyprbola-theme-menu-white-sky .toggle-switch,
-.zhyprbola-theme-menu-white-sky .toggle-switch:hover {
-    background-color: #dceeff;
-}
-
-.zhyprbola-theme-menu-white-sky .toggle-switch:checked,
-.zhyprbola-theme-menu-white-sky .toggle-switch:checked:hover {
-    background-color: #1e73e7;
-}
-
 .zhyprbola-dock-forest {
     background-color: #fafcfd;
 }
@@ -157,30 +77,6 @@
 
 .zhyprbola-dock-forest .zhyprbola-dock-icon {
     color: #ffffff;
-}
-
-.zhyprbola-theme-menu-forest .popup-menu-content {
-    background-color: #fafcfd;
-    color: #194c3c;
-}
-
-.zhyprbola-theme-menu-forest .popup-menu-item {
-    color: #194c3c;
-}
-
-.zhyprbola-theme-menu-forest .popup-menu-item:focus,
-.zhyprbola-theme-menu-forest .popup-menu-item:hover {
-    background-color: #d9eae1;
-}
-
-.zhyprbola-theme-menu-forest .toggle-switch,
-.zhyprbola-theme-menu-forest .toggle-switch:hover {
-    background-color: #d9eae1;
-}
-
-.zhyprbola-theme-menu-forest .toggle-switch:checked,
-.zhyprbola-theme-menu-forest .toggle-switch:checked:hover {
-    background-color: #477f6d;
 }
 
 .zhyprbola-dock-one-half-gray {
@@ -201,30 +97,6 @@
     color: #ffffff;
 }
 
-.zhyprbola-theme-menu-one-half-gray .popup-menu-content {
-    background-color: #fafcfd;
-    color: #2d3640;
-}
-
-.zhyprbola-theme-menu-one-half-gray .popup-menu-item {
-    color: #2d3640;
-}
-
-.zhyprbola-theme-menu-one-half-gray .popup-menu-item:focus,
-.zhyprbola-theme-menu-one-half-gray .popup-menu-item:hover {
-    background-color: #e0e5e8;
-}
-
-.zhyprbola-theme-menu-one-half-gray .toggle-switch,
-.zhyprbola-theme-menu-one-half-gray .toggle-switch:hover {
-    background-color: #e0e5e8;
-}
-
-.zhyprbola-theme-menu-one-half-gray .toggle-switch:checked,
-.zhyprbola-theme-menu-one-half-gray .toggle-switch:checked:hover {
-    background-color: #68717d;
-}
-
 .zhyprbola-dock-red {
     background-color: #fafcfd;
 }
@@ -241,28 +113,4 @@
 
 .zhyprbola-dock-red .zhyprbola-dock-icon {
     color: #ffffff;
-}
-
-.zhyprbola-theme-menu-red .popup-menu-content {
-    background-color: #fafcfd;
-    color: #542437;
-}
-
-.zhyprbola-theme-menu-red .popup-menu-item {
-    color: #542437;
-}
-
-.zhyprbola-theme-menu-red .popup-menu-item:focus,
-.zhyprbola-theme-menu-red .popup-menu-item:hover {
-    background-color: #f5dce4;
-}
-
-.zhyprbola-theme-menu-red .toggle-switch,
-.zhyprbola-theme-menu-red .toggle-switch:hover {
-    background-color: #f5dce4;
-}
-
-.zhyprbola-theme-menu-red .toggle-switch:checked,
-.zhyprbola-theme-menu-red .toggle-switch:checked:hover {
-    background-color: #b83252;
 }

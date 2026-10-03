@@ -13,6 +13,7 @@ Window {
         case "audio-spectrum": return 440
         case "system-status": return 528
         case "music": return 414
+        case "settings": return 560
         case "todo":
         case "calendar": return 384
         default: return 430
@@ -25,6 +26,7 @@ Window {
         case "audio-spectrum": return 172
         case "system-status": return 195
         case "music": return 254
+        case "settings": return 420
         case "todo": return 304
         case "calendar": return 314
         default: return 548
@@ -45,6 +47,8 @@ Window {
             return "Zhyprbola Today"
         if (panelName === "calendar")
             return "Zhyprbola Calendar"
+        if (panelName === "settings")
+            return "Zhyprbola Settings"
         return "Zhyprbola Bluetooth"
     }
 
@@ -111,6 +115,12 @@ Window {
     Calendar {
         anchors.centerIn: parent
         visible: host.panelName === "calendar"
+    }
+
+    SettingsPanel {
+        anchors.centerIn: parent
+        visible: host.panelName === "settings"
+        onCloseRequested: host.showMinimized()
     }
 
     Rectangle {

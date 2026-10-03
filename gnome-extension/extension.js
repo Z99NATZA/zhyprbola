@@ -4,7 +4,6 @@ import St from 'gi://St';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 const DockPosition = Object.freeze({
     LEFT: 'left',
@@ -21,20 +20,13 @@ const DOCK_CONFIG = Object.freeze({
     spacing: 8,
 });
 
-const POSITION_OPTIONS = [
-    {name: DockPosition.LEFT, label: 'Dock: Left'},
-    {name: DockPosition.RIGHT, label: 'Dock: Right'},
-    {name: DockPosition.TOP, label: 'Dock: Top'},
-    {name: DockPosition.BOTTOM, label: 'Dock: Bottom'},
-];
-
 const THEMES = [
-    {name: 'current', label: '1. Purple', wallpaper: '1.png'},
-    {name: 'white', label: '2. White Mist', wallpaper: '2.png'},
-    {name: 'white-sky', label: '3. White Sky', wallpaper: '3.png'},
-    {name: 'forest', label: '4. Forest Calm', wallpaper: '4.png'},
-    {name: 'one-half-gray', label: '5. One Half Gray', wallpaper: '5.png'},
-    {name: 'red', label: '6. Red', wallpaper: '6.png'},
+    {name: 'current', wallpaper: '1.png'},
+    {name: 'white', wallpaper: '2.png'},
+    {name: 'white-sky', wallpaper: '3.png'},
+    {name: 'forest', wallpaper: '4.png'},
+    {name: 'one-half-gray', wallpaper: '5.png'},
+    {name: 'red', wallpaper: '6.png'},
 ];
 
 const PANEL_TITLES = Object.freeze({
@@ -46,6 +38,7 @@ const PANEL_TITLES = Object.freeze({
     music: 'Zhyprbola Music Player',
     todo: 'Zhyprbola Today',
     calendar: 'Zhyprbola Calendar',
+    settings: 'Zhyprbola Settings',
 });
 
 export default class ZhyprbolaExtension extends Extension {
@@ -53,6 +46,9 @@ export default class ZhyprbolaExtension extends Extension {
         this._dock = null;
         this._layoutIdleId = 0;
         this._wallpaperRefreshId = 0;
+        this._settingsPlacementId = 0;
+        this._settingsSyncId = 0;
+        this._settingsMonitor = null;
         this._pendingPanels = new Set();
         this._themePath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'theme']);
@@ -71,6 +67,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._applyDockPosition();
         this._applyTheme();
         this._applyWallpaper(true);
+        this._watchSettings();
 
         global.display.connectObject('workareas-changed', () => this._queueLayout(), this);
         Main.layoutManager.connectObject('monitors-changed', () => this._queueLayout(), this);
@@ -86,7 +83,16 @@ export default class ZhyprbolaExtension extends Extension {
         }
 
         this._cancelWallpaperRefresh();
-        this._destroySettingsMenu();
+        if (this._settingsPlacementId) {
+            GLib.source_remove(this._settingsPlacementId);
+            this._settingsPlacementId = 0;
+        }
+        if (this._settingsSyncId) {
+            GLib.source_remove(this._settingsSyncId);
+            this._settingsSyncId = 0;
+        }
+        this._settingsMonitor?.cancel();
+        this._settingsMonitor = null;
         this._destroyDock();
         this._backgroundSettings = null;
     }
@@ -141,66 +147,15 @@ export default class ZhyprbolaExtension extends Extension {
             accessibleName: 'Calendar',
             panelName: 'calendar',
         }));
-        this._dock.add_child(this._createSettingsButton());
+        this._dock.add_child(this._createPanelButton({
+            iconName: 'settings',
+            accessibleName: 'Zhyprbola settings',
+            panelName: 'settings',
+        }));
 
         this._layoutDock();
         Main.layoutManager.addTopChrome(this._dock, {trackFullscreen: true});
         this._layoutDock();
-    }
-
-    _createSettingsButton() {
-        const icon = new St.Icon({
-            icon_name: 'preferences-desktop-theme-symbolic',
-            style_class: 'zhyprbola-dock-icon',
-        });
-        const button = new St.Button({
-            style_class: 'zhyprbola-dock-button',
-            child: icon,
-            can_focus: true,
-            reactive: true,
-            track_hover: true,
-            accessible_name: 'Zhyprbola settings',
-        });
-
-        const side = {
-            [DockPosition.LEFT]: St.Side.RIGHT,
-            [DockPosition.RIGHT]: St.Side.LEFT,
-            [DockPosition.TOP]: St.Side.BOTTOM,
-            [DockPosition.BOTTOM]: St.Side.TOP,
-        }[this._dockPosition];
-        this._themeMenu = new PopupMenu.PopupMenu(button, 0.5, side);
-        this._themeMenu.actor.add_style_class_name('zhyprbola-theme-menu');
-        this._themeMenu.actor.hide();
-        Main.uiGroup.add_child(this._themeMenu.actor);
-        this._menuManager = new PopupMenu.PopupMenuManager(button);
-        this._menuManager.addMenu(this._themeMenu);
-        this._themeItems = new Map();
-        this._positionItems = new Map();
-
-        for (const position of POSITION_OPTIONS) {
-            const item = new PopupMenu.PopupMenuItem(position.label);
-            item.connect('activate', () => this._setDockPosition(position.name));
-            this._themeMenu.addMenuItem(item);
-            this._positionItems.set(position.name, item);
-        }
-
-        this._themeMenu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        for (const theme of THEMES) {
-            const item = new PopupMenu.PopupMenuItem(theme.label);
-            item.connect('activate', () => this._setTheme(theme.name));
-            this._themeMenu.addMenuItem(item);
-            this._themeItems.set(theme.name, item);
-        }
-        this._themeMenu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        this._useWallpaperItem = new PopupMenu.PopupSwitchMenuItem(
-            'Use wallpaper', this._useWallpaper);
-        this._useWallpaperItem.connect('toggled', (_item, state) => {
-            this._setUseWallpaper(state);
-        });
-        this._themeMenu.addMenuItem(this._useWallpaperItem);
-
-        button.connect('clicked', () => this._themeMenu.toggle());
-        return button;
     }
 
     _readTheme() {
@@ -217,9 +172,7 @@ export default class ZhyprbolaExtension extends Extension {
         try {
             const [, contents] = GLib.file_get_contents(this._dockPositionPath);
             const name = new TextDecoder().decode(contents).trim();
-            return POSITION_OPTIONS.some(position => position.name === name)
-                ? name
-                : DEFAULT_DOCK_POSITION;
+            return Object.values(DockPosition).includes(name) ? name : DEFAULT_DOCK_POSITION;
         } catch (_) {
             return DEFAULT_DOCK_POSITION;
         }
@@ -234,117 +187,83 @@ export default class ZhyprbolaExtension extends Extension {
         }
     }
 
-    _setDockPosition(position) {
-        if (!POSITION_OPTIONS.some(item => item.name === position))
-            return;
-
+    _watchSettings() {
+        const directory = GLib.path_get_dirname(this._themePath);
         try {
-            GLib.mkdir_with_parents(GLib.path_get_dirname(this._dockPositionPath), 0o700);
-            GLib.file_set_contents(this._dockPositionPath, `${position}\n`);
-            this._dockPosition = position;
+            GLib.mkdir_with_parents(directory, 0o700);
+            this._settingsMonitor = Gio.File.new_for_path(directory)
+                .monitor_directory(Gio.FileMonitorFlags.NONE, null);
+            this._settingsMonitor.connect('changed', () => {
+                if (this._settingsSyncId)
+                    return;
+                this._settingsSyncId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+                    this._settingsSyncId = 0;
+                    this._syncSettings();
+                    return GLib.SOURCE_REMOVE;
+                });
+            });
+        } catch (error) {
+            logError(error, 'Failed to watch Zhyprbola settings');
+        }
+    }
+
+    _syncSettings() {
+        const theme = this._readTheme();
+        const position = this._readDockPosition();
+        const useWallpaper = this._readUseWallpaper();
+        const themeChanged = theme !== this._themeName;
+        const positionChanged = position !== this._dockPosition;
+        const wallpaperChanged = useWallpaper !== this._useWallpaper;
+
+        this._themeName = theme;
+        this._dockPosition = position;
+        this._useWallpaper = useWallpaper;
+
+        if (positionChanged)
             this._rebuildDock();
-        } catch (error) {
-            logError(error, 'Failed to save Zhyprbola dock position');
-        }
-    }
-
-    _setTheme(name) {
-        if (!THEMES.some(theme => theme.name === name))
-            return;
-
-        try {
-            GLib.mkdir_with_parents(GLib.path_get_dirname(this._themePath), 0o700);
-            GLib.file_set_contents(this._themePath, `${name}\n`);
-            this._themeName = name;
+        else if (themeChanged)
             this._applyTheme();
-            this._applyWallpaper();
-        } catch (error) {
-            logError(error, 'Failed to save Zhyprbola theme');
-        }
-    }
-
-    _setUseWallpaper(enabled) {
-        try {
-            GLib.mkdir_with_parents(GLib.path_get_dirname(this._useWallpaperPath), 0o700);
-            GLib.file_set_contents(this._useWallpaperPath, enabled ? 'true\n' : 'false\n');
-            this._useWallpaper = enabled;
-            this._applyWallpaper(enabled);
-        } catch (error) {
-            logError(error, 'Failed to save Zhyprbola wallpaper setting');
-        }
+        if (themeChanged || wallpaperChanged)
+            this._applyWallpaper(wallpaperChanged && useWallpaper);
     }
 
     _applyTheme() {
         if (this._themeName === 'white' || this._themeName === 'white-sky') {
             this._dock.add_style_class_name('zhyprbola-dock-white');
-            this._themeMenu.actor.add_style_class_name('zhyprbola-theme-menu-white');
         } else {
             this._dock.remove_style_class_name('zhyprbola-dock-white');
-            this._themeMenu.actor.remove_style_class_name('zhyprbola-theme-menu-white');
         }
         if (this._themeName === 'white-sky') {
             this._dock.add_style_class_name('zhyprbola-dock-white-sky');
-            this._themeMenu.actor.add_style_class_name('zhyprbola-theme-menu-white-sky');
         } else {
             this._dock.remove_style_class_name('zhyprbola-dock-white-sky');
-            this._themeMenu.actor.remove_style_class_name('zhyprbola-theme-menu-white-sky');
         }
         if (this._themeName === 'forest') {
             this._dock.add_style_class_name('zhyprbola-dock-forest');
-            this._themeMenu.actor.add_style_class_name('zhyprbola-theme-menu-forest');
         } else {
             this._dock.remove_style_class_name('zhyprbola-dock-forest');
-            this._themeMenu.actor.remove_style_class_name('zhyprbola-theme-menu-forest');
         }
         if (this._themeName === 'one-half-gray') {
             this._dock.add_style_class_name('zhyprbola-dock-one-half-gray');
-            this._themeMenu.actor.add_style_class_name('zhyprbola-theme-menu-one-half-gray');
         } else {
             this._dock.remove_style_class_name('zhyprbola-dock-one-half-gray');
-            this._themeMenu.actor.remove_style_class_name('zhyprbola-theme-menu-one-half-gray');
         }
         if (this._themeName === 'red') {
             this._dock.add_style_class_name('zhyprbola-dock-red');
-            this._themeMenu.actor.add_style_class_name('zhyprbola-theme-menu-red');
         } else {
             this._dock.remove_style_class_name('zhyprbola-dock-red');
-            this._themeMenu.actor.remove_style_class_name('zhyprbola-theme-menu-red');
         }
-
-        for (const [name, item] of this._themeItems)
-            item.setOrnament(name === this._themeName
-                ? PopupMenu.Ornament.CHECK
-                : PopupMenu.Ornament.NONE);
     }
 
     _applyDockPosition() {
-        for (const [name, item] of this._positionItems)
-            item.setOrnament(name === this._dockPosition
-                ? PopupMenu.Ornament.CHECK
-                : PopupMenu.Ornament.NONE);
-
         this._layoutDock();
     }
 
     _rebuildDock() {
-        this._destroySettingsMenu();
         this._destroyDock();
         this._createDock();
         this._applyTheme();
         this._applyDockPosition();
-    }
-
-    _destroySettingsMenu() {
-        if (this._themeMenu) {
-            this._menuManager?.removeMenu(this._themeMenu);
-            this._themeMenu.destroy();
-            this._themeMenu = null;
-        }
-
-        this._themeItems = null;
-        this._positionItems = null;
-        this._useWallpaperItem = null;
-        this._menuManager = null;
     }
 
     _destroyDock() {
@@ -467,6 +386,8 @@ export default class ZhyprbolaExtension extends Extension {
             const process = Gio.Subprocess.new(
                 ['bash', launcher.get_path(), panelName],
                 Gio.SubprocessFlags.NONE);
+            if (panelName === 'settings')
+                this._placeSettingsOnFirstOpen();
             process.wait_async(null, (source, result) => {
                 try {
                     source.wait_finish(result);
@@ -480,6 +401,66 @@ export default class ZhyprbolaExtension extends Extension {
             pendingPanels.delete(panelName);
             logError(error, `Failed to open Zhyprbola panel: ${panelName}`);
         }
+    }
+
+    _placeSettingsOnFirstOpen() {
+        if (this._settingsPlacementId)
+            GLib.source_remove(this._settingsPlacementId);
+
+        let attempts = 0;
+        this._settingsPlacementId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+            const window = global.display.list_all_windows()
+                .find(item => item.get_title() === PANEL_TITLES.settings);
+            const frame = window?.get_frame_rect();
+            const actor = window?.get_compositor_private();
+            if (actor?.mapped && frame.width > 0 && frame.height > 0) {
+                this._moveSettingsNearDock(window, frame);
+                this._settingsPlacementId = 0;
+                return GLib.SOURCE_REMOVE;
+            }
+            if (++attempts >= 100) {
+                this._settingsPlacementId = 0;
+                return GLib.SOURCE_REMOVE;
+            }
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    _moveSettingsNearDock(window, frame) {
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (!this._dock || !monitor)
+            return;
+
+        const gap = 12;
+        const margin = 12;
+        const dockX = this._dock.get_x();
+        const dockY = this._dock.get_y();
+        const dockWidth = this._dock.get_width();
+        const dockHeight = this._dock.get_height();
+        let x = dockX + dockWidth + gap;
+        let y = dockY + Math.round((dockHeight - frame.height) / 2);
+
+        switch (this._dockPosition) {
+        case DockPosition.RIGHT:
+            x = dockX - frame.width - gap;
+            break;
+        case DockPosition.TOP:
+            x = dockX + Math.round((dockWidth - frame.width) / 2);
+            y = dockY + dockHeight + gap;
+            break;
+        case DockPosition.BOTTOM:
+            x = dockX + Math.round((dockWidth - frame.width) / 2);
+            y = dockY - frame.height - gap;
+            break;
+        default:
+            break;
+        }
+
+        x = Math.max(monitor.x + margin,
+            Math.min(x, monitor.x + monitor.width - frame.width - margin));
+        y = Math.max(monitor.y + margin,
+            Math.min(y, monitor.y + monitor.height - frame.height - margin));
+        window.move_frame(true, x, y);
     }
 
     _queueLayout() {

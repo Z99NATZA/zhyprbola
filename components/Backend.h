@@ -45,6 +45,8 @@ class Backend : public QObject {
     Q_PROPERTY(bool playing READ playing NOTIFY musicChanged)
     Q_PROPERTY(QVariantList spectrum READ spectrum NOTIFY spectrumChanged)
     Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
+    Q_PROPERTY(QString dockPosition READ dockPosition NOTIFY dockSettingsChanged)
+    Q_PROPERTY(bool useWallpaper READ useWallpaper NOTIFY dockSettingsChanged)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -86,6 +88,8 @@ public:
     bool playing() const { return m_playing; }
     QVariantList spectrum() const { return m_spectrum; }
     QString themeName() const { return m_themeName; }
+    QString dockPosition() const { return m_dockPosition; }
+    bool useWallpaper() const { return m_useWallpaper; }
 
     Q_INVOKABLE void togglePlayback();
     Q_INVOKABLE void nextTrack();
@@ -108,6 +112,9 @@ public:
     Q_INVOKABLE bool componentEnabled(const QString &key) const;
     Q_INVOKABLE void setComponentEnabled(const QString &key, bool enabled);
     Q_INVOKABLE void resetComponentSettings();
+    Q_INVOKABLE void setThemeName(const QString &name);
+    Q_INVOKABLE void setDockPosition(const QString &position);
+    Q_INVOKABLE void setUseWallpaper(bool enabled);
 
 signals:
     void systemChanged();
@@ -120,6 +127,7 @@ signals:
     void wifiDisconnectionFinished(const QString &ssid, bool success);
     void bluetoothDevicesChanged();
     void themeChanged();
+    void dockSettingsChanged();
 
 private:
     void refreshSystem();
@@ -182,4 +190,6 @@ private:
     QVariantList m_spectrum;
     QFileSystemWatcher m_themeWatcher;
     QString m_themeName = QStringLiteral("current");
+    QString m_dockPosition = QStringLiteral("left");
+    bool m_useWallpaper = false;
 };

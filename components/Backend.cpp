@@ -11,6 +11,7 @@
 #include <QCoreApplication>
 #include <QProcess>
 #include <QSettings>
+#include <QSaveFile>
 #include <QSet>
 #include <QStandardPaths>
 #include <QStorageInfo>
@@ -26,6 +27,21 @@
 #include <algorithm>
 
 namespace {
+QString dockConfigPath(const QString &name) {
+    return QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation))
+        .filePath(QStringLiteral("zhyprbola/") + name);
+}
+
+bool writeDockConfig(const QString &name, const QString &value) {
+    const QString path = dockConfigPath(name);
+    if (!QDir().mkpath(QFileInfo(path).absolutePath())) return false;
+
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) return false;
+    if (file.write((value + QLatin1Char('\n')).toUtf8()) < 0) return false;
+    return file.commit();
+}
+
 QString formatGiB(quint64 bytes) {
     return QString::number(double(bytes) / 1073741824.0, 'f', 1);
 }
@@ -149,6 +165,16 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     connect(&m_themeWatcher, &QFileSystemWatcher::fileChanged,
         this, &Backend::refreshTheme);
     refreshTheme();
+    QFile dockPositionFile(dockConfigPath(QStringLiteral("dock-position")));
+    if (dockPositionFile.open(QIODevice::ReadOnly)) {
+        const QString position = QString::fromUtf8(dockPositionFile.readAll()).trimmed();
+        if (position == QLatin1String("right") || position == QLatin1String("top")
+            || position == QLatin1String("bottom"))
+            m_dockPosition = position;
+    }
+    QFile wallpaperFile(dockConfigPath(QStringLiteral("use-wallpaper")));
+    if (wallpaperFile.open(QIODevice::ReadOnly))
+        m_useWallpaper = wallpaperFile.readAll().trimmed() == "true";
 
     m_location = qEnvironmentVariable("ZHYPRBOLA_LOCATION", "Bangkok");
     m_userName = qEnvironmentVariable("USER", "User");
@@ -209,6 +235,31 @@ void Backend::refreshTheme() {
         m_themeName = name;
         emit themeChanged();
     }
+}
+
+void Backend::setThemeName(const QString &name) {
+    static const QStringList names = {QStringLiteral("current"), QStringLiteral("white"),
+        QStringLiteral("white-sky"), QStringLiteral("forest"),
+        QStringLiteral("one-half-gray"), QStringLiteral("red")};
+    if (!names.contains(name) || name == m_themeName) return;
+    if (writeDockConfig(QStringLiteral("theme"), name)) refreshTheme();
+}
+
+void Backend::setDockPosition(const QString &position) {
+    static const QStringList positions = {QStringLiteral("left"), QStringLiteral("right"),
+        QStringLiteral("top"), QStringLiteral("bottom")};
+    if (!positions.contains(position) || position == m_dockPosition) return;
+    if (!writeDockConfig(QStringLiteral("dock-position"), position)) return;
+    m_dockPosition = position;
+    emit dockSettingsChanged();
+}
+
+void Backend::setUseWallpaper(bool enabled) {
+    if (enabled == m_useWallpaper) return;
+    if (!writeDockConfig(QStringLiteral("use-wallpaper"), enabled ? QStringLiteral("true")
+        : QStringLiteral("false"))) return;
+    m_useWallpaper = enabled;
+    emit dockSettingsChanged();
 }
 
 Backend::~Backend() {
