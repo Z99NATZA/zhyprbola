@@ -68,7 +68,7 @@ Window {
             Item {
                 x: 90 + 40 * stage.layoutProgress
                 y: 100 + 5 * stage.layoutProgress
-                width: 440 * stage.leftScale
+                width: 480 * stage.leftScale
                 height: 172 * stage.leftScale
                 visible: stage.clockEnabled
                 enabled: visible

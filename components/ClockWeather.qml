@@ -3,7 +3,7 @@ import QtQuick
 Item {
     id: win
 
-    width: 440
+    width: 480
     height: 172
 
 
@@ -62,7 +62,7 @@ Item {
 
         anchors.centerIn: parent
 
-        width: 440
+        width: parent.width
         height: 172
 
         // ----------------------------------------------
@@ -183,8 +183,7 @@ Item {
                 bottom: parent.bottom
             }
 
-            width:
-                parent.width * 0.51
+            width: 224
 
             Column {
                 anchors.centerIn: parent
@@ -378,12 +377,44 @@ Item {
                     // Weather icon
                     // --------------------------------------
 
-                    FlatIcon {
+                    Item {
                         id: weatherIcon
                         width: 64
                         height: 58
-                        name: "weather"
-                        ink: card.accentColor
+
+                        FlatIcon {
+                            anchors.fill: parent
+                            name: "weather-sun"
+                            ink: card.accentColor
+                        }
+
+                        FlatIcon {
+                            id: cloudIcon
+                            anchors.fill: parent
+                            name: "weather-cloud"
+                            ink: card.accentColor
+
+                            transform: Translate {
+                                SequentialAnimation on y {
+                                    running: cloudIcon.visible
+                                    loops: Animation.Infinite
+
+                                    NumberAnimation {
+                                        from: 0
+                                        to: -3
+                                        duration: 2200
+                                        easing.type: Easing.InOutSine
+                                    }
+
+                                    NumberAnimation {
+                                        from: -3
+                                        to: 0
+                                        duration: 2200
+                                        easing.type: Easing.InOutSine
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     // --------------------------------------

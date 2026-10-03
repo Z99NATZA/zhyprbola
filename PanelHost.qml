@@ -7,9 +7,10 @@ Window {
 
     property string requestedPanel: "bluetooth"
     readonly property string panelName: requestedPanel
-    readonly property int panelWidth: panelName === "clock-weather" || panelName === "audio-spectrum"
-        ? 440
-        : (panelName === "system-status" ? 528 : 430)
+    readonly property int panelWidth: panelName === "clock-weather"
+        ? 480
+        : (panelName === "audio-spectrum" ? 440
+            : (panelName === "system-status" ? 528 : 430))
     readonly property int panelHeight: panelName === "wifi"
         ? 576
         : (panelName === "clock-weather" || panelName === "audio-spectrum"
