@@ -65,7 +65,6 @@ export default class ZhyprbolaExtension extends Extension {
         this._applyDockPosition();
         this._applyTheme();
         this._applyWallpaper(true);
-        this._queueLayout();
 
         global.display.connectObject('workareas-changed', () => this._queueLayout(), this);
         Main.layoutManager.connectObject('monitors-changed', () => this._queueLayout(), this);
@@ -118,7 +117,9 @@ export default class ZhyprbolaExtension extends Extension {
         }));
         this._dock.add_child(this._createSettingsButton());
 
+        this._layoutDock();
         Main.layoutManager.addTopChrome(this._dock, {trackFullscreen: true});
+        this._layoutDock();
     }
 
     _createSettingsButton() {
@@ -282,7 +283,7 @@ export default class ZhyprbolaExtension extends Extension {
                 ? PopupMenu.Ornament.CHECK
                 : PopupMenu.Ornament.NONE);
 
-        this._queueLayout();
+        this._layoutDock();
     }
 
     _rebuildDock() {
