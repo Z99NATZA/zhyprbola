@@ -4,6 +4,7 @@
 Flow: GNOME dock extension -> focused QML panels
 Panels: bluetooth, wifi, clock-weather, system-status
 Theme: ~/.config/zhyprbola/theme
+Wallpaper toggle: ~/.config/zhyprbola/use-wallpaper
 ```
 
 ## Commands
@@ -27,6 +28,13 @@ Bluetooth:  bluetoothctl / BlueZ
 Media:      MPRIS, optional playerctl
 Spectrum:   cava
 Weather:    Open-Meteo
+```
+
+## Wallpapers
+
+```text
+Files: gnome-extension/wallpapers/1.png ... 5.png
+Themes: 1. Purple -> 1.png, 2. White Mist -> 2.png, etc.
 ```
 
 ## Weather

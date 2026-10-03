@@ -15,6 +15,7 @@ chmod +x "$PACK_DIR/panel-command.sh"
 
 gnome-extensions pack "$ROOT_DIR/gnome-extension" \
   --extra-source="$PACK_DIR/panel-command.sh" \
+  --extra-source="$ROOT_DIR/gnome-extension/wallpapers" \
   --force \
   --out-dir "$PACK_DIR" >/dev/null
 gnome-extensions install --force "$PACK_DIR/${UUID}.shell-extension.zip"

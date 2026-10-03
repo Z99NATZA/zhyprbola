@@ -21,10 +21,10 @@ const DOCK_CONFIG = Object.freeze({
 });
 
 const THEMES = [
-    {name: 'current', label: 'Purple'},
-    {name: 'white', label: 'White Mist'},
-    {name: 'white-sky', label: 'White Sky'},
-    {name: 'forest', label: 'Forest Calm'},
+    {name: 'current', label: '1. Purple', wallpaper: '1.png'},
+    {name: 'white', label: '2. White Mist', wallpaper: '2.png'},
+    {name: 'white-sky', label: '3. White Sky', wallpaper: '3.png'},
+    {name: 'forest', label: '4. Forest Calm', wallpaper: '4.png'},
 ];
 
 const PANEL_TITLES = Object.freeze({
@@ -41,10 +41,17 @@ export default class ZhyprbolaExtension extends Extension {
         this._pendingPanels = new Set();
         this._themePath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'theme']);
+        this._useWallpaperPath = GLib.build_filenamev([
+            GLib.get_user_config_dir(), 'zhyprbola', 'use-wallpaper']);
         this._themeName = this._readTheme();
+        this._useWallpaper = this._readUseWallpaper();
+        this._backgroundSettings = new Gio.Settings({
+            schema_id: 'org.gnome.desktop.background',
+        });
 
         this._createDock();
         this._applyTheme();
+        this._applyWallpaper();
         this._queueLayout();
 
         global.display.connectObject('workareas-changed', () => this._queueLayout(), this);
@@ -61,7 +68,9 @@ export default class ZhyprbolaExtension extends Extension {
             this._themeMenu = null;
         }
         this._themeItems = null;
+        this._useWallpaperItem = null;
         this._menuManager = null;
+        this._backgroundSettings = null;
 
         if (this._layoutIdleId) {
             GLib.source_remove(this._layoutIdleId);
@@ -144,6 +153,13 @@ export default class ZhyprbolaExtension extends Extension {
             this._themeMenu.addMenuItem(item);
             this._themeItems.set(theme.name, item);
         }
+        this._themeMenu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        this._useWallpaperItem = new PopupMenu.PopupSwitchMenuItem(
+            'Use wallpaper', this._useWallpaper);
+        this._useWallpaperItem.connect('toggled', (_item, state) => {
+            this._setUseWallpaper(state);
+        });
+        this._themeMenu.addMenuItem(this._useWallpaperItem);
 
         button.connect('clicked', () => this._themeMenu.toggle());
         return button;
@@ -159,6 +175,15 @@ export default class ZhyprbolaExtension extends Extension {
         }
     }
 
+    _readUseWallpaper() {
+        try {
+            const [, contents] = GLib.file_get_contents(this._useWallpaperPath);
+            return new TextDecoder().decode(contents).trim() === 'true';
+        } catch (_) {
+            return false;
+        }
+    }
+
     _setTheme(name) {
         if (!THEMES.some(theme => theme.name === name))
             return;
@@ -168,8 +193,20 @@ export default class ZhyprbolaExtension extends Extension {
             GLib.file_set_contents(this._themePath, `${name}\n`);
             this._themeName = name;
             this._applyTheme();
+            this._applyWallpaper();
         } catch (error) {
             logError(error, 'Failed to save Zhyprbola theme');
+        }
+    }
+
+    _setUseWallpaper(enabled) {
+        try {
+            GLib.mkdir_with_parents(GLib.path_get_dirname(this._useWallpaperPath), 0o700);
+            GLib.file_set_contents(this._useWallpaperPath, enabled ? 'true\n' : 'false\n');
+            this._useWallpaper = enabled;
+            this._applyWallpaper();
+        } catch (error) {
+            logError(error, 'Failed to save Zhyprbola wallpaper setting');
         }
     }
 
@@ -200,6 +237,27 @@ export default class ZhyprbolaExtension extends Extension {
             item.setOrnament(name === this._themeName
                 ? PopupMenu.Ornament.CHECK
                 : PopupMenu.Ornament.NONE);
+    }
+
+    _applyWallpaper() {
+        if (!this._useWallpaper || !this._backgroundSettings)
+            return;
+
+        const theme = THEMES.find(item => item.name === this._themeName);
+        if (!theme)
+            return;
+
+        const path = GLib.build_filenamev([this.path, 'wallpapers', theme.wallpaper]);
+        const file = Gio.File.new_for_path(path);
+        if (!file.query_exists(null)) {
+            logError(new Error(`Missing Zhyprbola wallpaper: ${path}`));
+            return;
+        }
+
+        const uri = file.get_uri();
+        this._backgroundSettings.set_string('picture-uri', uri);
+        this._backgroundSettings.set_string('picture-uri-dark', uri);
+        this._backgroundSettings.set_string('picture-options', 'zoom');
     }
 
     _createPanelButton({iconName, accessibleName, panelName}) {
