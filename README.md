@@ -1,5 +1,7 @@
 # Zhyprbola
 
+![Zhyprbola](assets/zhyprbola-logo.png)
+
 ## Stack
 
 ```text
