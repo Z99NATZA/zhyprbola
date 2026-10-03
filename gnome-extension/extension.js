@@ -33,6 +33,8 @@ const THEMES = [
     {name: 'white', label: '2. White Mist', wallpaper: '2.png'},
     {name: 'white-sky', label: '3. White Sky', wallpaper: '3.png'},
     {name: 'forest', label: '4. Forest Calm', wallpaper: '4.png'},
+    {name: 'one-half-gray', label: '5. One Half Gray', wallpaper: '5.png'},
+    {name: 'red', label: '6. Red', wallpaper: '6.png'},
 ];
 
 const PANEL_TITLES = Object.freeze({
@@ -275,6 +277,20 @@ export default class ZhyprbolaExtension extends Extension {
         } else {
             this._dock.remove_style_class_name('zhyprbola-dock-forest');
             this._themeMenu.actor.remove_style_class_name('zhyprbola-theme-menu-forest');
+        }
+        if (this._themeName === 'one-half-gray') {
+            this._dock.add_style_class_name('zhyprbola-dock-one-half-gray');
+            this._themeMenu.actor.add_style_class_name('zhyprbola-theme-menu-one-half-gray');
+        } else {
+            this._dock.remove_style_class_name('zhyprbola-dock-one-half-gray');
+            this._themeMenu.actor.remove_style_class_name('zhyprbola-theme-menu-one-half-gray');
+        }
+        if (this._themeName === 'red') {
+            this._dock.add_style_class_name('zhyprbola-dock-red');
+            this._themeMenu.actor.add_style_class_name('zhyprbola-theme-menu-red');
+        } else {
+            this._dock.remove_style_class_name('zhyprbola-dock-red');
+            this._themeMenu.actor.remove_style_class_name('zhyprbola-theme-menu-red');
         }
 
         for (const [name, item] of this._themeItems)

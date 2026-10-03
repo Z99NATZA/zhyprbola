@@ -2,24 +2,50 @@ pragma Singleton
 import QtQuick
 
 QtObject {
-    readonly property bool mist: backend.themeName === "white"
-    readonly property bool sky: backend.themeName === "white-sky"
-    readonly property bool forest: backend.themeName === "forest"
+    readonly property var palette: {
+        const colors = {
+            current: {
+                accent: "#875A82", text: "#3F2B41", control: "#F2EAF2",
+                controlHover: "#E9DDE9", selected: "#E9DDE9", track: "#E2D2E2"
+            },
+            white: {
+                accent: "#467B9D", text: "#263B4C", control: "#EAF1F5",
+                controlHover: "#DDEAF0", selected: "#DCEAF1", track: "#D3E2EA"
+            },
+            "white-sky": {
+                accent: "#1E73E7", text: "#174269", control: "#EAF4FF",
+                controlHover: "#DCEEFF", selected: "#DCEEFF", track: "#D1E7FA"
+            },
+            forest: {
+                accent: "#477F6D", text: "#194C3C", control: "#E8F3EE",
+                controlHover: "#D9EAE1", selected: "#D9EAE1", track: "#CFE3D8"
+            },
+            "one-half-gray": {
+                accent: "#68717D", text: "#2D3640", control: "#ECEFF1",
+                controlHover: "#E0E5E8", selected: "#E0E5E8", track: "#CFD7DC"
+            },
+            red: {
+                accent: "#B83252", text: "#542437", control: "#FAE9EE",
+                controlHover: "#F5DCE4", selected: "#F5DCE4", track: "#EECBD5"
+            }
+        }
+        return colors[backend.themeName] || colors.current
+    }
 
-    readonly property color accent: forest ? "#477F6D" : (sky ? "#1E73E7" : (mist ? "#467B9D" : "#875A82"))
+    readonly property color accent: palette.accent
     readonly property color accentText: "#FFFFFF"
-    readonly property color text: forest ? "#194C3C" : (sky ? "#174269" : (mist ? "#263B4C" : "#3F2B41"))
+    readonly property color text: palette.text
     readonly property color mutedText: Qt.alpha(text, 0.68)
 
     readonly property color cardSurface: "#FAFCFD"
     readonly property color panelSurface: cardSurface
     readonly property color managerSurface: cardSurface
     readonly property color barSurface: cardSurface
-    readonly property color control: forest ? "#E8F3EE" : (sky ? "#EAF4FF" : (mist ? "#EAF1F5" : "#F2EAF2"))
-    readonly property color controlHover: forest ? "#D9EAE1" : (sky ? "#DCEEFF" : (mist ? "#DDEAF0" : "#E9DDE9"))
-    readonly property color selected: forest ? "#D9EAE1" : (sky ? "#DCEEFF" : (mist ? "#DCEAF1" : "#E9DDE9"))
+    readonly property color control: palette.control
+    readonly property color controlHover: palette.controlHover
+    readonly property color selected: palette.selected
     readonly property color selectedStrong: accent
-    readonly property color track: forest ? "#CFE3D8" : (sky ? "#D1E7FA" : (mist ? "#D3E2EA" : "#E2D2E2"))
+    readonly property color track: palette.track
     readonly property color secondary: track
 
     readonly property color heroSurface: accent

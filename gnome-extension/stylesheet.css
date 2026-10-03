@@ -136,3 +136,67 @@
 .zhyprbola-theme-menu-forest .popup-menu-item:hover {
     background-color: #d9eae1;
 }
+
+.zhyprbola-dock-one-half-gray {
+    background-color: #fafcfd;
+}
+
+.zhyprbola-dock-one-half-gray .zhyprbola-dock-button {
+    background-color: #68717d;
+    color: #ffffff;
+}
+
+.zhyprbola-dock-one-half-gray .zhyprbola-dock-button:hover,
+.zhyprbola-dock-one-half-gray .zhyprbola-dock-button:active {
+    background-color: #59636f;
+}
+
+.zhyprbola-dock-one-half-gray .zhyprbola-dock-icon {
+    color: #ffffff;
+}
+
+.zhyprbola-theme-menu-one-half-gray .popup-menu-content {
+    background-color: #fafcfd;
+    color: #2d3640;
+}
+
+.zhyprbola-theme-menu-one-half-gray .popup-menu-item {
+    color: #2d3640;
+}
+
+.zhyprbola-theme-menu-one-half-gray .popup-menu-item:focus,
+.zhyprbola-theme-menu-one-half-gray .popup-menu-item:hover {
+    background-color: #e0e5e8;
+}
+
+.zhyprbola-dock-red {
+    background-color: #fafcfd;
+}
+
+.zhyprbola-dock-red .zhyprbola-dock-button {
+    background-color: #b83252;
+    color: #ffffff;
+}
+
+.zhyprbola-dock-red .zhyprbola-dock-button:hover,
+.zhyprbola-dock-red .zhyprbola-dock-button:active {
+    background-color: #a92a49;
+}
+
+.zhyprbola-dock-red .zhyprbola-dock-icon {
+    color: #ffffff;
+}
+
+.zhyprbola-theme-menu-red .popup-menu-content {
+    background-color: #fafcfd;
+    color: #542437;
+}
+
+.zhyprbola-theme-menu-red .popup-menu-item {
+    color: #542437;
+}
+
+.zhyprbola-theme-menu-red .popup-menu-item:focus,
+.zhyprbola-theme-menu-red .popup-menu-item:hover {
+    background-color: #f5dce4;
+}

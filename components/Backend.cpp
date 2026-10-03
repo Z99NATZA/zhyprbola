@@ -201,7 +201,8 @@ void Backend::refreshTheme() {
     if (file.open(QIODevice::ReadOnly)) {
         const QString value = QString::fromUtf8(file.readAll()).trimmed();
         if (value == QLatin1String("white") || value == QLatin1String("white-sky")
-            || value == QLatin1String("forest"))
+            || value == QLatin1String("forest") || value == QLatin1String("one-half-gray")
+            || value == QLatin1String("red"))
             name = value;
     }
     if (name != m_themeName) {
