@@ -417,13 +417,17 @@ export default class ZhyprbolaExtension extends Extension {
 
     _openPanel(panelName) {
         const title = PANEL_TITLES[panelName];
-        const existingWindow = global.get_window_actors()
-            .map(actor => actor.meta_window)
+        const existingWindow = global.display.list_all_windows()
             .find(window => window && (window.get_title() === title ||
                 (panelName === 'bluetooth' && window.get_title() === 'Zhyprbola Panel')));
 
         if (existingWindow) {
-            existingWindow.activate(global.get_current_time());
+            if (existingWindow.minimized) {
+                existingWindow.unminimize();
+                existingWindow.activate(global.get_current_time());
+            } else {
+                existingWindow.minimize();
+            }
             return;
         }
 

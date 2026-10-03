@@ -52,7 +52,7 @@ Window {
         anchors.fill: parent
         standalone: true
         opened: false
-        onCloseRequested: Qt.quit()
+        onCloseRequested: host.showMinimized()
     }
 
     WifiPanel {
@@ -60,7 +60,7 @@ Window {
         anchors.fill: parent
         standalone: true
         opened: false
-        onCloseRequested: Qt.quit()
+        onCloseRequested: host.showMinimized()
     }
 
     ClockWeather {
