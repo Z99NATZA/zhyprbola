@@ -42,6 +42,9 @@ make run-panel
 ./scripts/run-panel clock-weather
 ./scripts/run-panel system-status
 
+# Edge spectrum is managed by the GNOME dock extension. Enable it and choose
+# an edge in Settings → Spectrum; the original spectrum bubble remains available.
+
 # QML lint checks
 # make check currently exits successfully but may print existing qmllint warnings.
 make check

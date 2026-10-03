@@ -18,8 +18,12 @@ Item {
     property real minimumBarHeight: 5
     property real sensitivity: 1.25
     property real barOpacity: 0.82
+    property bool flatBaseline: false
     property color barColor: Theme.accent
     property int smoothingDuration: 130
+    property bool adaptiveSmoothing: false
+    property int riseDuration: 45
+    property int fallDuration: 100
     readonly property int inwardBarCount: Math.max(2, barCount - barCount % 2)
     readonly property int inwardHalfCount: inwardBarCount / 2
     readonly property real inwardBarWidth: Math.max(2,
@@ -135,24 +139,53 @@ Item {
                 id: bar
                 required property int index
                 readonly property real targetHeight: visualizer.inwardHeight(index)
+                property real displayedHeight: visualizer.minimumBarHeight
+                property int transitionDuration: visualizer.smoothingDuration
+
+                onTargetHeightChanged: {
+                    if (!visualizer.adaptiveSmoothing)
+                        return
+                    transitionDuration = targetHeight > displayedHeight
+                        ? visualizer.riseDuration : visualizer.fallDuration
+                    displayedHeight = targetHeight
+                }
+
+                Behavior on displayedHeight {
+                    enabled: visualizer.adaptiveSmoothing
+                    NumberAnimation {
+                        duration: bar.transitionDuration
+                        easing.type: Easing.OutCubic
+                    }
+                }
 
                 x: index * (visualizer.inwardBarWidth + visualizer.gap)
                 width: visualizer.inwardBarWidth
                 height: inwardBars.height
 
                 Rectangle {
+                    id: roundedBar
                     anchors.bottom: parent.bottom
                     width: bar.width
-                    height: bar.targetHeight
+                    height: visualizer.adaptiveSmoothing
+                        ? bar.displayedHeight : bar.targetHeight
                     radius: width / 2
                     color: visualizer.barColor
 
                     Behavior on height {
+                        enabled: !visualizer.adaptiveSmoothing
                         NumberAnimation {
                             duration: visualizer.smoothingDuration
                             easing.type: Easing.OutCubic
                         }
                     }
+                }
+
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    width: bar.width
+                    height: Math.min(roundedBar.height, roundedBar.radius)
+                    color: visualizer.barColor
+                    visible: visualizer.flatBaseline
                 }
             }
         }

@@ -16,6 +16,7 @@ const DEFAULT_DOCK_POSITION = DockPosition.LEFT;
 
 const DOCK_CONFIG = Object.freeze({
     edgeMargin: 18,
+    bottomMargin: 32,
     centerOffset: 0,
     spacing: 8,
 });
@@ -47,6 +48,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._layoutIdleId = 0;
         this._wallpaperRefreshId = 0;
         this._settingsPlacementId = 0;
+        this._edgePlacementId = 0;
+        this._edgeProcess = null;
         this._settingsSyncId = 0;
         this._settingsMonitor = null;
         this._pendingPanels = new Set();
@@ -56,9 +59,15 @@ export default class ZhyprbolaExtension extends Extension {
             GLib.get_user_config_dir(), 'zhyprbola', 'dock-position']);
         this._useWallpaperPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'use-wallpaper']);
+        this._edgeEnabledPath = GLib.build_filenamev([
+            GLib.get_user_config_dir(), 'zhyprbola', 'edge-spectrum-enabled']);
+        this._edgePositionPath = GLib.build_filenamev([
+            GLib.get_user_config_dir(), 'zhyprbola', 'edge-spectrum-position']);
         this._themeName = this._readTheme();
         this._dockPosition = this._readDockPosition();
         this._useWallpaper = this._readUseWallpaper();
+        this._edgeEnabled = this._readEdgeEnabled();
+        this._edgePosition = this._readEdgePosition();
         this._backgroundSettings = new Gio.Settings({
             schema_id: 'org.gnome.desktop.background',
         });
@@ -68,9 +77,13 @@ export default class ZhyprbolaExtension extends Extension {
         this._applyTheme();
         this._applyWallpaper(true);
         this._watchSettings();
+        this._startEdgeSpectrum();
 
         global.display.connectObject('workareas-changed', () => this._queueLayout(), this);
-        Main.layoutManager.connectObject('monitors-changed', () => this._queueLayout(), this);
+        Main.layoutManager.connectObject('monitors-changed', () => {
+            this._queueLayout();
+            this._restartEdgeSpectrum();
+        }, this);
     }
 
     disable() {
@@ -87,6 +100,7 @@ export default class ZhyprbolaExtension extends Extension {
             GLib.source_remove(this._settingsPlacementId);
             this._settingsPlacementId = 0;
         }
+        this._stopEdgeSpectrum();
         if (this._settingsSyncId) {
             GLib.source_remove(this._settingsSyncId);
             this._settingsSyncId = 0;
@@ -187,6 +201,26 @@ export default class ZhyprbolaExtension extends Extension {
         }
     }
 
+    _readEdgeEnabled() {
+        try {
+            const [, contents] = GLib.file_get_contents(this._edgeEnabledPath);
+            return new TextDecoder().decode(contents).trim() === 'true';
+        } catch (_) {
+            return false;
+        }
+    }
+
+    _readEdgePosition() {
+        try {
+            const [, contents] = GLib.file_get_contents(this._edgePositionPath);
+            const position = new TextDecoder().decode(contents).trim();
+            return Object.values(DockPosition).includes(position)
+                ? position : DockPosition.BOTTOM;
+        } catch (_) {
+            return DockPosition.BOTTOM;
+        }
+    }
+
     _watchSettings() {
         const directory = GLib.path_get_dirname(this._themePath);
         try {
@@ -211,13 +245,19 @@ export default class ZhyprbolaExtension extends Extension {
         const theme = this._readTheme();
         const position = this._readDockPosition();
         const useWallpaper = this._readUseWallpaper();
+        const edgeEnabled = this._readEdgeEnabled();
+        const edgePosition = this._readEdgePosition();
         const themeChanged = theme !== this._themeName;
         const positionChanged = position !== this._dockPosition;
         const wallpaperChanged = useWallpaper !== this._useWallpaper;
+        const edgeChanged = edgeEnabled !== this._edgeEnabled ||
+            edgePosition !== this._edgePosition;
 
         this._themeName = theme;
         this._dockPosition = position;
         this._useWallpaper = useWallpaper;
+        this._edgeEnabled = edgeEnabled;
+        this._edgePosition = edgePosition;
 
         if (positionChanged)
             this._rebuildDock();
@@ -225,6 +265,78 @@ export default class ZhyprbolaExtension extends Extension {
             this._applyTheme();
         if (themeChanged || wallpaperChanged)
             this._applyWallpaper(wallpaperChanged && useWallpaper);
+        if (edgeChanged)
+            this._restartEdgeSpectrum();
+    }
+
+    _startEdgeSpectrum() {
+        if (!this._edgeEnabled || this._edgeProcess)
+            return;
+
+        const launcher = GLib.build_filenamev([this.path, 'panel-command.sh']);
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (!monitor || !Gio.File.new_for_path(launcher).query_exists(null))
+            return;
+
+        try {
+            const process = Gio.Subprocess.new(
+                ['bash', launcher, 'edge-spectrum'], Gio.SubprocessFlags.NONE);
+            this._edgeProcess = process;
+            this._placeEdgeSpectrum(process);
+            process.wait_async(null, (source, result) => {
+                try {
+                    source.wait_finish(result);
+                } catch (error) {
+                    logError(error, 'Failed to wait for edge spectrum');
+                }
+                if (this._edgeProcess === process)
+                    this._edgeProcess = null;
+            });
+        } catch (error) {
+            logError(error, 'Failed to open edge spectrum');
+        }
+    }
+
+    _stopEdgeSpectrum() {
+        if (this._edgePlacementId) {
+            GLib.source_remove(this._edgePlacementId);
+            this._edgePlacementId = 0;
+        }
+        this._edgeProcess?.force_exit();
+        this._edgeProcess = null;
+    }
+
+    _restartEdgeSpectrum() {
+        this._stopEdgeSpectrum();
+        this._startEdgeSpectrum();
+    }
+
+    _placeEdgeSpectrum(process) {
+        let attempts = 0;
+        this._edgePlacementId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+            const window = global.display.list_all_windows().find(item =>
+                item.get_title() === 'Zhyprbola Edge Spectrum' &&
+                item.get_pid() === Number(process.get_identifier()));
+            const frame = window?.get_frame_rect();
+            const actor = window?.get_compositor_private();
+            const monitor = Main.layoutManager.primaryMonitor;
+            if (actor?.mapped && frame?.width > 0 && frame?.height > 0 && monitor) {
+                let x = monitor.x;
+                let y = monitor.y;
+                if (this._edgePosition === DockPosition.RIGHT)
+                    x += monitor.width - frame.width;
+                else if (this._edgePosition === DockPosition.BOTTOM)
+                    y += monitor.height - frame.height;
+                window.move_frame(true, x, y);
+                this._edgePlacementId = 0;
+                return GLib.SOURCE_REMOVE;
+            }
+            if (++attempts >= 100 || process.get_if_exited()) {
+                this._edgePlacementId = 0;
+                return GLib.SOURCE_REMOVE;
+            }
+            return GLib.SOURCE_CONTINUE;
+        });
     }
 
     _applyTheme() {
@@ -504,7 +616,7 @@ export default class ZhyprbolaExtension extends Extension {
             x += offset;
             break;
         case DockPosition.BOTTOM:
-            y = monitor.y + monitor.height - naturalHeight - margin;
+            y = monitor.y + monitor.height - naturalHeight - DOCK_CONFIG.bottomMargin;
             x += offset;
             break;
         default:

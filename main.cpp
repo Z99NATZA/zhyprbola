@@ -31,12 +31,14 @@ int main(int argc, char *argv[]) {
     const QStringList positional = parser.positionalArguments();
     const QString defaultQml = panelName.isEmpty()
         ? QStringLiteral("../Main.qml")
-        : QStringLiteral("../PanelHost.qml");
+        : (panelName == QLatin1String("edge-spectrum")
+            ? QStringLiteral("../EdgeSpectrum.qml")
+            : QStringLiteral("../PanelHost.qml"));
     const QString qmlFile = !positional.isEmpty()
         ? QFileInfo(positional.first()).absoluteFilePath()
         : QDir(app.applicationDirPath()).absoluteFilePath(defaultQml);
 
-    if (!panelName.isEmpty()) {
+    if (!panelName.isEmpty() && panelName != QLatin1String("edge-spectrum")) {
         engine.setInitialProperties({
             {QStringLiteral("requestedPanel"), panelName}
         });

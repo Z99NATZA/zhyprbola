@@ -11,6 +11,7 @@ Item {
     readonly property var sections: [
         {key: "themes", label: "Themes"},
         {key: "dock", label: "Dock"},
+        {key: "spectrum", label: "Spectrum"},
         {key: "wallpaper", label: "Wallpaper"}
     ]
     readonly property var themes: [
@@ -99,7 +100,8 @@ Item {
         x: 184
         y: 29
         text: panel.section === "themes" ? "Themes"
-            : (panel.section === "dock" ? "Dock position" : "Wallpaper")
+            : (panel.section === "dock" ? "Dock position"
+            : (panel.section === "spectrum" ? "Edge spectrum" : "Wallpaper"))
         color: Theme.text
         font.family: Qt.application.font.family
         font.pixelSize: 20
@@ -241,6 +243,100 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: backend.setDockPosition(modelData.key)
+                }
+            }
+        }
+    }
+
+    Column {
+        x: 184
+        y: 76
+        width: 358
+        spacing: 8
+        visible: panel.section === "spectrum"
+
+        Rectangle {
+            width: 358
+            height: 53
+            radius: 11
+            color: Theme.control
+
+            Text {
+                x: 16
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Show edge spectrum"
+                color: Theme.text
+                font.family: Qt.application.font.family
+                font.pixelSize: 14
+            }
+
+            Rectangle {
+                anchors.right: parent.right
+                anchors.rightMargin: 15
+                anchors.verticalCenter: parent.verticalCenter
+                width: 44
+                height: 26
+                radius: 13
+                color: backend.edgeSpectrumEnabled ? Theme.accent : Theme.track
+
+                Rectangle {
+                    x: backend.edgeSpectrumEnabled ? 21 : 3
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 20
+                    height: 20
+                    radius: 10
+                    color: "#ffffff"
+                }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: backend.setEdgeSpectrumEnabled(!backend.edgeSpectrumEnabled)
+            }
+        }
+
+        Repeater {
+            model: panel.positions
+
+            delegate: Rectangle {
+                required property var modelData
+                width: 358
+                height: 49
+                radius: 11
+                color: backend.edgeSpectrumPosition === modelData.key
+                    ? Theme.selected
+                    : (edgePositionMouse.containsMouse ? Theme.controlHover : Theme.control)
+
+                Text {
+                    x: 16
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: modelData.label
+                    color: Theme.text
+                    font.family: Qt.application.font.family
+                    font.pixelSize: 14
+                    font.weight: backend.edgeSpectrumPosition === modelData.key
+                        ? Font.DemiBold : Font.Normal
+                }
+
+                Text {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 16
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: backend.edgeSpectrumPosition === modelData.key
+                    text: "✓"
+                    color: Theme.accent
+                    font.family: Qt.application.font.family
+                    font.pixelSize: 16
+                    font.weight: Font.Bold
+                }
+
+                MouseArea {
+                    id: edgePositionMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: backend.setEdgeSpectrumPosition(modelData.key)
                 }
             }
         }

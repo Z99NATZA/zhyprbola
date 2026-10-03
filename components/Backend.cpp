@@ -175,6 +175,16 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     QFile wallpaperFile(dockConfigPath(QStringLiteral("use-wallpaper")));
     if (wallpaperFile.open(QIODevice::ReadOnly))
         m_useWallpaper = wallpaperFile.readAll().trimmed() == "true";
+    QFile edgeEnabledFile(dockConfigPath(QStringLiteral("edge-spectrum-enabled")));
+    if (edgeEnabledFile.open(QIODevice::ReadOnly))
+        m_edgeSpectrumEnabled = edgeEnabledFile.readAll().trimmed() == "true";
+    QFile edgePositionFile(dockConfigPath(QStringLiteral("edge-spectrum-position")));
+    if (edgePositionFile.open(QIODevice::ReadOnly)) {
+        const QString position = QString::fromUtf8(edgePositionFile.readAll()).trimmed();
+        if (position == QLatin1String("left") || position == QLatin1String("right")
+            || position == QLatin1String("top") || position == QLatin1String("bottom"))
+            m_edgeSpectrumPosition = position;
+    }
 
     m_location = qEnvironmentVariable("ZHYPRBOLA_LOCATION", "Bangkok");
     m_userName = qEnvironmentVariable("USER", "User");
@@ -260,6 +270,23 @@ void Backend::setUseWallpaper(bool enabled) {
         : QStringLiteral("false"))) return;
     m_useWallpaper = enabled;
     emit dockSettingsChanged();
+}
+
+void Backend::setEdgeSpectrumEnabled(bool enabled) {
+    if (enabled == m_edgeSpectrumEnabled) return;
+    if (!writeDockConfig(QStringLiteral("edge-spectrum-enabled"),
+        enabled ? QStringLiteral("true") : QStringLiteral("false"))) return;
+    m_edgeSpectrumEnabled = enabled;
+    emit edgeSpectrumSettingsChanged();
+}
+
+void Backend::setEdgeSpectrumPosition(const QString &position) {
+    static const QStringList positions = {QStringLiteral("left"), QStringLiteral("right"),
+        QStringLiteral("top"), QStringLiteral("bottom")};
+    if (!positions.contains(position) || position == m_edgeSpectrumPosition) return;
+    if (!writeDockConfig(QStringLiteral("edge-spectrum-position"), position)) return;
+    m_edgeSpectrumPosition = position;
+    emit edgeSpectrumSettingsChanged();
 }
 
 Backend::~Backend() {
