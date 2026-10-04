@@ -235,23 +235,46 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _createAppButton(app, running) {
+        const vertical = [DockPosition.LEFT, DockPosition.RIGHT]
+            .includes(this._dockPosition);
+        const focused = app.get_windows().some(window => window.has_focus());
+        const content = new St.Widget({
+            width: DOCK_CONFIG.buttonSize,
+            height: DOCK_CONFIG.buttonSize,
+            layout_manager: new Clutter.FixedLayout(),
+        });
         const icon = new St.Icon({
             gicon: app.get_icon(),
             icon_size: 21,
             style_class: 'zhyprbola-dock-app-icon',
+            x: this._dockPosition === DockPosition.LEFT ? 8
+                : this._dockPosition === DockPosition.RIGHT ? 3 : 6,
+            y: this._dockPosition === DockPosition.TOP ? 8
+                : this._dockPosition === DockPosition.BOTTOM ? 3 : 6,
         });
+        content.add_child(icon);
+        if (running) {
+            const indicator = new St.Widget({
+                style_class: 'zhyprbola-dock-app-indicator',
+                width: vertical ? (focused ? 3 : 4) : (focused ? 14 : 4),
+                height: vertical ? (focused ? 14 : 4) : (focused ? 3 : 4),
+                x: this._dockPosition === DockPosition.LEFT ? 1
+                    : this._dockPosition === DockPosition.RIGHT ? 28
+                        : (focused ? 9 : 14),
+                y: this._dockPosition === DockPosition.TOP ? 1
+                    : this._dockPosition === DockPosition.BOTTOM ? 28
+                        : (focused ? 9 : 14),
+            });
+            content.add_child(indicator);
+        }
         const button = new St.Button({
             style_class: 'zhyprbola-dock-app-button',
-            child: icon,
+            child: content,
             can_focus: true,
             reactive: true,
             track_hover: true,
             accessible_name: app.get_name(),
         });
-        if (running)
-            button.add_style_class_name('zhyprbola-dock-app-running');
-        if (app.get_windows().some(window => window.has_focus()))
-            button.add_style_class_name('zhyprbola-dock-app-focused');
         button.connect('clicked', () => this._activateApp(app));
         return button;
     }
