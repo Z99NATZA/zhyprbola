@@ -53,3 +53,7 @@ make run-panel
 # make check currently exits successfully but may print existing qmllint warnings.
 make check
 ```
+
+## LICENSE
+
+MIT [LICENSE](LICENSE)
