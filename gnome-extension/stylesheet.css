@@ -6,14 +6,24 @@
     padding: 4px;
 }
 
+.zhyprbola-dock-bottom,
+.zhyprbola-dock-top {
+    padding: 0 4px;
+}
+
+.zhyprbola-dock-left,
+.zhyprbola-dock-right {
+    padding: 4px 0;
+}
+
 .zhyprbola-dock-group {
     spacing: 4px;
 }
 
 .zhyprbola-dock-app-button,
 .zhyprbola-dock-button {
-    width: 32px;
-    height: 32px;
+    width: 27px;
+    height: 27px;
     border-radius: 8px;
     background-color: transparent;
     border: 0;
@@ -56,7 +66,7 @@
 
 .zhyprbola-dock-icon {
     color: #875a82;
-    icon-size: 21px;
+    icon-size: 16px;
 }
 
 .zhyprbola-dock-white {

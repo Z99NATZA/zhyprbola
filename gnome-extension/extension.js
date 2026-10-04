@@ -18,10 +18,10 @@ const DockPosition = Object.freeze({
 const DEFAULT_DOCK_POSITION = DockPosition.BOTTOM;
 
 const DOCK_CONFIG = Object.freeze({
-    buttonSize: 32,
+    iconSize: 16,
+    buttonSize: 27,
     groupSpacing: 4,
     padding: 4,
-    thickness: 40,
 });
 
 const DEFAULT_DOCK_GROUPS = ['zhyprbola', 'apps', 'running'];
@@ -155,7 +155,7 @@ export default class ZhyprbolaExtension extends Extension {
     _createDock() {
         const vertical = [DockPosition.LEFT, DockPosition.RIGHT].includes(this._dockPosition);
         this._dock = new St.BoxLayout({
-            style_class: 'zhyprbola-dock',
+            style_class: `zhyprbola-dock zhyprbola-dock-${this._dockPosition}`,
             style: 'spacing: 0;',
             vertical,
             reactive: true,
@@ -245,25 +245,27 @@ export default class ZhyprbolaExtension extends Extension {
         });
         const icon = new St.Icon({
             gicon: app.get_icon(),
-            icon_size: 21,
+            icon_size: DOCK_CONFIG.iconSize,
             style_class: 'zhyprbola-dock-app-icon',
-            x: this._dockPosition === DockPosition.LEFT ? 8
-                : this._dockPosition === DockPosition.RIGHT ? 3 : 6,
-            y: this._dockPosition === DockPosition.TOP ? 8
-                : this._dockPosition === DockPosition.BOTTOM ? 3 : 6,
+            x: this._dockPosition === DockPosition.LEFT ? 5 : 6,
+            y: this._dockPosition === DockPosition.TOP ? 5 : 6,
         });
         content.add_child(icon);
         if (running) {
+            const indicatorWidth = vertical ? 4 : (focused ? 14 : 4);
+            const indicatorHeight = vertical ? (focused ? 14 : 4) : 4;
             const indicator = new St.Widget({
                 style_class: 'zhyprbola-dock-app-indicator',
-                width: vertical ? (focused ? 3 : 4) : (focused ? 14 : 4),
-                height: vertical ? (focused ? 14 : 4) : (focused ? 3 : 4),
-                x: this._dockPosition === DockPosition.LEFT ? 1
-                    : this._dockPosition === DockPosition.RIGHT ? 28
-                        : (focused ? 9 : 14),
-                y: this._dockPosition === DockPosition.TOP ? 1
-                    : this._dockPosition === DockPosition.BOTTOM ? 28
-                        : (focused ? 9 : 14),
+                width: indicatorWidth,
+                height: indicatorHeight,
+                x: this._dockPosition === DockPosition.LEFT ? 0
+                    : this._dockPosition === DockPosition.RIGHT
+                        ? DOCK_CONFIG.buttonSize - indicatorWidth
+                        : Math.floor((DOCK_CONFIG.buttonSize - indicatorWidth) / 2),
+                y: this._dockPosition === DockPosition.TOP ? 0
+                    : this._dockPosition === DockPosition.BOTTOM
+                        ? DOCK_CONFIG.buttonSize - indicatorHeight
+                        : Math.floor((DOCK_CONFIG.buttonSize - indicatorHeight) / 2),
             });
             content.add_child(indicator);
         }
@@ -905,7 +907,7 @@ export default class ZhyprbolaExtension extends Extension {
 
         const vertical = [DockPosition.LEFT, DockPosition.RIGHT]
             .includes(this._dockPosition);
-        const thickness = DOCK_CONFIG.thickness;
+        const thickness = DOCK_CONFIG.buttonSize;
         const width = vertical ? thickness : monitor.width;
         const height = vertical ? monitor.height : thickness;
         const available = (vertical ? height : width) - 2 * DOCK_CONFIG.padding;
