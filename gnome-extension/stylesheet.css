@@ -68,3 +68,27 @@
 .zhyprbola-dock-red {
     background-color: rgba(184, 50, 82, 0.5);
 }
+
+.zhyprbola-power-menu.zhyprbola-power-current .popup-menu-item:hover {
+    background-color: rgba(135, 90, 130, 0.18) !important;
+}
+
+.zhyprbola-power-menu.zhyprbola-power-white .popup-menu-item:hover {
+    background-color: rgba(70, 123, 157, 0.18) !important;
+}
+
+.zhyprbola-power-menu.zhyprbola-power-white-sky .popup-menu-item:hover {
+    background-color: rgba(30, 115, 231, 0.18) !important;
+}
+
+.zhyprbola-power-menu.zhyprbola-power-forest .popup-menu-item:hover {
+    background-color: rgba(71, 127, 109, 0.18) !important;
+}
+
+.zhyprbola-power-menu.zhyprbola-power-one-half-gray .popup-menu-item:hover {
+    background-color: rgba(104, 113, 125, 0.18) !important;
+}
+
+.zhyprbola-power-menu.zhyprbola-power-red .popup-menu-item:hover {
+    background-color: rgba(184, 50, 82, 0.18) !important;
+}

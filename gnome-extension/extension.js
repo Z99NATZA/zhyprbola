@@ -251,12 +251,14 @@ export default class ZhyprbolaExtension extends Extension {
             height: DOCK_CONFIG.buttonSize,
             layout_manager: new Clutter.FixedLayout(),
         });
+        const iconX = this._dockPosition === DockPosition.LEFT ? 5 : 6;
+        const iconY = this._dockPosition === DockPosition.TOP ? 5 : 6;
         const icon = new St.Icon({
             gicon: app.get_icon(),
             icon_size: DOCK_CONFIG.iconSize,
             style_class: 'zhyprbola-dock-app-icon',
-            x: this._dockPosition === DockPosition.LEFT ? 5 : 6,
-            y: this._dockPosition === DockPosition.TOP ? 5 : 6,
+            x: iconX,
+            y: iconY,
         });
         content.add_child(icon);
         if (running) {
@@ -269,11 +271,11 @@ export default class ZhyprbolaExtension extends Extension {
                 x: this._dockPosition === DockPosition.LEFT ? 0
                     : this._dockPosition === DockPosition.RIGHT
                         ? DOCK_CONFIG.buttonSize - indicatorWidth
-                        : Math.floor((DOCK_CONFIG.buttonSize - indicatorWidth) / 2),
+                        : iconX + (DOCK_CONFIG.iconSize - indicatorWidth) / 2,
                 y: this._dockPosition === DockPosition.TOP ? 0
                     : this._dockPosition === DockPosition.BOTTOM
                         ? DOCK_CONFIG.buttonSize - indicatorHeight
-                        : Math.floor((DOCK_CONFIG.buttonSize - indicatorHeight) / 2),
+                        : iconY + (DOCK_CONFIG.iconSize - indicatorHeight) / 2,
             });
             content.add_child(indicator);
         }
@@ -868,21 +870,21 @@ export default class ZhyprbolaExtension extends Extension {
         const menu = new PopupMenu.PopupMenu(button, 0.5, side);
         const theme = THEMES.find(item => item.name === this._themeName);
         menu.actor.add_style_class_name('zhyprbola-overflow-menu');
+        menu.actor.add_style_class_name('zhyprbola-power-menu');
+        menu.actor.add_style_class_name(`zhyprbola-power-${this._themeName}`);
         menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor};`);
-        // Mutter display power mode 3 is OFF; the computer remains awake.
-        menu.addAction('Turn Off Display', () => this._sessionBusCall(
-            'org.gnome.Mutter.DisplayConfig', '/org/gnome/Mutter/DisplayConfig',
-            'org.freedesktop.DBus.Properties', 'Set',
-            new GLib.Variant('(ssv)', ['org.gnome.Mutter.DisplayConfig',
-                'PowerSaveMode', new GLib.Variant('i', 3)])));
-        menu.addAction('Log Out', () => this._sessionBusCall(
+        const addAction = (label, callback) => {
+            const item = menu.addAction(label, callback);
+            item.label.set_style(`color: ${theme.iconColor};`);
+        };
+        addAction('Log Out', () => this._sessionBusCall(
             'org.gnome.SessionManager', '/org/gnome/SessionManager',
             'org.gnome.SessionManager', 'Logout',
             new GLib.Variant('(u)', [0])));
-        menu.addAction('Restart', () => this._sessionBusCall(
+        addAction('Restart', () => this._sessionBusCall(
             'org.gnome.SessionManager', '/org/gnome/SessionManager',
             'org.gnome.SessionManager', 'Reboot'));
-        menu.addAction('Power Off', () => this._sessionBusCall(
+        addAction('Power Off', () => this._sessionBusCall(
             'org.gnome.SessionManager', '/org/gnome/SessionManager',
             'org.gnome.SessionManager', 'Shutdown'));
         Main.uiGroup.add_child(menu.actor);
