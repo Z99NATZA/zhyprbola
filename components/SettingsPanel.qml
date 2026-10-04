@@ -88,8 +88,9 @@ Item {
             .filter(key => key !== draggedComponent)
         if (destination) {
             const target = destination.zoneKey === "visible" ? show : hidden
-            const position = Math.max(0, Math.min(target.length,
-                Math.floor((localPoint.x - 12 + 18.5) / 37)))
+            const row = Math.max(0, Math.floor((localPoint.y - 45 + 18.5) / 37))
+            const column = Math.max(0, Math.floor((localPoint.x - 12 + 18.5) / 37))
+            const position = Math.max(0, Math.min(target.length, row * 9 + column))
             componentBeforeKey = target[position] || ""
             target.splice(position, 0, draggedComponent)
         } else if (backend.dockVisibleComponents.includes(draggedComponent)) {
@@ -513,7 +514,7 @@ Item {
         objectName: "dock-zone-" + zoneKey
 
         width: 358
-        height: 98
+        height: 136
         radius: 12
         color: dropHovered ? Theme.selected : Theme.control
         border.width: dropHovered ? 2 : 0
@@ -544,13 +545,14 @@ Item {
             x: 12
             y: 45
             width: 334
-            height: 34
+            height: 72
 
             Rectangle {
                 width: 34
                 height: 34
                 radius: 9
-                x: zone.displayOrder.indexOf(panel.draggedComponent) * 37
+                x: (zone.displayOrder.indexOf(panel.draggedComponent) % 9) * 37
+                y: Math.floor(zone.displayOrder.indexOf(panel.draggedComponent) / 9) * 37
                 visible: panel.draggingComponent
                     && zone.displayOrder.includes(panel.draggedComponent)
                 color: Theme.selected
@@ -569,7 +571,11 @@ Item {
                     objectName: "dock-component-" + zone.zoneKey + "-" + componentKey
                     x: {
                         const position = zone.displayOrder.indexOf(componentKey)
-                        return (position < 0 ? index : position) * 37
+                        return ((position < 0 ? index : position) % 9) * 37
+                    }
+                    y: {
+                        const position = zone.displayOrder.indexOf(componentKey)
+                        return Math.floor((position < 0 ? index : position) / 9) * 37
                     }
                     width: 34
                     height: 34
@@ -579,6 +585,10 @@ Item {
                         ? 0 : 1
 
                     Behavior on x {
+                        enabled: panel.draggingComponent
+                        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on y {
                         enabled: panel.draggingComponent
                         NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
                     }

@@ -35,6 +35,7 @@ const DOCK_COMPONENTS = [
     ['music', 'Music Player'],
     ['todo', 'Today'],
     ['calendar', 'Calendar'],
+    ['power', 'Power'],
 ];
 const DEFAULT_PINNED_APPS = [
     ['google-chrome.desktop', 'com.google.Chrome.desktop', 'chromium.desktop'],
@@ -611,6 +612,8 @@ export default class ZhyprbolaExtension extends Extension {
         if (!this._dock)
             return;
 
+        this._powerMenu?.destroy();
+        this._powerMenu = null;
         this._overflowMenu?.destroy();
         this._overflowMenu = null;
         Main.layoutManager.removeChrome(this._dock);
@@ -698,7 +701,12 @@ export default class ZhyprbolaExtension extends Extension {
             accessible_name: accessibleName,
         });
 
-        button.connect('clicked', () => this._openPanel(panelName));
+        button.connect('clicked', () => {
+            if (panelName === 'power')
+                this._openPowerMenu(button);
+            else
+                this._openPanel(panelName);
+        });
         return button;
     }
 
@@ -730,8 +738,11 @@ export default class ZhyprbolaExtension extends Extension {
 
         this._overflowMenu?.destroy();
         this._overflowMenu = null;
-        if (name === 'zhyprbola')
+        if (name === 'zhyprbola') {
+            this._powerMenu?.destroy();
+            this._powerMenu = null;
             this._panelIcons.clear();
+        }
         for (const child of group.get_children())
             child.destroy();
 
@@ -792,7 +803,13 @@ export default class ZhyprbolaExtension extends Extension {
             const icon = item.kind === 'panel'
                 ? this._panelGicon(item.name, theme.iconColor) : item.app.get_icon();
             menu.addAction(item.label, () => {
-                if (item.kind === 'panel')
+                if (item.name === 'power') {
+                    GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                        if (this._dock)
+                            this._openPowerMenu(button);
+                        return GLib.SOURCE_REMOVE;
+                    });
+                } else if (item.kind === 'panel')
                     this._openPanel(item.name);
                 else
                     this._activateApp(item.app);
@@ -803,6 +820,56 @@ export default class ZhyprbolaExtension extends Extension {
         this._menuManager.addMenu(menu);
         this._overflowMenu = menu;
         menu.open();
+    }
+
+    _openPowerMenu(button) {
+        if (this._powerMenu?.sourceActor === button) {
+            this._powerMenu.toggle();
+            return;
+        }
+        this._powerMenu?.destroy();
+        const side = {
+            [DockPosition.LEFT]: St.Side.RIGHT,
+            [DockPosition.RIGHT]: St.Side.LEFT,
+            [DockPosition.TOP]: St.Side.BOTTOM,
+            [DockPosition.BOTTOM]: St.Side.TOP,
+        }[this._dockPosition];
+        const menu = new PopupMenu.PopupMenu(button, 0.5, side);
+        const theme = THEMES.find(item => item.name === this._themeName);
+        menu.actor.add_style_class_name('zhyprbola-overflow-menu');
+        menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor};`);
+        // Mutter display power mode 3 is OFF; the computer remains awake.
+        menu.addAction('Turn Off Display', () => this._sessionBusCall(
+            'org.gnome.Mutter.DisplayConfig', '/org/gnome/Mutter/DisplayConfig',
+            'org.freedesktop.DBus.Properties', 'Set',
+            new GLib.Variant('(ssv)', ['org.gnome.Mutter.DisplayConfig',
+                'PowerSaveMode', new GLib.Variant('i', 3)])));
+        menu.addAction('Log Out', () => this._sessionBusCall(
+            'org.gnome.SessionManager', '/org/gnome/SessionManager',
+            'org.gnome.SessionManager', 'Logout',
+            new GLib.Variant('(u)', [0])));
+        menu.addAction('Restart', () => this._sessionBusCall(
+            'org.gnome.SessionManager', '/org/gnome/SessionManager',
+            'org.gnome.SessionManager', 'Reboot'));
+        menu.addAction('Power Off', () => this._sessionBusCall(
+            'org.gnome.SessionManager', '/org/gnome/SessionManager',
+            'org.gnome.SessionManager', 'Shutdown'));
+        Main.uiGroup.add_child(menu.actor);
+        menu.actor.hide();
+        this._menuManager.addMenu(menu);
+        this._powerMenu = menu;
+        menu.open();
+    }
+
+    _sessionBusCall(destination, path, interfaceName, method, parameters = null) {
+        Gio.DBus.session.call(destination, path, interfaceName, method, parameters,
+            null, Gio.DBusCallFlags.NONE, -1, null, (connection, result) => {
+                try {
+                    connection.call_finish(result);
+                } catch (error) {
+                    logError(error, `Failed to call ${interfaceName}.${method}`);
+                }
+            });
     }
 
     _openPanel(panelName) {

@@ -127,7 +127,7 @@ QStringList dockComponentKeys() {
         QStringLiteral("wifi"), QStringLiteral("clock-weather"),
         QStringLiteral("system-status"), QStringLiteral("audio-spectrum"),
         QStringLiteral("music"), QStringLiteral("todo"),
-        QStringLiteral("calendar")};
+        QStringLiteral("calendar"), QStringLiteral("power")};
 }
 
 QList<QByteArray> splitNetworkRow(const QByteArray &row) {
