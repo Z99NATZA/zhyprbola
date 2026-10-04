@@ -45,6 +45,7 @@ class Backend : public QObject {
     Q_PROPERTY(QVariantList spectrum READ spectrum NOTIFY spectrumChanged)
     Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
     Q_PROPERTY(QString dockPosition READ dockPosition NOTIFY dockSettingsChanged)
+    Q_PROPERTY(int dockBgOpacity READ dockBgOpacity NOTIFY dockSettingsChanged)
     Q_PROPERTY(QStringList dockGroups READ dockGroups NOTIFY dockSettingsChanged)
     Q_PROPERTY(QStringList dockGroupOrder READ dockGroupOrder NOTIFY dockSettingsChanged)
     Q_PROPERTY(QStringList dockVisibleComponents READ dockVisibleComponents NOTIFY dockSettingsChanged)
@@ -93,6 +94,7 @@ public:
     QVariantList spectrum() const { return m_spectrum; }
     QString themeName() const { return m_themeName; }
     QString dockPosition() const { return m_dockPosition; }
+    int dockBgOpacity() const { return m_dockBgOpacity; }
     QStringList dockGroups() const { return m_dockGroups; }
     QStringList dockGroupOrder() const { return m_dockGroupOrder; }
     QStringList dockVisibleComponents() const { return m_dockVisibleComponents; }
@@ -124,6 +126,7 @@ public:
     Q_INVOKABLE void resetComponentSettings();
     Q_INVOKABLE void setThemeName(const QString &name);
     Q_INVOKABLE void setDockPosition(const QString &position);
+    Q_INVOKABLE void setDockBgOpacity(int opacity);
     Q_INVOKABLE void setDockGroupEnabled(const QString &group, bool enabled);
     Q_INVOKABLE void moveDockGroup(const QString &source, int targetIndex);
     Q_INVOKABLE void moveDockComponent(const QString &key, const QString &destination,
@@ -207,6 +210,7 @@ private:
     QFileSystemWatcher m_themeWatcher;
     QString m_themeName = QStringLiteral("current");
     QString m_dockPosition = QStringLiteral("bottom");
+    int m_dockBgOpacity = 50;
     QStringList m_dockGroups = {QStringLiteral("zhyprbola"),
         QStringLiteral("apps"), QStringLiteral("running")};
     QStringList m_dockGroupOrder = {QStringLiteral("zhyprbola"),

@@ -83,6 +83,8 @@ export default class ZhyprbolaExtension extends Extension {
             GLib.get_user_config_dir(), 'zhyprbola', 'theme']);
         this._dockPositionPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'dock-position']);
+        this._dockBgOpacityPath = GLib.build_filenamev([
+            GLib.get_user_config_dir(), 'zhyprbola', 'dock-bg-opacity']);
         this._useWallpaperPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'use-wallpaper']);
         this._edgeEnabledPath = GLib.build_filenamev([
@@ -99,6 +101,7 @@ export default class ZhyprbolaExtension extends Extension {
             GLib.get_user_config_dir(), 'zhyprbola', 'pinned-apps']);
         this._themeName = this._readTheme();
         this._dockPosition = this._readDockPosition();
+        this._dockBgOpacity = this._readDockBgOpacity();
         this._useWallpaper = this._readUseWallpaper();
         this._edgeEnabled = this._readEdgeEnabled();
         this._edgePosition = this._readEdgePosition();
@@ -347,6 +350,18 @@ export default class ZhyprbolaExtension extends Extension {
         }
     }
 
+    _readDockBgOpacity() {
+        try {
+            const [, contents] = GLib.file_get_contents(this._dockBgOpacityPath);
+            const text = new TextDecoder().decode(contents).trim();
+            const opacity = Number(text);
+            return text && Number.isInteger(opacity) && opacity >= 0 && opacity <= 100
+                ? opacity : 50;
+        } catch (_) {
+            return 50;
+        }
+    }
+
     _readUseWallpaper() {
         try {
             const [, contents] = GLib.file_get_contents(this._useWallpaperPath);
@@ -456,6 +471,7 @@ export default class ZhyprbolaExtension extends Extension {
     _syncSettings() {
         const theme = this._readTheme();
         const position = this._readDockPosition();
+        const bgOpacity = this._readDockBgOpacity();
         const useWallpaper = this._readUseWallpaper();
         const edgeEnabled = this._readEdgeEnabled();
         const edgePosition = this._readEdgePosition();
@@ -465,6 +481,7 @@ export default class ZhyprbolaExtension extends Extension {
         const pinnedApps = this._readPinnedApps();
         const themeChanged = theme !== this._themeName;
         const positionChanged = position !== this._dockPosition;
+        const bgOpacityChanged = bgOpacity !== this._dockBgOpacity;
         const wallpaperChanged = useWallpaper !== this._useWallpaper;
         const edgeChanged = edgeEnabled !== this._edgeEnabled ||
             edgePosition !== this._edgePosition;
@@ -477,6 +494,7 @@ export default class ZhyprbolaExtension extends Extension {
 
         this._themeName = theme;
         this._dockPosition = position;
+        this._dockBgOpacity = bgOpacity;
         this._useWallpaper = useWallpaper;
         this._edgeEnabled = edgeEnabled;
         this._edgePosition = edgePosition;
@@ -489,6 +507,8 @@ export default class ZhyprbolaExtension extends Extension {
             this._rebuildDock();
         else if (themeChanged)
             this._applyTheme();
+        else if (bgOpacityChanged)
+            this._applyDockBackground();
         if (themeChanged || wallpaperChanged)
             this._applyWallpaper(wallpaperChanged && useWallpaper);
         if (edgeChanged)
@@ -591,10 +611,21 @@ export default class ZhyprbolaExtension extends Extension {
         } else {
             this._dock.remove_style_class_name('zhyprbola-dock-red');
         }
+        this._applyDockBackground();
         for (const [name, icon] of this._panelIcons)
             icon.gicon = this._panelGicon(name);
         this._overflowMenu?.destroy();
         this._overflowMenu = null;
+    }
+
+    _applyDockBackground() {
+        const color = (THEMES.find(theme => theme.name === this._themeName) ?? THEMES[0])
+            .iconColor;
+        const red = parseInt(color.slice(1, 3), 16);
+        const green = parseInt(color.slice(3, 5), 16);
+        const blue = parseInt(color.slice(5, 7), 16);
+        this._dock.set_style(`spacing: 0; background-color: rgba(${red}, ${green}, ` +
+            `${blue}, ${this._dockBgOpacity / 100});`);
     }
 
     _applyDockPosition() {

@@ -4,7 +4,7 @@ Item {
     id: panel
 
     width: 560
-    height: 470
+    height: 510
     property string section: "themes"
     signal closeRequested()
     readonly property int contentRowHeight: 46
@@ -561,6 +561,80 @@ Item {
                             onClicked: backend.setDockGroupEnabled(modelData, !active)
                         }
                     }
+                }
+            }
+        }
+
+        Rectangle {
+            objectName: "dock-bg-opacity"
+            width: 358
+            height: 64
+            radius: 11
+            color: Theme.control
+
+            Text {
+                x: 16
+                y: 10
+                text: "BG Opacity"
+                color: Theme.text
+                font.family: Qt.application.font.family
+                font.pixelSize: 14
+            }
+
+            Text {
+                anchors.right: parent.right
+                anchors.rightMargin: 16
+                y: 10
+                text: backend.dockBgOpacity + "%"
+                color: Theme.text
+                font.family: Qt.application.font.family
+                font.pixelSize: 13
+            }
+
+            Rectangle {
+                id: opacityTrack
+                x: 24
+                y: 42
+                width: 310
+                height: 6
+                radius: 3
+                color: Theme.track
+
+                Rectangle {
+                    width: parent.width * backend.dockBgOpacity / 100
+                    height: parent.height
+                    radius: parent.radius
+                    color: Theme.accent
+                }
+            }
+
+            Rectangle {
+                x: opacityTrack.x - 8 + opacityTrack.width * backend.dockBgOpacity / 100
+                y: opacityTrack.y - 5
+                width: 16
+                height: 16
+                radius: 8
+                color: Theme.accent
+            }
+
+            MouseArea {
+                id: opacityMouse
+                x: 16
+                y: 32
+                width: 326
+                height: 30
+                cursorShape: Qt.PointingHandCursor
+
+                function setFromPointer(pointerX) {
+                    const fraction = (pointerX - (opacityTrack.x - opacityMouse.x))
+                        / opacityTrack.width
+                    backend.setDockBgOpacity(Math.round(
+                        Math.max(0, Math.min(1, fraction)) * 100))
+                }
+
+                onPressed: function(mouse) { setFromPointer(mouse.x) }
+                onPositionChanged: function(mouse) {
+                    if (pressed) setFromPointer(mouse.x)
                 }
             }
         }

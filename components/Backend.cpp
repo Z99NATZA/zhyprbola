@@ -181,6 +181,13 @@ Backend::Backend(QObject *parent) : QObject(parent) {
             || position == QLatin1String("bottom"))
             m_dockPosition = position;
     }
+    QFile dockBgOpacityFile(dockConfigPath(QStringLiteral("dock-bg-opacity")));
+    if (dockBgOpacityFile.open(QIODevice::ReadOnly)) {
+        bool valid = false;
+        const int opacity = dockBgOpacityFile.readAll().trimmed().toInt(&valid);
+        if (valid && opacity >= 0 && opacity <= 100)
+            m_dockBgOpacity = opacity;
+    }
     QFile dockGroupsFile(dockConfigPath(QStringLiteral("dock-groups")));
     if (dockGroupsFile.open(QIODevice::ReadOnly)) {
         static const QStringList names = {QStringLiteral("apps"),
@@ -323,6 +330,14 @@ void Backend::setDockPosition(const QString &position) {
     if (!positions.contains(position) || position == m_dockPosition) return;
     if (!writeDockConfig(QStringLiteral("dock-position"), position)) return;
     m_dockPosition = position;
+    emit dockSettingsChanged();
+}
+
+void Backend::setDockBgOpacity(int opacity) {
+    opacity = qBound(0, opacity, 100);
+    if (opacity == m_dockBgOpacity) return;
+    if (!writeDockConfig(QStringLiteral("dock-bg-opacity"), QString::number(opacity))) return;
+    m_dockBgOpacity = opacity;
     emit dockSettingsChanged();
 }
 

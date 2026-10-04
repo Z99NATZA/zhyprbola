@@ -6,6 +6,7 @@ Panels: bluetooth, wifi, clock-weather, system-status, audio-spectrum
 Theme: ~/.config/zhyprbola/theme
 Dock position: ~/.config/zhyprbola/dock-position
 Dock default: bottom
+Dock BG opacity: ~/.config/zhyprbola/dock-bg-opacity (0-100%, default 50%; background only)
 Dock groups: ~/.config/zhyprbola/dock-groups (enabled groups)
 Dock group order: ~/.config/zhyprbola/dock-group-order (drag cards in Settings)
 Pinned apps: ~/.config/zhyprbola/pinned-apps (desktop IDs, one per line)
@@ -41,7 +42,7 @@ Weather:    Open-Meteo
 ```text
 Content row height: 46 px
 Gap within one group: 8 px (theme choices, dock group switches, spectrum edge choices)
-Gap between groups: 16 px (dock position / group order / switches, spectrum toggle / edge choices, component Show / Hidden)
+Gap between groups: 16 px (dock position / group order / switches / BG opacity, spectrum toggle / edge choices, component Show / Hidden)
 These gaps are between controls; padding inside a control is separate.
 ```
 
