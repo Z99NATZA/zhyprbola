@@ -125,7 +125,7 @@ public:
     Q_INVOKABLE void setThemeName(const QString &name);
     Q_INVOKABLE void setDockPosition(const QString &position);
     Q_INVOKABLE void setDockGroupEnabled(const QString &group, bool enabled);
-    Q_INVOKABLE void swapDockGroups(const QString &source, const QString &target);
+    Q_INVOKABLE void moveDockGroup(const QString &source, int targetIndex);
     Q_INVOKABLE void moveDockComponent(const QString &key, const QString &destination,
         const QString &beforeKey);
     Q_INVOKABLE void setUseWallpaper(bool enabled);

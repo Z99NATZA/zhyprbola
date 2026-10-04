@@ -36,6 +36,15 @@ Spectrum:   cava
 Weather:    Open-Meteo
 ```
 
+## Settings Spacing
+
+```text
+Content row height: 46 px
+Gap within one group: 8 px (theme choices, dock group switches, spectrum edge choices)
+Gap between groups: 16 px (dock position / group order / switches, spectrum toggle / edge choices, component Show / Hidden)
+These gaps are between controls; padding inside a control is separate.
+```
+
 ## Wallpapers
 
 ```text

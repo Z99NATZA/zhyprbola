@@ -340,12 +340,13 @@ void Backend::setDockGroupEnabled(const QString &group, bool enabled) {
     emit dockSettingsChanged();
 }
 
-void Backend::swapDockGroups(const QString &source, const QString &target) {
+void Backend::moveDockGroup(const QString &source, int targetIndex) {
     const int from = m_dockGroupOrder.indexOf(source);
-    const int to = m_dockGroupOrder.indexOf(target);
-    if (from < 0 || to < 0 || from == to) return;
+    if (from < 0 || targetIndex < 0 || targetIndex >= m_dockGroupOrder.size()
+        || from == targetIndex) return;
     QStringList next = m_dockGroupOrder;
-    next.swapItemsAt(from, to);
+    next.removeAt(from);
+    next.insert(targetIndex, source);
     if (!writeDockConfig(QStringLiteral("dock-group-order"), next.join(QLatin1Char(',')))) return;
     m_dockGroupOrder = next;
     emit dockSettingsChanged();

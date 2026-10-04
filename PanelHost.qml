@@ -26,7 +26,7 @@ Window {
         case "audio-spectrum": return 172
         case "system-status": return 195
         case "music": return 254
-        case "settings": return 420
+        case "settings": return 470
         case "todo": return 304
         case "calendar": return 314
         default: return 548

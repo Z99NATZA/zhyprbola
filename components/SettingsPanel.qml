@@ -4,14 +4,16 @@ Item {
     id: panel
 
     width: 560
-    height: 420
+    height: 470
     property string section: "themes"
     signal closeRequested()
+    readonly property int contentRowHeight: 46
+    readonly property int contentItemGap: 8
+    readonly property int contentSectionGap: 16
 
     readonly property var sections: [
         {key: "themes", label: "Themes"},
         {key: "dock", label: "Dock"},
-        {key: "groups", label: "Groups"},
         {key: "components", label: "Components"},
         {key: "spectrum", label: "Spectrum"},
         {key: "wallpaper", label: "Wallpaper"}
@@ -36,6 +38,14 @@ Item {
     readonly property var groupPlaces: backend.dockPosition === "left"
         || backend.dockPosition === "right"
         ? ["Top", "Center", "Bottom"] : ["Left", "Center", "Right"]
+    property string draggedGroup: ""
+    property bool draggingGroup: false
+    property int groupDropIndex: -1
+    property var groupPreviewOrder: []
+    property real groupDragStartX: 0
+    property real groupDragStartY: 0
+    property real groupDragOffsetX: 0
+    property real groupDragOffsetY: 0
     property string draggedComponent: ""
     property bool draggingComponent: false
     property string componentDropZone: ""
@@ -44,6 +54,59 @@ Item {
     property var componentPreviewHidden: []
     property real dragStartX: 0
     property real dragStartY: 0
+
+    function beginGroupDrag(name, point, offsetX, offsetY) {
+        draggedGroup = name
+        groupDragStartX = point.x
+        groupDragStartY = point.y
+        groupDragOffsetX = offsetX
+        groupDragOffsetY = offsetY
+        groupPreviewOrder = backend.dockGroupOrder.slice()
+        groupDropIndex = -1
+    }
+
+    function updateGroupDrag(point) {
+        if (!draggedGroup)
+            return
+        if (!draggingGroup) {
+            const dx = point.x - groupDragStartX
+            const dy = point.y - groupDragStartY
+            if (dx * dx + dy * dy < 36)
+                return
+            draggingGroup = true
+        }
+
+        floatingGroup.x = point.x - groupDragOffsetX
+        floatingGroup.y = point.y - groupDragOffsetY
+        const local = groupSlots.mapFromItem(panel, point.x, point.y)
+        const inside = local.x >= 0 && local.x < groupSlots.width
+            && local.y >= 0 && local.y < groupSlots.height
+        const order = backend.dockGroupOrder.slice()
+        if (inside) {
+            groupDropIndex = Math.max(0, Math.min(order.length - 1,
+                Math.floor((local.x + 4) / 122)))
+            const preview = order.filter(name => name !== draggedGroup)
+            preview.splice(groupDropIndex, 0, draggedGroup)
+            if (preview.join(',') !== groupPreviewOrder.join(','))
+                groupPreviewOrder = preview
+        } else {
+            groupDropIndex = -1
+            if (order.join(',') !== groupPreviewOrder.join(','))
+                groupPreviewOrder = order
+        }
+    }
+
+    function finishGroupDrag(commit) {
+        const name = draggedGroup
+        const index = groupDropIndex
+        const shouldCommit = commit && draggingGroup && index >= 0
+        draggedGroup = ""
+        draggingGroup = false
+        groupDropIndex = -1
+        groupPreviewOrder = []
+        if (shouldCommit)
+            backend.moveDockGroup(name, index)
+    }
 
     function beginComponentDrag(key, point) {
         draggedComponent = key
@@ -194,10 +257,9 @@ Item {
         x: 184
         y: 29
         text: panel.section === "themes" ? "Themes"
-            : (panel.section === "dock" ? "Dock position"
-            : (panel.section === "groups" ? "Dock groups"
+            : (panel.section === "dock" ? "Dock"
             : (panel.section === "components" ? "Components"
-            : (panel.section === "spectrum" ? "Edge spectrum" : "Wallpaper"))))
+            : (panel.section === "spectrum" ? "Edge spectrum" : "Wallpaper")))
         color: Theme.text
         font.family: Qt.application.font.family
         font.pixelSize: 20
@@ -233,7 +295,7 @@ Item {
         x: 184
         y: 76
         width: 358
-        spacing: 7
+        spacing: panel.contentItemGap
         visible: panel.section === "themes"
 
         Repeater {
@@ -242,7 +304,7 @@ Item {
             delegate: Rectangle {
                 required property var modelData
                 width: 358
-                height: 44
+                height: panel.contentRowHeight
                 radius: 11
                 color: backend.themeName === modelData.key
                     ? Theme.selected
@@ -292,71 +354,82 @@ Item {
     }
 
     Column {
+        objectName: "dock-settings-content"
         x: 184
         y: 76
         width: 358
-        spacing: 8
+        spacing: panel.contentSectionGap
         visible: panel.section === "dock"
 
-        Repeater {
-            model: panel.positions
+        Row {
+            width: 358
+            height: panel.contentRowHeight
+            spacing: 6
 
-            delegate: Rectangle {
-                required property var modelData
-                width: 358
-                height: 49
-                radius: 11
-                color: backend.dockPosition === modelData.key
-                    ? Theme.selected
-                    : (positionMouse.containsMouse ? Theme.controlHover : Theme.control)
+            Repeater {
+                model: panel.positions
 
-                Text {
-                    x: 16
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: modelData.label
-                    color: Theme.text
-                    font.family: Qt.application.font.family
-                    font.pixelSize: 14
-                    font.weight: backend.dockPosition === modelData.key
-                        ? Font.DemiBold : Font.Normal
-                }
+                delegate: Rectangle {
+                    required property var modelData
+                    objectName: "dock-position-" + modelData.key
+                    width: 85
+                    height: panel.contentRowHeight
+                    radius: 11
+                    color: backend.dockPosition === modelData.key
+                        ? Theme.selected
+                        : (positionMouse.containsMouse ? Theme.controlHover : Theme.control)
 
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: 16
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: backend.dockPosition === modelData.key
-                    text: "✓"
-                    color: Theme.accent
-                    font.family: Qt.application.font.family
-                    font.pixelSize: 16
-                    font.weight: Font.Bold
-                }
+                    Text {
+                        x: 11
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.label
+                        color: Theme.text
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 13
+                        font.weight: backend.dockPosition === modelData.key
+                            ? Font.DemiBold : Font.Normal
+                    }
 
-                MouseArea {
-                    id: positionMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: backend.setDockPosition(modelData.key)
+                    Text {
+                        anchors.right: parent.right
+                        anchors.rightMargin: 9
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: backend.dockPosition === modelData.key
+                        text: "✓"
+                        color: Theme.accent
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 14
+                        font.weight: Font.Bold
+                    }
+
+                    MouseArea {
+                        id: positionMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: backend.setDockPosition(modelData.key)
+                    }
                 }
             }
         }
-    }
 
-    Column {
-        x: 184
-        y: 76
-        width: 358
-        spacing: 12
-        visible: panel.section === "groups"
-
-        Row {
+        Item {
             id: groupSlots
-            spacing: 8
+            width: 358
+            height: 90
+
+            Rectangle {
+                width: 114
+                height: 90
+                radius: 11
+                x: panel.groupPreviewOrder.indexOf(panel.draggedGroup) * 122
+                visible: panel.draggingGroup && panel.groupDropIndex >= 0
+                color: Theme.selected
+                border.width: 2
+                border.color: Theme.accent
+            }
 
             Repeater {
-                id: groupRepeater
                 model: backend.dockGroupOrder
 
                 delegate: Rectangle {
@@ -364,25 +437,30 @@ Item {
                     required property string modelData
                     required property int index
                     readonly property string groupName: modelData
-                    property bool dropHovered: false
                     objectName: "dock-group-" + groupName
+                    x: {
+                        const position = panel.groupPreviewOrder.indexOf(groupName)
+                        return (position < 0 ? index : position) * 122
+                    }
                     width: 114
                     height: 90
                     radius: 11
-                    color: dropHovered ? Theme.selected : Theme.control
-                    border.width: dragArea.drag.active ? 2 : 0
-                    border.color: Theme.accent
-                    z: dragArea.drag.active ? 2 : 0
-                    Drag.active: dragArea.drag.active
-                    Drag.source: groupCard
-                    Drag.keys: ["dock-group"]
-                    Drag.hotSpot.x: dragArea.mouseX
-                    Drag.hotSpot.y: dragArea.mouseY
+                    color: Theme.control
+                    opacity: panel.draggingGroup && panel.draggedGroup === groupName
+                        ? 0 : 1
+
+                    Behavior on x {
+                        enabled: panel.draggingGroup
+                        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                    }
 
                     Text {
                         x: 10
                         y: 9
-                        text: panel.groupPlaces[groupCard.index]
+                        text: {
+                            const position = panel.groupPreviewOrder.indexOf(groupCard.groupName)
+                            return panel.groupPlaces[position < 0 ? groupCard.index : position]
+                        }
                         color: Theme.secondary
                         font.family: Qt.application.font.family
                         font.pixelSize: 12
@@ -407,96 +485,81 @@ Item {
                         font.pixelSize: 13
                     }
 
-                    DropArea {
-                        anchors.fill: parent
-                        keys: ["dock-group"]
-                        enabled: !dragArea.drag.active
-                        onEntered: groupCard.dropHovered = true
-                        onExited: groupCard.dropHovered = false
-                        onDropped: function(drop) {
-                            groupCard.dropHovered = false
-                            backend.swapDockGroups(drop.source.groupName, groupCard.groupName)
-                        }
-                    }
-
                     MouseArea {
                         id: dragArea
                         anchors.fill: parent
-                        drag.target: groupCard
-                        drag.axis: Drag.XAxis
-                        cursorShape: Qt.OpenHandCursor
-                        onReleased: {
-                            const name = groupCard.groupName
-                            const repeater = groupRepeater
-                            const spacing = groupSlots.spacing
-                            groupCard.Drag.drop()
-                            Qt.callLater(() => {
-                                for (let i = 0; i < repeater.count; ++i) {
-                                    const card = repeater.itemAt(i)
-                                    if (card && card.groupName === name) {
-                                        card.x = i * (card.width + spacing)
-                                        break
-                                    }
-                                }
-                            })
+                        hoverEnabled: true
+                        preventStealing: true
+                        cursorShape: panel.draggingGroup
+                            ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                        onPressed: function(mouse) {
+                            panel.beginGroupDrag(groupCard.groupName,
+                                dragArea.mapToItem(panel, mouse.x, mouse.y),
+                                mouse.x, mouse.y)
                         }
+                        onPositionChanged: function(mouse) {
+                            if (pressed)
+                                panel.updateGroupDrag(
+                                    dragArea.mapToItem(panel, mouse.x, mouse.y))
+                        }
+                        onReleased: panel.finishGroupDrag(true)
+                        onCanceled: panel.finishGroupDrag(false)
                     }
                 }
             }
         }
 
-        Text {
-            text: "Show groups"
-            color: Theme.secondary
-            font.family: Qt.application.font.family
-            font.pixelSize: 13
-        }
+        Column {
+            width: 358
+            spacing: panel.contentItemGap
 
-        Repeater {
-            model: ["zhyprbola", "apps", "running"]
+            Repeater {
+                model: ["zhyprbola", "apps", "running"]
 
-            delegate: Rectangle {
-                required property string modelData
-                required property int index
-                readonly property bool active: backend.dockGroups.includes(modelData)
+                delegate: Rectangle {
+                    required property string modelData
+                    required property int index
+                    readonly property bool active: backend.dockGroups.includes(modelData)
+                    objectName: "dock-group-toggle-" + modelData
 
-                width: 358
-                height: 48
-                radius: 11
-                color: active ? Theme.selected : Theme.control
+                    width: 358
+                    height: panel.contentRowHeight
+                    radius: 11
+                    color: active ? Theme.selected : Theme.control
 
-                Text {
-                    x: 16
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: panel.groupLabels[modelData]
-                    color: Theme.text
-                    font.family: Qt.application.font.family
-                    font.pixelSize: 14
-                    font.weight: active ? Font.DemiBold : Font.Normal
-                }
-
-                Rectangle {
-                    x: 299
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 44
-                    height: 26
-                    radius: 13
-                    color: active ? Theme.accent : Theme.track
-
-                    Rectangle {
-                        x: active ? 21 : 3
+                    Text {
+                        x: 16
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 20
-                        height: 20
-                        radius: 10
-                        color: "#ffffff"
+                        text: panel.groupLabels[modelData]
+                        color: Theme.text
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 14
+                        font.weight: active ? Font.DemiBold : Font.Normal
                     }
 
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: modelData !== "zhyprbola"
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: backend.setDockGroupEnabled(modelData, !active)
+                    Rectangle {
+                        x: 299
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 44
+                        height: 26
+                        radius: 13
+                        color: active ? Theme.accent : Theme.track
+
+                        Rectangle {
+                            x: active ? 21 : 3
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 20
+                            height: 20
+                            radius: 10
+                            color: "#ffffff"
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: modelData !== "zhyprbola"
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: backend.setDockGroupEnabled(modelData, !active)
+                        }
                     }
                 }
             }
@@ -630,7 +693,7 @@ Item {
         x: 184
         y: 76
         width: 358
-        spacing: 12
+        spacing: panel.contentSectionGap
         visible: panel.section === "components"
 
         DockComponentZone {
@@ -643,6 +706,49 @@ Item {
             id: hiddenZone
             zoneKey: "hidden"
             items: backend.dockHiddenComponents
+        }
+    }
+
+    Rectangle {
+        id: floatingGroup
+        objectName: "dock-group-drag-overlay"
+        z: 100
+        width: 114
+        height: 90
+        radius: 11
+        visible: panel.draggingGroup
+        color: Theme.control
+        border.width: 2
+        border.color: Theme.accent
+
+        Text {
+            x: 10
+            y: 9
+            text: panel.draggedGroup
+                ? panel.groupPlaces[panel.groupDropIndex >= 0
+                    ? panel.groupDropIndex : backend.dockGroupOrder.indexOf(panel.draggedGroup)]
+                : ""
+            color: Theme.secondary
+            font.family: Qt.application.font.family
+            font.pixelSize: 12
+        }
+
+        Text {
+            anchors.centerIn: parent
+            text: panel.groupLabels[panel.draggedGroup] || ""
+            color: Theme.text
+            font.family: Qt.application.font.family
+            font.pixelSize: 13
+            font.weight: Font.DemiBold
+        }
+
+        Text {
+            anchors.right: parent.right
+            anchors.rightMargin: 9
+            y: 7
+            text: "⋮⋮"
+            color: Theme.secondary
+            font.pixelSize: 13
         }
     }
 
@@ -671,12 +777,12 @@ Item {
         x: 184
         y: 76
         width: 358
-        spacing: 8
+        spacing: panel.contentSectionGap
         visible: panel.section === "spectrum"
 
         Rectangle {
             width: 358
-            height: 53
+            height: panel.contentRowHeight
             radius: 11
             color: Theme.control
 
@@ -715,47 +821,52 @@ Item {
             }
         }
 
-        Repeater {
-            model: panel.positions
+        Column {
+            width: 358
+            spacing: panel.contentItemGap
 
-            delegate: Rectangle {
-                required property var modelData
-                width: 358
-                height: 49
-                radius: 11
-                color: backend.edgeSpectrumPosition === modelData.key
-                    ? Theme.selected
-                    : (edgePositionMouse.containsMouse ? Theme.controlHover : Theme.control)
+            Repeater {
+                model: panel.positions
 
-                Text {
-                    x: 16
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: modelData.label
-                    color: Theme.text
-                    font.family: Qt.application.font.family
-                    font.pixelSize: 14
-                    font.weight: backend.edgeSpectrumPosition === modelData.key
-                        ? Font.DemiBold : Font.Normal
-                }
+                delegate: Rectangle {
+                    required property var modelData
+                    width: 358
+                    height: panel.contentRowHeight
+                    radius: 11
+                    color: backend.edgeSpectrumPosition === modelData.key
+                        ? Theme.selected
+                        : (edgePositionMouse.containsMouse ? Theme.controlHover : Theme.control)
 
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: 16
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: backend.edgeSpectrumPosition === modelData.key
-                    text: "✓"
-                    color: Theme.accent
-                    font.family: Qt.application.font.family
-                    font.pixelSize: 16
-                    font.weight: Font.Bold
-                }
+                    Text {
+                        x: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.label
+                        color: Theme.text
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 14
+                        font.weight: backend.edgeSpectrumPosition === modelData.key
+                            ? Font.DemiBold : Font.Normal
+                    }
 
-                MouseArea {
-                    id: edgePositionMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: backend.setEdgeSpectrumPosition(modelData.key)
+                    Text {
+                        anchors.right: parent.right
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: backend.edgeSpectrumPosition === modelData.key
+                        text: "✓"
+                        color: Theme.accent
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 16
+                        font.weight: Font.Bold
+                    }
+
+                    MouseArea {
+                        id: edgePositionMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: backend.setEdgeSpectrumPosition(modelData.key)
+                    }
                 }
             }
         }
@@ -765,7 +876,7 @@ Item {
         x: 184
         y: 76
         width: 358
-        height: 64
+        height: panel.contentRowHeight
         radius: 11
         color: Theme.control
         visible: panel.section === "wallpaper"
