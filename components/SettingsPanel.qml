@@ -12,6 +12,7 @@ Item {
         {key: "themes", label: "Themes"},
         {key: "dock", label: "Dock"},
         {key: "groups", label: "Groups"},
+        {key: "components", label: "Components"},
         {key: "spectrum", label: "Spectrum"},
         {key: "wallpaper", label: "Wallpaper"}
     ]
@@ -35,6 +36,91 @@ Item {
     readonly property var groupPlaces: backend.dockPosition === "left"
         || backend.dockPosition === "right"
         ? ["Top", "Center", "Bottom"] : ["Left", "Center", "Right"]
+    property string draggedComponent: ""
+    property bool draggingComponent: false
+    property string componentDropZone: ""
+    property string componentBeforeKey: ""
+    property var componentPreviewShow: []
+    property var componentPreviewHidden: []
+    property real dragStartX: 0
+    property real dragStartY: 0
+
+    function beginComponentDrag(key, point) {
+        draggedComponent = key
+        dragStartX = point.x
+        dragStartY = point.y
+        componentPreviewShow = backend.dockVisibleComponents.slice()
+        componentPreviewHidden = backend.dockHiddenComponents.slice()
+    }
+
+    function updateComponentDrag(point) {
+        if (!draggedComponent)
+            return
+        if (!draggingComponent) {
+            const dx = point.x - dragStartX
+            const dy = point.y - dragStartY
+            if (dx * dx + dy * dy < 36)
+                return
+            draggingComponent = true
+        }
+
+        floatingComponent.x = point.x - floatingComponent.width / 2
+        floatingComponent.y = point.y - floatingComponent.height / 2
+        let destination = null
+        let localPoint = null
+        for (const zone of [showZone, hiddenZone]) {
+            const local = zone.mapFromItem(panel, point.x, point.y)
+            if (local.x >= 0 && local.x < zone.width
+                && local.y >= 0 && local.y < zone.height) {
+                destination = zone
+                localPoint = local
+                break
+            }
+        }
+        showZone.dropHovered = destination === showZone
+        hiddenZone.dropHovered = destination === hiddenZone
+        componentDropZone = destination ? destination.zoneKey : ""
+        componentBeforeKey = ""
+
+        const show = backend.dockVisibleComponents.slice()
+            .filter(key => key !== draggedComponent)
+        const hidden = backend.dockHiddenComponents.slice()
+            .filter(key => key !== draggedComponent)
+        if (destination) {
+            const target = destination.zoneKey === "visible" ? show : hidden
+            const position = Math.max(0, Math.min(target.length,
+                Math.floor((localPoint.x - 12 + 18.5) / 37)))
+            componentBeforeKey = target[position] || ""
+            target.splice(position, 0, draggedComponent)
+        } else if (backend.dockVisibleComponents.includes(draggedComponent)) {
+            show.splice(backend.dockVisibleComponents.indexOf(draggedComponent),
+                0, draggedComponent)
+        } else {
+            hidden.splice(backend.dockHiddenComponents.indexOf(draggedComponent),
+                0, draggedComponent)
+        }
+        if (show.join(',') !== componentPreviewShow.join(','))
+            componentPreviewShow = show
+        if (hidden.join(',') !== componentPreviewHidden.join(','))
+            componentPreviewHidden = hidden
+    }
+
+    function finishComponentDrag() {
+        const key = draggedComponent
+        const destination = componentDropZone
+        const beforeKey = componentBeforeKey
+        const commit = draggingComponent && destination !== ""
+        draggedComponent = ""
+        draggingComponent = false
+        componentDropZone = ""
+        componentBeforeKey = ""
+        componentPreviewShow = []
+        componentPreviewHidden = []
+        showZone.dropHovered = false
+        hiddenZone.dropHovered = false
+        if (commit)
+            backend.moveDockComponent(key, destination, beforeKey)
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -109,7 +195,8 @@ Item {
         text: panel.section === "themes" ? "Themes"
             : (panel.section === "dock" ? "Dock position"
             : (panel.section === "groups" ? "Dock groups"
-            : (panel.section === "spectrum" ? "Edge spectrum" : "Wallpaper")))
+            : (panel.section === "components" ? "Components"
+            : (panel.section === "spectrum" ? "Edge spectrum" : "Wallpaper"))))
         color: Theme.text
         font.family: Qt.application.font.family
         font.pixelSize: 20
@@ -286,8 +373,8 @@ Item {
                     Drag.active: dragArea.drag.active
                     Drag.source: groupCard
                     Drag.keys: ["dock-group"]
-                    Drag.hotSpot.x: width / 2
-                    Drag.hotSpot.y: height / 2
+                    Drag.hotSpot.x: 0
+                    Drag.hotSpot.y: 0
 
                     Text {
                         x: 10
@@ -400,6 +487,161 @@ Item {
                     }
                 }
             }
+        }
+    }
+
+    component DockComponentZone: Rectangle {
+        id: zone
+        required property string zoneKey
+        required property var items
+        property bool dropHovered: false
+        readonly property var displayOrder: panel.draggingComponent
+            ? (zoneKey === "visible" ? panel.componentPreviewShow
+                : panel.componentPreviewHidden) : items
+        objectName: "dock-zone-" + zoneKey
+
+        width: 358
+        height: 98
+        radius: 12
+        color: dropHovered ? Theme.selected : Theme.control
+        border.width: dropHovered ? 2 : 0
+        border.color: Theme.accent
+
+        Text {
+            x: 13
+            y: 12
+            text: zone.zoneKey === "visible" ? "Show" : "Hidden"
+            color: Theme.text
+            font.family: Qt.application.font.family
+            font.pixelSize: 14
+            font.weight: Font.DemiBold
+        }
+
+        Text {
+            anchors.right: parent.right
+            anchors.rightMargin: 13
+            y: 13
+            text: zone.items.length
+            color: Theme.mutedText
+            font.family: Qt.application.font.family
+            font.pixelSize: 12
+        }
+
+        Item {
+            id: componentRow
+            x: 12
+            y: 45
+            width: 334
+            height: 34
+
+            Rectangle {
+                width: 34
+                height: 34
+                radius: 9
+                x: zone.displayOrder.indexOf(panel.draggedComponent) * 37
+                visible: panel.draggingComponent
+                    && zone.displayOrder.includes(panel.draggedComponent)
+                color: Theme.selected
+                border.width: 2
+                border.color: Theme.accent
+            }
+
+            Repeater {
+                model: zone.items
+
+                delegate: Rectangle {
+                    id: tile
+                    required property string modelData
+                    required property int index
+                    readonly property string componentKey: modelData
+                    objectName: "dock-component-" + zone.zoneKey + "-" + componentKey
+                    x: {
+                        const position = zone.displayOrder.indexOf(componentKey)
+                        return (position < 0 ? index : position) * 37
+                    }
+                    width: 34
+                    height: 34
+                    radius: 9
+                    color: zone.zoneKey === "visible" ? Theme.accent : Theme.mutedText
+                    opacity: panel.draggingComponent && panel.draggedComponent === componentKey
+                        ? 0 : 1
+
+                    Behavior on x {
+                        enabled: panel.draggingComponent
+                        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                    }
+
+                    Image {
+                        anchors.centerIn: parent
+                        width: 20
+                        height: 20
+                        source: Qt.resolvedUrl("../gnome-extension/icons/"
+                            + tile.componentKey + ".svg")
+                        fillMode: Image.PreserveAspectFit
+                    }
+
+                    MouseArea {
+                        id: dragArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        preventStealing: true
+                        cursorShape: panel.draggingComponent
+                            ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                        onPressed: function(mouse) {
+                            panel.beginComponentDrag(tile.componentKey,
+                                dragArea.mapToItem(panel, mouse.x, mouse.y))
+                        }
+                        onPositionChanged: function(mouse) {
+                            if (pressed)
+                                panel.updateComponentDrag(
+                                    dragArea.mapToItem(panel, mouse.x, mouse.y))
+                        }
+                        onReleased: panel.finishComponentDrag()
+                        onCanceled: panel.finishComponentDrag()
+                    }
+                }
+            }
+        }
+    }
+
+    Column {
+        x: 184
+        y: 76
+        width: 358
+        spacing: 12
+        visible: panel.section === "components"
+
+        DockComponentZone {
+            id: showZone
+            zoneKey: "visible"
+            items: backend.dockVisibleComponents
+        }
+
+        DockComponentZone {
+            id: hiddenZone
+            zoneKey: "hidden"
+            items: backend.dockHiddenComponents
+        }
+    }
+
+    Rectangle {
+        id: floatingComponent
+        objectName: "dock-component-drag-overlay"
+        z: 100
+        width: 34
+        height: 34
+        radius: 9
+        visible: panel.draggingComponent
+        color: Theme.accent
+
+        Image {
+            anchors.centerIn: parent
+            width: 20
+            height: 20
+            source: panel.draggedComponent
+                ? Qt.resolvedUrl("../gnome-extension/icons/"
+                    + panel.draggedComponent + ".svg") : ""
+            fillMode: Image.PreserveAspectFit
         }
     }
 

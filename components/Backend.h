@@ -47,6 +47,8 @@ class Backend : public QObject {
     Q_PROPERTY(QString dockPosition READ dockPosition NOTIFY dockSettingsChanged)
     Q_PROPERTY(QStringList dockGroups READ dockGroups NOTIFY dockSettingsChanged)
     Q_PROPERTY(QStringList dockGroupOrder READ dockGroupOrder NOTIFY dockSettingsChanged)
+    Q_PROPERTY(QStringList dockVisibleComponents READ dockVisibleComponents NOTIFY dockSettingsChanged)
+    Q_PROPERTY(QStringList dockHiddenComponents READ dockHiddenComponents NOTIFY dockSettingsChanged)
     Q_PROPERTY(bool useWallpaper READ useWallpaper NOTIFY dockSettingsChanged)
     Q_PROPERTY(bool edgeSpectrumEnabled READ edgeSpectrumEnabled NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QString edgeSpectrumPosition READ edgeSpectrumPosition NOTIFY edgeSpectrumSettingsChanged)
@@ -93,6 +95,8 @@ public:
     QString dockPosition() const { return m_dockPosition; }
     QStringList dockGroups() const { return m_dockGroups; }
     QStringList dockGroupOrder() const { return m_dockGroupOrder; }
+    QStringList dockVisibleComponents() const { return m_dockVisibleComponents; }
+    QStringList dockHiddenComponents() const { return m_dockHiddenComponents; }
     bool useWallpaper() const { return m_useWallpaper; }
     bool edgeSpectrumEnabled() const { return m_edgeSpectrumEnabled; }
     QString edgeSpectrumPosition() const { return m_edgeSpectrumPosition; }
@@ -122,6 +126,8 @@ public:
     Q_INVOKABLE void setDockPosition(const QString &position);
     Q_INVOKABLE void setDockGroupEnabled(const QString &group, bool enabled);
     Q_INVOKABLE void swapDockGroups(const QString &source, const QString &target);
+    Q_INVOKABLE void moveDockComponent(const QString &key, const QString &destination,
+        const QString &beforeKey);
     Q_INVOKABLE void setUseWallpaper(bool enabled);
     Q_INVOKABLE void setEdgeSpectrumEnabled(bool enabled);
     Q_INVOKABLE void setEdgeSpectrumPosition(const QString &position);
@@ -205,6 +211,8 @@ private:
         QStringLiteral("apps"), QStringLiteral("running")};
     QStringList m_dockGroupOrder = {QStringLiteral("zhyprbola"),
         QStringLiteral("apps"), QStringLiteral("running")};
+    QStringList m_dockVisibleComponents;
+    QStringList m_dockHiddenComponents;
     bool m_useWallpaper = false;
     bool m_edgeSpectrumEnabled = false;
     QString m_edgeSpectrumPosition = QStringLiteral("bottom");

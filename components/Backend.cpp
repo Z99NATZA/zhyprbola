@@ -122,6 +122,14 @@ bool validComponentKey(const QString &key) {
     return componentKeys().contains(key);
 }
 
+QStringList dockComponentKeys() {
+    return {QStringLiteral("settings"), QStringLiteral("bluetooth"),
+        QStringLiteral("wifi"), QStringLiteral("clock-weather"),
+        QStringLiteral("system-status"), QStringLiteral("audio-spectrum"),
+        QStringLiteral("music"), QStringLiteral("todo"),
+        QStringLiteral("calendar")};
+}
+
 QList<QByteArray> splitNetworkRow(const QByteArray &row) {
     QList<QByteArray> fields = row.split(':');
     if (fields.size() <= 4) return fields;
@@ -199,6 +207,32 @@ Backend::Backend(QObject *parent) : QObject(parent) {
         for (const QString &name : names)
             if (!order.contains(name)) order.append(name);
         m_dockGroupOrder = order;
+    }
+    const QStringList componentNames = dockComponentKeys();
+    m_dockVisibleComponents = componentNames;
+    QFile dockComponentsFile(dockConfigPath(QStringLiteral("dock-components")));
+    if (dockComponentsFile.open(QIODevice::ReadOnly)) {
+        const QJsonDocument document = QJsonDocument::fromJson(dockComponentsFile.readAll());
+        const QJsonObject object = document.object();
+        if (object.value(QStringLiteral("visible")).isArray()
+            && object.value(QStringLiteral("hidden")).isArray()) {
+            m_dockVisibleComponents.clear();
+            for (const auto &entry : object.value(QStringLiteral("visible")).toArray()) {
+                const QString name = entry.toString();
+                if (componentNames.contains(name) && !m_dockVisibleComponents.contains(name))
+                    m_dockVisibleComponents.append(name);
+            }
+            for (const auto &entry : object.value(QStringLiteral("hidden")).toArray()) {
+                const QString name = entry.toString();
+                if (componentNames.contains(name) && !m_dockVisibleComponents.contains(name)
+                    && !m_dockHiddenComponents.contains(name))
+                    m_dockHiddenComponents.append(name);
+            }
+            for (const QString &name : componentNames)
+                if (!m_dockVisibleComponents.contains(name)
+                    && !m_dockHiddenComponents.contains(name))
+                    m_dockVisibleComponents.append(name);
+        }
     }
     QFile wallpaperFile(dockConfigPath(QStringLiteral("use-wallpaper")));
     if (wallpaperFile.open(QIODevice::ReadOnly))
@@ -314,6 +348,32 @@ void Backend::swapDockGroups(const QString &source, const QString &target) {
     next.swapItemsAt(from, to);
     if (!writeDockConfig(QStringLiteral("dock-group-order"), next.join(QLatin1Char(',')))) return;
     m_dockGroupOrder = next;
+    emit dockSettingsChanged();
+}
+
+void Backend::moveDockComponent(const QString &key, const QString &destination,
+    const QString &beforeKey) {
+    if (!dockComponentKeys().contains(key) || beforeKey == key
+        || (destination != QLatin1String("visible")
+            && destination != QLatin1String("hidden"))) return;
+
+    QStringList visible = m_dockVisibleComponents;
+    QStringList hidden = m_dockHiddenComponents;
+    visible.removeAll(key);
+    hidden.removeAll(key);
+    QStringList &target = destination == QLatin1String("visible") ? visible : hidden;
+    int index = beforeKey.isEmpty() ? target.size() : target.indexOf(beforeKey);
+    if (index < 0) return;
+    target.insert(index, key);
+    if (visible == m_dockVisibleComponents && hidden == m_dockHiddenComponents) return;
+
+    QJsonObject object;
+    object.insert(QStringLiteral("visible"), QJsonArray::fromStringList(visible));
+    object.insert(QStringLiteral("hidden"), QJsonArray::fromStringList(hidden));
+    if (!writeDockConfig(QStringLiteral("dock-components"),
+            QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact)))) return;
+    m_dockVisibleComponents = visible;
+    m_dockHiddenComponents = hidden;
     emit dockSettingsChanged();
 }
 
