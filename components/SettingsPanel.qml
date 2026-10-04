@@ -355,6 +355,7 @@ Item {
             spacing: 8
 
             Repeater {
+                id: groupRepeater
                 model: backend.dockGroupOrder
 
                 delegate: Rectangle {
@@ -363,6 +364,7 @@ Item {
                     required property int index
                     readonly property string groupName: modelData
                     property bool dropHovered: false
+                    objectName: "dock-group-" + groupName
                     width: 114
                     height: 90
                     radius: 11
@@ -373,8 +375,8 @@ Item {
                     Drag.active: dragArea.drag.active
                     Drag.source: groupCard
                     Drag.keys: ["dock-group"]
-                    Drag.hotSpot.x: 0
-                    Drag.hotSpot.y: 0
+                    Drag.hotSpot.x: dragArea.mouseX
+                    Drag.hotSpot.y: dragArea.mouseY
 
                     Text {
                         x: 10
@@ -407,6 +409,7 @@ Item {
                     DropArea {
                         anchors.fill: parent
                         keys: ["dock-group"]
+                        enabled: !dragArea.drag.active
                         onEntered: groupCard.dropHovered = true
                         onExited: groupCard.dropHovered = false
                         onDropped: function(drop) {
@@ -422,9 +425,18 @@ Item {
                         drag.axis: Drag.XAxis
                         cursorShape: Qt.OpenHandCursor
                         onReleased: {
+                            const name = groupCard.groupName
+                            const repeater = groupRepeater
+                            const spacing = groupSlots.spacing
                             groupCard.Drag.drop()
                             Qt.callLater(() => {
-                                groupCard.x = groupCard.index * (groupCard.width + groupSlots.spacing)
+                                for (let i = 0; i < repeater.count; ++i) {
+                                    const card = repeater.itemAt(i)
+                                    if (card && card.groupName === name) {
+                                        card.x = i * (card.width + spacing)
+                                        break
+                                    }
+                                }
                             })
                         }
                     }

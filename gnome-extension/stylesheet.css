@@ -1,5 +1,5 @@
 .zhyprbola-dock {
-    background-color: #fafcfd;
+    background-color: rgba(135, 90, 130, 0.5);
     border: 0;
     box-shadow: none;
     border-radius: 0;
@@ -32,99 +32,39 @@
 .zhyprbola-dock-app-button:hover,
 .zhyprbola-dock-button:hover,
 .zhyprbola-dock-button:active {
-    background-color: rgba(0, 0, 0, 0.07);
+    background-color: rgba(255, 255, 255, 0.18);
 }
 
 .zhyprbola-dock-app-indicator {
-    background-color: #875a82;
+    background-color: #ffffff;
     border-radius: 4px;
 }
 
-.zhyprbola-dock-white .zhyprbola-dock-app-indicator {
-    background-color: #467b9d;
-}
-
-.zhyprbola-dock-white-sky .zhyprbola-dock-app-indicator {
-    background-color: #1e73e7;
-}
-
-.zhyprbola-dock-forest .zhyprbola-dock-app-indicator {
-    background-color: #477f6d;
-}
-
-.zhyprbola-dock-one-half-gray .zhyprbola-dock-app-indicator {
-    background-color: #68717d;
-}
-
-.zhyprbola-dock-red .zhyprbola-dock-app-indicator {
-    background-color: #b83252;
-}
-
 .zhyprbola-dock-button {
-    color: #875a82;
+    color: #ffffff;
 }
 
 .zhyprbola-dock-icon {
-    color: #875a82;
+    color: #ffffff;
     icon-size: 16px;
 }
 
 .zhyprbola-dock-white {
-    background-color: #fafcfd;
-}
-
-.zhyprbola-dock-white .zhyprbola-dock-button {
-    color: #467b9d;
-}
-
-.zhyprbola-dock-white .zhyprbola-dock-icon {
-    color: #467b9d;
+    background-color: rgba(70, 123, 157, 0.5);
 }
 
 .zhyprbola-dock-white-sky {
-    background-color: #fcfdff;
-}
-
-.zhyprbola-dock-white-sky .zhyprbola-dock-button {
-    color: #1e73e7;
-}
-
-.zhyprbola-dock-white-sky .zhyprbola-dock-icon {
-    color: #1e73e7;
+    background-color: rgba(30, 115, 231, 0.5);
 }
 
 .zhyprbola-dock-forest {
-    background-color: #fafcfd;
-}
-
-.zhyprbola-dock-forest .zhyprbola-dock-button {
-    color: #477f6d;
-}
-
-.zhyprbola-dock-forest .zhyprbola-dock-icon {
-    color: #477f6d;
+    background-color: rgba(71, 127, 109, 0.5);
 }
 
 .zhyprbola-dock-one-half-gray {
-    background-color: #fafcfd;
-}
-
-.zhyprbola-dock-one-half-gray .zhyprbola-dock-button {
-    color: #68717d;
-}
-
-.zhyprbola-dock-one-half-gray .zhyprbola-dock-icon {
-    color: #68717d;
+    background-color: rgba(104, 113, 125, 0.5);
 }
 
 .zhyprbola-dock-red {
-    background-color: #fafcfd;
-}
-
-.zhyprbola-dock-red .zhyprbola-dock-button {
-    color: #b83252;
-}
-
-.zhyprbola-dock-red .zhyprbola-dock-icon {
-    color: #b83252;
+    background-color: rgba(184, 50, 82, 0.5);
 }

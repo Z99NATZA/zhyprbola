@@ -702,7 +702,7 @@ export default class ZhyprbolaExtension extends Extension {
         return button;
     }
 
-    _panelGicon(name) {
+    _panelGicon(name, color = '#ffffff') {
         const path = GLib.build_filenamev([this.path, 'icons', `${name}.svg`]);
         try {
             let source = this._panelIconSources.get(name);
@@ -711,8 +711,7 @@ export default class ZhyprbolaExtension extends Extension {
                 source = new TextDecoder().decode(contents);
                 this._panelIconSources.set(name, source);
             }
-            const theme = THEMES.find(item => item.name === this._themeName);
-            const svg = source.replace(/#fff(?:fff)?\b/gi, theme.iconColor);
+            const svg = source.replace(/#fff(?:fff)?\b/gi, color);
             return Gio.BytesIcon.new(new GLib.Bytes(new TextEncoder().encode(svg)));
         } catch (error) {
             logError(error, `Failed to color Zhyprbola icon: ${name}`);
@@ -791,7 +790,7 @@ export default class ZhyprbolaExtension extends Extension {
         menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor};`);
         for (const item of items) {
             const icon = item.kind === 'panel'
-                ? this._panelGicon(item.name) : item.app.get_icon();
+                ? this._panelGicon(item.name, theme.iconColor) : item.app.get_icon();
             menu.addAction(item.label, () => {
                 if (item.kind === 'panel')
                     this._openPanel(item.name);
