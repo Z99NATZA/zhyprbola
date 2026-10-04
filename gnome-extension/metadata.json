@@ -1,7 +1,7 @@
 {
     "uuid": "zhyprbola@znnn.local",
     "name": "Zhyprbola",
-    "description": "A configurable sidebar dock for opening Zhyprbola panels.",
+    "description": "A full-edge, configurable bar for apps and Zhyprbola panels.",
     "shell-version": [
         "50"
     ],

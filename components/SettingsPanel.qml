@@ -11,6 +11,7 @@ Item {
     readonly property var sections: [
         {key: "themes", label: "Themes"},
         {key: "dock", label: "Dock"},
+        {key: "groups", label: "Groups"},
         {key: "spectrum", label: "Spectrum"},
         {key: "wallpaper", label: "Wallpaper"}
     ]
@@ -28,6 +29,12 @@ Item {
         {key: "top", label: "Top"},
         {key: "bottom", label: "Bottom"}
     ]
+    readonly property var groupLabels: ({
+        apps: "Apps", zhyprbola: "Zhyprbola", running: "Running"
+    })
+    readonly property var groupPlaces: backend.dockPosition === "left"
+        || backend.dockPosition === "right"
+        ? ["Top", "Center", "Bottom"] : ["Left", "Center", "Right"]
 
     Rectangle {
         anchors.fill: parent
@@ -101,7 +108,8 @@ Item {
         y: 29
         text: panel.section === "themes" ? "Themes"
             : (panel.section === "dock" ? "Dock position"
-            : (panel.section === "spectrum" ? "Edge spectrum" : "Wallpaper"))
+            : (panel.section === "groups" ? "Dock groups"
+            : (panel.section === "spectrum" ? "Edge spectrum" : "Wallpaper")))
         color: Theme.text
         font.family: Qt.application.font.family
         font.pixelSize: 20
@@ -243,6 +251,153 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: backend.setDockPosition(modelData.key)
+                }
+            }
+        }
+    }
+
+    Column {
+        x: 184
+        y: 76
+        width: 358
+        spacing: 12
+        visible: panel.section === "groups"
+
+        Row {
+            id: groupSlots
+            spacing: 8
+
+            Repeater {
+                model: backend.dockGroupOrder
+
+                delegate: Rectangle {
+                    id: groupCard
+                    required property string modelData
+                    required property int index
+                    readonly property string groupName: modelData
+                    property bool dropHovered: false
+                    width: 114
+                    height: 90
+                    radius: 11
+                    color: dropHovered ? Theme.selected : Theme.control
+                    border.width: dragArea.drag.active ? 2 : 0
+                    border.color: Theme.accent
+                    z: dragArea.drag.active ? 2 : 0
+                    Drag.active: dragArea.drag.active
+                    Drag.source: groupCard
+                    Drag.keys: ["dock-group"]
+                    Drag.hotSpot.x: width / 2
+                    Drag.hotSpot.y: height / 2
+
+                    Text {
+                        x: 10
+                        y: 9
+                        text: panel.groupPlaces[groupCard.index]
+                        color: Theme.secondary
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 12
+                    }
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: 35
+                        text: panel.groupLabels[groupCard.groupName]
+                        color: Theme.text
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                    }
+
+                    Text {
+                        anchors.right: parent.right
+                        anchors.rightMargin: 9
+                        y: 7
+                        text: "⋮⋮"
+                        color: Theme.secondary
+                        font.pixelSize: 13
+                    }
+
+                    DropArea {
+                        anchors.fill: parent
+                        keys: ["dock-group"]
+                        onEntered: groupCard.dropHovered = true
+                        onExited: groupCard.dropHovered = false
+                        onDropped: function(drop) {
+                            groupCard.dropHovered = false
+                            backend.swapDockGroups(drop.source.groupName, groupCard.groupName)
+                        }
+                    }
+
+                    MouseArea {
+                        id: dragArea
+                        anchors.fill: parent
+                        drag.target: groupCard
+                        drag.axis: Drag.XAxis
+                        cursorShape: Qt.OpenHandCursor
+                        onReleased: {
+                            groupCard.Drag.drop()
+                            Qt.callLater(() => {
+                                groupCard.x = groupCard.index * (groupCard.width + groupSlots.spacing)
+                            })
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: "Show groups"
+            color: Theme.secondary
+            font.family: Qt.application.font.family
+            font.pixelSize: 13
+        }
+
+        Repeater {
+            model: ["zhyprbola", "apps", "running"]
+
+            delegate: Rectangle {
+                required property string modelData
+                required property int index
+                readonly property bool active: backend.dockGroups.includes(modelData)
+
+                width: 358
+                height: 48
+                radius: 11
+                color: active ? Theme.selected : Theme.control
+
+                Text {
+                    x: 16
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: panel.groupLabels[modelData]
+                    color: Theme.text
+                    font.family: Qt.application.font.family
+                    font.pixelSize: 14
+                    font.weight: active ? Font.DemiBold : Font.Normal
+                }
+
+                Rectangle {
+                    x: 299
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 44
+                    height: 26
+                    radius: 13
+                    color: active ? Theme.accent : Theme.track
+
+                    Rectangle {
+                        x: active ? 21 : 3
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 20
+                        height: 20
+                        radius: 10
+                        color: "#ffffff"
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: modelData !== "zhyprbola"
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: backend.setDockGroupEnabled(modelData, !active)
+                    }
                 }
             }
         }

@@ -10,6 +10,7 @@
 #include <QNetworkRequest>
 #include <QCoreApplication>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QSaveFile>
 #include <QSet>
@@ -172,6 +173,33 @@ Backend::Backend(QObject *parent) : QObject(parent) {
             || position == QLatin1String("bottom"))
             m_dockPosition = position;
     }
+    QFile dockGroupsFile(dockConfigPath(QStringLiteral("dock-groups")));
+    if (dockGroupsFile.open(QIODevice::ReadOnly)) {
+        static const QStringList names = {QStringLiteral("apps"),
+            QStringLiteral("zhyprbola"), QStringLiteral("running")};
+        m_dockGroups.clear();
+        const QString contents = QString::fromUtf8(dockGroupsFile.readAll());
+        for (const QString &name : contents.split(QRegularExpression(QStringLiteral("[\\s,]+")),
+                 Qt::SkipEmptyParts)) {
+            if (names.contains(name) && !m_dockGroups.contains(name))
+                m_dockGroups.append(name);
+        }
+        if (!m_dockGroups.contains(QStringLiteral("zhyprbola")))
+            m_dockGroups.append(QStringLiteral("zhyprbola"));
+    }
+    QFile dockGroupOrderFile(dockConfigPath(QStringLiteral("dock-group-order")));
+    if (dockGroupOrderFile.open(QIODevice::ReadOnly)) {
+        const QStringList names = m_dockGroupOrder;
+        QStringList order;
+        const QString contents = QString::fromUtf8(dockGroupOrderFile.readAll());
+        for (const QString &name : contents.split(QRegularExpression(QStringLiteral("[\\s,]+")),
+                 Qt::SkipEmptyParts)) {
+            if (names.contains(name) && !order.contains(name)) order.append(name);
+        }
+        for (const QString &name : names)
+            if (!order.contains(name)) order.append(name);
+        m_dockGroupOrder = order;
+    }
     QFile wallpaperFile(dockConfigPath(QStringLiteral("use-wallpaper")));
     if (wallpaperFile.open(QIODevice::ReadOnly))
         m_useWallpaper = wallpaperFile.readAll().trimmed() == "true";
@@ -261,6 +289,31 @@ void Backend::setDockPosition(const QString &position) {
     if (!positions.contains(position) || position == m_dockPosition) return;
     if (!writeDockConfig(QStringLiteral("dock-position"), position)) return;
     m_dockPosition = position;
+    emit dockSettingsChanged();
+}
+
+void Backend::setDockGroupEnabled(const QString &group, bool enabled) {
+    static const QStringList names = {QStringLiteral("apps"),
+        QStringLiteral("zhyprbola"), QStringLiteral("running")};
+    if (!names.contains(group) || (group == QLatin1String("zhyprbola") && !enabled)
+        || m_dockGroups.contains(group) == enabled) return;
+
+    QStringList next = m_dockGroups;
+    if (enabled) next.append(group);
+    else next.removeAll(group);
+    if (!writeDockConfig(QStringLiteral("dock-groups"), next.join(QLatin1Char(',')))) return;
+    m_dockGroups = next;
+    emit dockSettingsChanged();
+}
+
+void Backend::swapDockGroups(const QString &source, const QString &target) {
+    const int from = m_dockGroupOrder.indexOf(source);
+    const int to = m_dockGroupOrder.indexOf(target);
+    if (from < 0 || to < 0 || from == to) return;
+    QStringList next = m_dockGroupOrder;
+    next.swapItemsAt(from, to);
+    if (!writeDockConfig(QStringLiteral("dock-group-order"), next.join(QLatin1Char(',')))) return;
+    m_dockGroupOrder = next;
     emit dockSettingsChanged();
 }
 

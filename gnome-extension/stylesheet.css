@@ -2,27 +2,74 @@
     background-color: #fafcfd;
     border: 0;
     box-shadow: none;
-    border-radius: 18px;
-    padding: 9px;
+    border-radius: 0;
+    padding: 4px;
+}
+
+.zhyprbola-dock-group {
+    spacing: 4px;
+}
+
+.zhyprbola-dock-app-button,
+.zhyprbola-dock-button {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background-color: transparent;
+    border: 0;
+}
+
+.zhyprbola-dock-app-button:hover,
+.zhyprbola-dock-button:hover,
+.zhyprbola-dock-button:active {
+    background-color: rgba(0, 0, 0, 0.07);
+}
+
+.zhyprbola-dock-app-running {
+    border-bottom: 2px solid #875a82;
+}
+
+.zhyprbola-dock-vertical .zhyprbola-dock-app-running {
+    border-bottom: 0;
+    border-left: 2px solid #875a82;
+}
+
+.zhyprbola-dock-app-focused {
+    background-color: rgba(135, 90, 130, 0.12);
+}
+
+.zhyprbola-dock-white .zhyprbola-dock-app-running {
+    border-bottom-color: #467b9d;
+    border-left-color: #467b9d;
+}
+
+.zhyprbola-dock-white-sky .zhyprbola-dock-app-running {
+    border-bottom-color: #1e73e7;
+    border-left-color: #1e73e7;
+}
+
+.zhyprbola-dock-forest .zhyprbola-dock-app-running {
+    border-bottom-color: #477f6d;
+    border-left-color: #477f6d;
+}
+
+.zhyprbola-dock-one-half-gray .zhyprbola-dock-app-running {
+    border-bottom-color: #68717d;
+    border-left-color: #68717d;
+}
+
+.zhyprbola-dock-red .zhyprbola-dock-app-running {
+    border-bottom-color: #b83252;
+    border-left-color: #b83252;
 }
 
 .zhyprbola-dock-button {
-    width: 42px;
-    height: 42px;
-    border-radius: 13px;
-    background-color: #875a82;
-    border: 0;
-    color: #ffffff;
-}
-
-.zhyprbola-dock-button:hover,
-.zhyprbola-dock-button:active {
-    background-color: #996c94;
+    color: #875a82;
 }
 
 .zhyprbola-dock-icon {
-    color: #ffffff;
-    icon-size: 20px;
+    color: #875a82;
+    icon-size: 21px;
 }
 
 .zhyprbola-dock-white {
@@ -30,17 +77,11 @@
 }
 
 .zhyprbola-dock-white .zhyprbola-dock-button {
-    background-color: #467b9d;
-    color: #ffffff;
-}
-
-.zhyprbola-dock-white .zhyprbola-dock-button:hover,
-.zhyprbola-dock-white .zhyprbola-dock-button:active {
-    background-color: #3c6d8c;
+    color: #467b9d;
 }
 
 .zhyprbola-dock-white .zhyprbola-dock-icon {
-    color: #ffffff;
+    color: #467b9d;
 }
 
 .zhyprbola-dock-white-sky {
@@ -48,17 +89,11 @@
 }
 
 .zhyprbola-dock-white-sky .zhyprbola-dock-button {
-    background-color: #1e73e7;
-    color: #ffffff;
-}
-
-.zhyprbola-dock-white-sky .zhyprbola-dock-button:hover,
-.zhyprbola-dock-white-sky .zhyprbola-dock-button:active {
-    background-color: #1766cb;
+    color: #1e73e7;
 }
 
 .zhyprbola-dock-white-sky .zhyprbola-dock-icon {
-    color: #ffffff;
+    color: #1e73e7;
 }
 
 .zhyprbola-dock-forest {
@@ -66,17 +101,11 @@
 }
 
 .zhyprbola-dock-forest .zhyprbola-dock-button {
-    background-color: #477f6d;
-    color: #ffffff;
-}
-
-.zhyprbola-dock-forest .zhyprbola-dock-button:hover,
-.zhyprbola-dock-forest .zhyprbola-dock-button:active {
-    background-color: #3f7866;
+    color: #477f6d;
 }
 
 .zhyprbola-dock-forest .zhyprbola-dock-icon {
-    color: #ffffff;
+    color: #477f6d;
 }
 
 .zhyprbola-dock-one-half-gray {
@@ -84,17 +113,11 @@
 }
 
 .zhyprbola-dock-one-half-gray .zhyprbola-dock-button {
-    background-color: #68717d;
-    color: #ffffff;
-}
-
-.zhyprbola-dock-one-half-gray .zhyprbola-dock-button:hover,
-.zhyprbola-dock-one-half-gray .zhyprbola-dock-button:active {
-    background-color: #59636f;
+    color: #68717d;
 }
 
 .zhyprbola-dock-one-half-gray .zhyprbola-dock-icon {
-    color: #ffffff;
+    color: #68717d;
 }
 
 .zhyprbola-dock-red {
@@ -102,15 +125,9 @@
 }
 
 .zhyprbola-dock-red .zhyprbola-dock-button {
-    background-color: #b83252;
-    color: #ffffff;
-}
-
-.zhyprbola-dock-red .zhyprbola-dock-button:hover,
-.zhyprbola-dock-red .zhyprbola-dock-button:active {
-    background-color: #a92a49;
+    color: #b83252;
 }
 
 .zhyprbola-dock-red .zhyprbola-dock-icon {
-    color: #ffffff;
+    color: #b83252;
 }

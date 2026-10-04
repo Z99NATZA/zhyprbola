@@ -5,7 +5,10 @@ Flow: GNOME dock extension -> focused QML panels
 Panels: bluetooth, wifi, clock-weather, system-status, audio-spectrum
 Theme: ~/.config/zhyprbola/theme
 Dock position: ~/.config/zhyprbola/dock-position
-Dock default: left
+Dock default: bottom
+Dock groups: ~/.config/zhyprbola/dock-groups (enabled groups)
+Dock group order: ~/.config/zhyprbola/dock-group-order (drag cards in Settings)
+Pinned apps: ~/.config/zhyprbola/pinned-apps (desktop IDs, one per line)
 Wallpaper toggle: ~/.config/zhyprbola/use-wallpaper
 ```
 
