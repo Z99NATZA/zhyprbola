@@ -413,7 +413,7 @@ Item {
             id: dragSurface
             anchors.left: checkbox.right
             anchors.leftMargin: 10
-            anchors.right: deleteButton.left
+            anchors.right: editButton.left
             anchors.rightMargin: 6
             anchors.top: parent.top
             anchors.bottom: parent.bottom
@@ -494,7 +494,7 @@ Item {
             id: editSurface
             anchors.left: checkbox.right
             anchors.leftMargin: 8
-            anchors.right: deleteButton.left
+            anchors.right: editButton.left
             anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
             height: 30
@@ -523,6 +523,41 @@ Item {
                     if (row.editing)
                         row.commitEdit()
                 }
+            }
+        }
+
+        Item {
+            id: editButton
+            anchors.right: deleteButton.left
+            anchors.rightMargin: 2
+            anchors.verticalCenter: parent.verticalCenter
+            width: 28
+            height: 28
+            opacity: rowHover.hovered || row.editing ? 1 : 0
+            visible: opacity > 0
+
+            Behavior on opacity { NumberAnimation { duration: 100 } }
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 8
+                color: editMouse.containsMouse ? Theme.controlHover : "transparent"
+            }
+
+            FlatIcon {
+                anchors.centerIn: parent
+                width: 15
+                height: 15
+                name: "edit"
+                ink: card.dimColor
+            }
+
+            MouseArea {
+                id: editMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: card.editingTaskId = row.taskId
             }
         }
 
