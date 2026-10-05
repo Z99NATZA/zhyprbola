@@ -38,7 +38,7 @@ Item {
         {key: "forest", label: "Forest Calm", accent: "#477F6D"},
         {key: "one-half-gray", label: "One Half Gray", accent: "#68717D"},
         {key: "red", label: "Red", accent: "#B83252"},
-        {key: "mauve", label: "Mauve", accent: "#A36386"}
+        {key: "mauve", label: "Mauve", accent: "#C45478"}
     ]
     readonly property var positions: [
         {key: "left", label: "Left"},

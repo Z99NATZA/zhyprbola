@@ -170,7 +170,7 @@
 }
 
 .zhyprbola-dock-mauve {
-    background-color: rgba(163, 99, 134, 0.5);
+    background-color: rgba(196, 84, 120, 0.5);
 }
 
 .zhyprbola-power-menu.zhyprbola-power-current .popup-menu-item:hover {
@@ -198,5 +198,5 @@
 }
 
 .zhyprbola-power-menu.zhyprbola-power-mauve .popup-menu-item:hover {
-    background-color: rgba(163, 99, 134, 0.18) !important;
+    background-color: rgba(196, 84, 120, 0.18) !important;
 }

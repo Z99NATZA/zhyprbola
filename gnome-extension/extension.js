@@ -61,7 +61,7 @@ const THEMES = [
     {name: 'forest', wallpaper: '4.png', iconColor: '#477f6d'},
     {name: 'one-half-gray', wallpaper: '5.png', iconColor: '#68717d'},
     {name: 'red', wallpaper: '6.png', iconColor: '#b83252'},
-    {name: 'mauve', wallpaper: '7.png', iconColor: '#a36386'},
+    {name: 'mauve', wallpaper: '7.png', iconColor: '#c45478'},
 ];
 
 const PANEL_TITLES = Object.freeze({
