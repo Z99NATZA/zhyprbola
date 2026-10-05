@@ -61,6 +61,7 @@ const THEMES = [
     {name: 'forest', wallpaper: '4.png', iconColor: '#477f6d'},
     {name: 'one-half-gray', wallpaper: '5.png', iconColor: '#68717d'},
     {name: 'red', wallpaper: '6.png', iconColor: '#b83252'},
+    {name: 'mauve', wallpaper: '7.png', iconColor: '#a36386'},
 ];
 
 const PANEL_TITLES = Object.freeze({
@@ -715,7 +716,8 @@ export default class ZhyprbolaExtension extends Extension {
     _readTheme() {
         try {
             const [, contents] = GLib.file_get_contents(this._themePath);
-            const name = new TextDecoder().decode(contents).trim();
+            const savedName = new TextDecoder().decode(contents).trim();
+            const name = savedName === 'rose-galaxy' ? 'mauve' : savedName;
             return THEMES.some(theme => theme.name === name) ? name : 'current';
         } catch (_) {
             return 'current';
@@ -1060,6 +1062,11 @@ export default class ZhyprbolaExtension extends Extension {
             this._dock.add_style_class_name('zhyprbola-dock-red');
         } else {
             this._dock.remove_style_class_name('zhyprbola-dock-red');
+        }
+        if (this._themeName === 'mauve') {
+            this._dock.add_style_class_name('zhyprbola-dock-mauve');
+        } else {
+            this._dock.remove_style_class_name('zhyprbola-dock-mauve');
         }
         this._applyDockBackground();
         for (const [name, icon] of this._panelIcons)

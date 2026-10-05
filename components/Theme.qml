@@ -27,6 +27,10 @@ QtObject {
             red: {
                 accent: "#B83252", text: "#542437", control: "#FAE9EE",
                 controlHover: "#F5DCE4", selected: "#F5DCE4", track: "#EECBD5"
+            },
+            mauve: {
+                accent: "#A36386", text: "#4C354E", control: "#F4EDF4",
+                controlHover: "#EBDDEB", selected: "#EBDDEB", track: "#DFCDDF"
             }
         }
         return colors[backend.themeName] || colors.current

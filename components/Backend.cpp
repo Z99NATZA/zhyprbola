@@ -352,10 +352,11 @@ void Backend::refreshTheme() {
     QFile file(themeFile);
     QString name = QStringLiteral("current");
     if (file.open(QIODevice::ReadOnly)) {
-        const QString value = QString::fromUtf8(file.readAll()).trimmed();
+        QString value = QString::fromUtf8(file.readAll()).trimmed();
+        if (value == QLatin1String("rose-galaxy")) value = QStringLiteral("mauve");
         if (value == QLatin1String("white") || value == QLatin1String("white-sky")
             || value == QLatin1String("forest") || value == QLatin1String("one-half-gray")
-            || value == QLatin1String("red"))
+            || value == QLatin1String("red") || value == QLatin1String("mauve"))
             name = value;
     }
     if (name != m_themeName) {
@@ -367,7 +368,8 @@ void Backend::refreshTheme() {
 void Backend::setThemeName(const QString &name) {
     static const QStringList names = {QStringLiteral("current"), QStringLiteral("white"),
         QStringLiteral("white-sky"), QStringLiteral("forest"),
-        QStringLiteral("one-half-gray"), QStringLiteral("red")};
+        QStringLiteral("one-half-gray"), QStringLiteral("red"),
+        QStringLiteral("mauve")};
     if (!names.contains(name) || name == m_themeName) return;
     if (writeDockConfig(QStringLiteral("theme"), name)) refreshTheme();
 }
