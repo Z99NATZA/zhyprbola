@@ -154,6 +154,7 @@ export default class ZhyprbolaExtension extends Extension {
 
         global.display.connectObject(
             'workareas-changed', () => this._queueLayout(),
+            'window-created', () => this._queueAppRefresh(),
             'notify::focus-window', () => {
                 const focused = global.display.focus_window;
                 // Clicking a launcher in Settings gives Settings focus first.
@@ -255,13 +256,13 @@ export default class ZhyprbolaExtension extends Extension {
         this._panelIcons = new Map();
         this._menuManager = new PopupMenu.PopupMenuManager(this._dock);
         for (const name of this._dockGroupOrder) {
+            if (!this._dockGroups.includes(name))
+                continue;
             const region = new St.Widget({
                 style_class: `zhyprbola-dock-region zhyprbola-dock-region-${name}`,
             });
             this._dock.add_child(region);
             this._dockRegions.set(name, region);
-            if (!this._dockGroups.includes(name))
-                continue;
 
             const group = new St.BoxLayout({
                 style_class: `zhyprbola-dock-group zhyprbola-dock-group-${name}`,
@@ -432,15 +433,39 @@ export default class ZhyprbolaExtension extends Extension {
             return {kind: 'app', app, label: app.get_name(), running: windows.length > 0};
         }));
 
+        const runningApps = new Map();
+        const seenWindows = new Set();
+        const addWindows = (app, windows) => {
+            if (!app)
+                return;
+            for (const window of windows) {
+                if (seenWindows.has(window) ||
+                    window.get_title()?.startsWith('Zhyprbola '))
+                    continue;
+                seenWindows.add(window);
+                const key = app.get_id() ?? app;
+                if (!runningApps.has(key))
+                    runningApps.set(key, {app, windows: []});
+                runningApps.get(key).windows.push(window);
+            }
+        };
+        for (const app of this._appSystem.get_running())
+            addWindows(app, app.get_windows());
+        for (const app of this._pinnedShellApps())
+            addWindows(app, app.get_windows());
+        for (const window of global.display.list_all_windows()) {
+            if (!window.is_skip_taskbar())
+                addWindows(this._windowTracker.get_window_app(window), [window]);
+        }
+
         const running = [];
-        for (const app of this._appSystem.get_running()) {
-            const windows = this._windowItemsForApp(app);
-            if (windows.length === 0)
-                continue;
+        for (const {app, windows} of runningApps.values()) {
             if (this._dockUngroupWindows)
-                running.push(...windows);
+                running.push(...windows.map(window => ({kind: 'app', app, window,
+                    label: window.get_title() || app.get_name(), running: true})));
             else
-                running.push({kind: 'app', app, label: app.get_name(), running: true});
+                running.push({kind: 'app', app, label: app.get_name(), running: true,
+                    window: app.get_windows().length === 0 ? windows[0] : null});
         }
         this._dockRenderState.delete('apps');
         this._dockItems.set('running', this._orderRunningItems(running));
@@ -1438,14 +1463,18 @@ export default class ZhyprbolaExtension extends Extension {
         const width = vertical ? thickness : monitor.width;
         const height = vertical ? monitor.height : thickness;
         const available = (vertical ? height : width) - 2 * DOCK_CONFIG.padding;
-        for (const [index, name] of this._dockGroupOrder.entries()) {
-            const start = Math.floor(available * index / this._dockGroupOrder.length);
-            const end = Math.floor(available * (index + 1) / this._dockGroupOrder.length);
+        const activeGroups = this._dockGroupOrder.filter(name =>
+            this._dockRegions.has(name));
+        for (const [index, name] of activeGroups.entries()) {
+            const start = Math.floor(available * index / activeGroups.length);
+            const end = Math.floor(available * (index + 1) / activeGroups.length);
             const regionLength = Math.max(0, end - start);
             const region = this._dockRegions.get(name);
             region.set_size(vertical ? DOCK_CONFIG.buttonSize : regionLength,
                 vertical ? regionLength : DOCK_CONFIG.buttonSize);
-            this._renderDockRegion(name, regionLength, vertical, index);
+            const slot = activeGroups.length === 1 ? 1 : index === 0 ? 0
+                : index === activeGroups.length - 1 ? 2 : 1;
+            this._renderDockRegion(name, regionLength, vertical, slot);
         }
         this._dock.set_size(width, height);
 
