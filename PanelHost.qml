@@ -8,6 +8,7 @@ Window {
     property string requestedPanel: "bluetooth"
     readonly property string panelName: requestedPanel === "tasks" || requestedPanel === "task"
         ? "todo" : requestedPanel
+    readonly property bool resizablePanel: panelName === "todo"
     readonly property int panelWidth: {
         switch (panelName) {
         case "clock-weather": return 480
@@ -58,8 +59,8 @@ Window {
     height: panelHeight
     minimumWidth: panelWidth
     minimumHeight: panelHeight
-    maximumWidth: panelWidth
-    maximumHeight: panelHeight
+    maximumWidth: resizablePanel ? 640 : panelWidth
+    maximumHeight: resizablePanel ? 720 : panelHeight
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
     color: "transparent"
     title: panelTitle
@@ -109,7 +110,7 @@ Window {
     }
 
     Todo {
-        anchors.centerIn: parent
+        anchors.fill: parent
         visible: host.panelName === "todo"
     }
 
@@ -132,5 +133,49 @@ Window {
         color: "transparent"
         border.color: Theme.secondary
         border.width: 1
+    }
+
+    Item {
+        id: resizeHandle
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        width: 28
+        height: 28
+        visible: host.resizablePanel
+        z: 300
+
+        Canvas {
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.rightMargin: 7
+            anchors.bottomMargin: 7
+            width: 13
+            height: 13
+            opacity: resizeMouse.containsMouse ? 0.72 : 0.34
+
+            onOpacityChanged: requestPaint()
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                ctx.strokeStyle = Theme.text
+                ctx.lineWidth = 1.6
+                ctx.lineCap = "round"
+                ctx.beginPath()
+                ctx.moveTo(5, 12)
+                ctx.lineTo(12, 5)
+                ctx.moveTo(9, 12)
+                ctx.lineTo(12, 9)
+                ctx.stroke()
+            }
+        }
+
+        MouseArea {
+            id: resizeMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton
+            cursorShape: Qt.SizeFDiagCursor
+            onPressed: host.startSystemResize(Qt.RightEdge | Qt.BottomEdge)
+        }
     }
 }

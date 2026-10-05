@@ -3,15 +3,15 @@ import QtQuick
 Item {
     id: win
 
+    implicitWidth: 360
+    implicitHeight: 336
     width: 360
     height: 336
 
     Item {
         id: card
 
-        anchors.centerIn: parent
-        width: 360
-        height: 336
+        anchors.fill: parent
 
         property color textColor: Theme.text
         property color dimColor: Qt.alpha(textColor, 0.72)
