@@ -200,17 +200,14 @@ Backend::Backend(QObject *parent) : QObject(parent) {
         m_dockUngroupWindows = dockUngroupWindowsFile.readAll().trimmed() == "true";
     QFile dockGroupsFile(dockConfigPath(QStringLiteral("dock-groups")));
     if (dockGroupsFile.open(QIODevice::ReadOnly)) {
-        static const QStringList names = {QStringLiteral("zhyprbola"),
-            QStringLiteral("running")};
+        static const QStringList names = {QStringLiteral("apps"), QStringLiteral("running"),
+            QStringLiteral("zhyprbola")};
         m_dockGroups.clear();
         const QString contents = QString::fromUtf8(dockGroupsFile.readAll());
         for (const QString &name : contents.split(QRegularExpression(QStringLiteral("[\\s,]+")),
                  Qt::SkipEmptyParts)) {
             if (names.contains(name) && !m_dockGroups.contains(name))
                 m_dockGroups.append(name);
-            else if (name == QLatin1String("apps")
-                && !m_dockGroups.contains(QStringLiteral("running")))
-                m_dockGroups.append(QStringLiteral("running"));
         }
         if (!m_dockGroups.contains(QStringLiteral("zhyprbola")))
             m_dockGroups.append(QStringLiteral("zhyprbola"));
@@ -356,8 +353,8 @@ void Backend::setDockBgOpacity(int opacity) {
 }
 
 void Backend::setDockGroupEnabled(const QString &group, bool enabled) {
-    static const QStringList names = {QStringLiteral("zhyprbola"),
-        QStringLiteral("running")};
+    static const QStringList names = {QStringLiteral("apps"), QStringLiteral("running"),
+        QStringLiteral("zhyprbola")};
     if (!names.contains(group) || (group == QLatin1String("zhyprbola") && !enabled)
         || m_dockGroups.contains(group) == enabled) return;
 

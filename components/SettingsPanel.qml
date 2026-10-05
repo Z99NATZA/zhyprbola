@@ -16,8 +16,10 @@ Item {
     readonly property int dockPositionWidth:
         Math.floor((contentWidth - dockPositionGap * 3) / 4)
     readonly property int dockGroupCardGap: 8
+    readonly property int dockGroupFramePadding: 1
+    readonly property int dockGroupContentWidth: contentWidth - dockGroupFramePadding * 2
     readonly property int dockGroupCardWidth:
-        Math.floor((contentWidth - dockGroupCardGap) / 2)
+        Math.floor((dockGroupContentWidth - dockGroupCardGap * 2) / 3)
     readonly property int dockGroupStep: dockGroupCardWidth + dockGroupCardGap
     readonly property int dockToggleWidth:
         Math.floor((contentWidth - contentItemGap) / 2)
@@ -44,7 +46,7 @@ Item {
         {key: "bottom", label: "Bottom"}
     ]
     readonly property var groupLabels: ({
-        zhyprbola: "Zhyprbola", running: "Running"
+        apps: "Apps", running: "Running", zhyprbola: "Zhyprbola"
     })
     property string draggedGroup: ""
     property bool draggingGroup: false
@@ -64,7 +66,10 @@ Item {
     property real dragStartY: 0
 
     function dockRegionLabel(groupName) {
-        return groupName === "zhyprbola" ? "Region 3" : "Region 2"
+        const order = groupPreviewOrder.length > 0
+            ? groupPreviewOrder : backend.dockGroupOrder
+        const index = order.indexOf(groupName)
+        return "Region " + (index < 0 ? 1 : index + 1)
     }
 
     function beginGroupDrag(name, point, offsetX, offsetY) {
@@ -90,9 +95,9 @@ Item {
 
         floatingGroup.x = point.x - groupDragOffsetX
         floatingGroup.y = point.y - groupDragOffsetY
-        const local = groupSlots.mapFromItem(panel, point.x, point.y)
-        const inside = local.x >= 0 && local.x < groupSlots.width
-            && local.y >= 0 && local.y < groupSlots.height
+        const local = groupSlotContent.mapFromItem(panel, point.x, point.y)
+        const inside = local.x >= 0 && local.x < groupSlotContent.width
+            && local.y >= 0 && local.y < groupSlotContent.height
         const order = backend.dockGroupOrder.slice()
         if (inside) {
             groupDropIndex = Math.max(0, Math.min(order.length - 1,
@@ -487,124 +492,114 @@ Item {
             }
         }
 
-        Item {
+        Rectangle {
             id: groupSlots
             width: panel.contentWidth
-            height: 90
+            height: 92
+            radius: 11
+            color: "transparent"
 
-            Rectangle {
-                width: panel.dockGroupCardWidth
-                height: 90
-                radius: 11
-                x: panel.groupPreviewOrder.indexOf(panel.draggedGroup) * panel.dockGroupStep
-                visible: panel.draggingGroup && panel.groupDropIndex >= 0
-                color: "transparent"
-
-                DashedBorder {
-                    anchors.fill: parent
-                    lineColor: Theme.accent
-                    lineWidth: 2
-                    dash: 8
-                    gap: 5
-                    opacity: 0.85
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: 1
-                    radius: 8
-                    color: Theme.selected
-                }
+            DashedBorder {
+                anchors.fill: parent
+                lineColor: Theme.track
+                lineWidth: 1
+                dash: 7
+                gap: 5
+                opacity: 0.9
             }
 
-            Repeater {
-                model: backend.dockGroupOrder
+            Item {
+                id: groupSlotContent
+                x: panel.dockGroupFramePadding
+                y: panel.dockGroupFramePadding
+                width: parent.width - panel.dockGroupFramePadding * 2
+                height: parent.height - panel.dockGroupFramePadding * 2
 
-                delegate: Rectangle {
-                    id: groupCard
-                    required property string modelData
-                    required property int index
-                    readonly property string groupName: modelData
-                    objectName: "dock-group-" + groupName
-                    x: {
-                        const position = panel.groupPreviewOrder.indexOf(groupName)
-                        return (position < 0 ? index : position) * panel.dockGroupStep
-                    }
+                Rectangle {
                     width: panel.dockGroupCardWidth
                     height: 90
-                    radius: 11
-                    color: "transparent"
-                    opacity: panel.draggingGroup && panel.draggedGroup === groupName
-                        ? 0 : 1
+                    radius: 10
+                    x: panel.groupPreviewOrder.indexOf(panel.draggedGroup)
+                        * panel.dockGroupStep
+                    visible: panel.draggingGroup && panel.groupDropIndex >= 0
+                    color: Theme.selected
+                }
 
-                    DashedBorder {
-                        anchors.fill: parent
-                        lineColor: Theme.accent
-                        lineWidth: 2
-                        dash: 7
-                        gap: 5
-                        opacity: dragArea.containsMouse ? 0.9 : 0.72
-                    }
+                Repeater {
+                    model: backend.dockGroupOrder
 
-                    Rectangle {
-                        anchors.fill: parent
-                        anchors.margins: 1
-                        radius: 8
+                    delegate: Rectangle {
+                        id: groupCard
+                        required property string modelData
+                        required property int index
+                        readonly property string groupName: modelData
+                        readonly property bool groupActive:
+                            backend.dockGroups.includes(groupName)
+                        objectName: "dock-group-" + groupName
+                        x: {
+                            const position = panel.groupPreviewOrder.indexOf(groupName)
+                            return (position < 0 ? index : position) * panel.dockGroupStep
+                        }
+                        width: panel.dockGroupCardWidth
+                        height: 90
+                        radius: 10
                         color: dragArea.containsMouse ? Theme.controlHover : Theme.control
-                    }
+                        opacity: panel.draggingGroup && panel.draggedGroup === groupName
+                            ? 0 : 1
 
-                    Behavior on x {
-                        enabled: panel.draggingGroup
-                        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
-                    }
-
-                    Text {
-                        x: 10
-                        y: 9
-                        text: panel.dockRegionLabel(groupCard.groupName)
-                        color: Theme.secondary
-                        font.family: Qt.application.font.family
-                        font.pixelSize: 12
-                    }
-
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        y: 35
-                        text: panel.groupLabels[groupCard.groupName]
-                        color: Theme.text
-                        font.family: Qt.application.font.family
-                        font.pixelSize: 13
-                        font.weight: Font.DemiBold
-                    }
-
-                    Text {
-                        anchors.right: parent.right
-                        anchors.rightMargin: 9
-                        y: 7
-                        text: "⋮⋮"
-                        color: Theme.secondary
-                        font.pixelSize: 13
-                    }
-
-                    MouseArea {
-                        id: dragArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        preventStealing: true
-                        cursorShape: panel.draggingGroup
-                            ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-                        onPressed: function(mouse) {
-                            panel.beginGroupDrag(groupCard.groupName,
-                                dragArea.mapToItem(panel, mouse.x, mouse.y),
-                                mouse.x, mouse.y)
+                        Behavior on x {
+                            enabled: panel.draggingGroup
+                            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
                         }
-                        onPositionChanged: function(mouse) {
-                            if (pressed)
-                                panel.updateGroupDrag(
-                                    dragArea.mapToItem(panel, mouse.x, mouse.y))
+
+                        Text {
+                            x: 10
+                            y: 9
+                            text: panel.dockRegionLabel(groupCard.groupName)
+                            color: groupCard.groupActive ? Theme.secondary : Theme.track
+                            font.family: Qt.application.font.family
+                            font.pixelSize: 12
                         }
-                        onReleased: panel.finishGroupDrag(true)
-                        onCanceled: panel.finishGroupDrag(false)
+
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            y: 35
+                            text: panel.groupLabels[groupCard.groupName]
+                            color: groupCard.groupActive ? Theme.text : Theme.mutedText
+                            font.family: Qt.application.font.family
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                        }
+
+                        Text {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 9
+                            y: 7
+                            text: "⋮⋮"
+                            color: groupCard.groupActive ? Theme.secondary : Theme.track
+                            font.pixelSize: 13
+                        }
+
+                        MouseArea {
+                            id: dragArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            preventStealing: true
+                            cursorShape: panel.draggingGroup
+                                ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                            onPressed: function(mouse) {
+                                panel.beginGroupDrag(groupCard.groupName,
+                                    dragArea.mapToItem(panel, mouse.x, mouse.y),
+                                    mouse.x, mouse.y)
+                            }
+                            onPositionChanged: function(mouse) {
+                                if (pressed)
+                                    panel.updateGroupDrag(
+                                        dragArea.mapToItem(panel, mouse.x, mouse.y))
+                            }
+                            onReleased: panel.finishGroupDrag(true)
+                            onCanceled: panel.finishGroupDrag(false)
+                        }
                     }
                 }
             }
@@ -618,6 +613,8 @@ Item {
 
             Repeater {
                 model: [
+                    {key: "apps", label: panel.groupLabels.apps,
+                        active: backend.dockGroups.includes("apps"), locked: false},
                     {key: "zhyprbola", label: panel.groupLabels.zhyprbola,
                         active: backend.dockGroups.includes("zhyprbola"), locked: true},
                     {key: "running", label: panel.groupLabels.running,

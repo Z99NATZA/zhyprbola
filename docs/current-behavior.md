@@ -8,8 +8,9 @@ Dock position: ~/.config/zhyprbola/dock-position
 Dock default: bottom
 Dock BG opacity: ~/.config/zhyprbola/dock-bg-opacity (0-100%, default 50%; background only)
 Dock groups: ~/.config/zhyprbola/dock-groups (enabled groups)
-Dock group order: ~/.config/zhyprbola/dock-group-order (drag cards in Settings)
+Dock group order: ~/.config/zhyprbola/dock-group-order (drag cards in Settings; disabled groups still keep an order slot)
 Ungroup windows: ~/.config/zhyprbola/dock-ungroup-windows (true/false, default false)
+Pinned apps: ~/.config/zhyprbola/pinned-apps (desktop IDs, one per line; shown only when Apps is enabled)
 Wallpaper toggle: ~/.config/zhyprbola/use-wallpaper
 Tasks: ~/.config/zhyprbola/tasks.json (local checklist; items remain until manually deleted)
 ```
@@ -18,11 +19,11 @@ Dock regions:
 
 ```text
 Region 1: empty
-Region 2: running applications
-Region 3: Zhyprbola component buttons
+Regions are ordered by dock-group-order and may contain Apps launchers, running applications, or Zhyprbola component buttons.
 ```
 
 When ungroup windows is enabled, running apps render one icon per window.
+Running apps include open windows even when the app also appears in Apps.
 The Input Source dock component shows the current language code such as `en`
 or `th` and opens a language-only switcher menu.
 The Tasks panel stores local checklist items, supports add/edit/toggle/delete
