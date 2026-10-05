@@ -8,9 +8,17 @@ Dock position: ~/.config/zhyprbola/dock-position
 Dock default: bottom
 Dock BG opacity: ~/.config/zhyprbola/dock-bg-opacity (0-100%, default 50%; background only)
 Dock groups: ~/.config/zhyprbola/dock-groups (enabled groups)
-Dock group order: ~/.config/zhyprbola/dock-group-order (drag cards in Settings)
+Dock group order: ~/.config/zhyprbola/dock-group-order (drag cards in Settings; apps/running order the shared launcher region)
 Pinned apps: ~/.config/zhyprbola/pinned-apps (desktop IDs, one per line)
 Wallpaper toggle: ~/.config/zhyprbola/use-wallpaper
+```
+
+Dock regions:
+
+```text
+Region 1: empty
+Region 2: apps + running, adjacent and ordered by dock-group-order
+Region 3: Zhyprbola component buttons
 ```
 
 ## Commands

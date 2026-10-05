@@ -25,6 +25,8 @@ const DOCK_CONFIG = Object.freeze({
 });
 
 const DEFAULT_DOCK_GROUPS = ['zhyprbola', 'apps', 'running'];
+const DOCK_REGIONS = ['empty', 'launchers', 'zhyprbola'];
+const LAUNCHER_GROUPS = ['apps', 'running'];
 const DOCK_COMPONENTS = [
     ['settings', 'Zhyprbola settings'],
     ['bluetooth', 'Bluetooth'],
@@ -188,13 +190,16 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockRenderState = new Map();
         this._panelIcons = new Map();
         this._menuManager = new PopupMenu.PopupMenuManager(this._dock);
-        for (const name of this._dockGroupOrder) {
+        for (const name of DOCK_REGIONS) {
             const region = new St.Widget({
                 style_class: `zhyprbola-dock-region zhyprbola-dock-region-${name}`,
             });
             this._dock.add_child(region);
             this._dockRegions.set(name, region);
-            if (!this._dockGroups.includes(name))
+            if (name === 'empty')
+                continue;
+            if (name === 'launchers' &&
+                !LAUNCHER_GROUPS.some(group => this._dockGroups.includes(group)))
                 continue;
 
             const group = new St.BoxLayout({
@@ -319,7 +324,17 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockItems.set('running', running);
         this._dockRenderState.delete('apps');
         this._dockRenderState.delete('running');
+        this._dockRenderState.delete('launchers');
         this._queueLayout();
+    }
+
+    _launcherItems() {
+        const items = [];
+        for (const name of this._dockGroupOrder) {
+            if (LAUNCHER_GROUPS.includes(name) && this._dockGroups.includes(name))
+                items.push(...(this._dockItems.get(name) ?? []));
+        }
+        return items;
     }
 
     _queueAppRefresh() {
@@ -1040,9 +1055,10 @@ export default class ZhyprbolaExtension extends Extension {
         const width = vertical ? thickness : monitor.width;
         const height = vertical ? monitor.height : thickness;
         const available = (vertical ? height : width) - 2 * DOCK_CONFIG.padding;
-        for (const [index, name] of this._dockGroupOrder.entries()) {
-            const start = Math.floor(available * index / 3);
-            const end = Math.floor(available * (index + 1) / 3);
+        this._dockItems.set('launchers', this._launcherItems());
+        for (const [index, name] of DOCK_REGIONS.entries()) {
+            const start = Math.floor(available * index / DOCK_REGIONS.length);
+            const end = Math.floor(available * (index + 1) / DOCK_REGIONS.length);
             const regionLength = Math.max(0, end - start);
             const region = this._dockRegions.get(name);
             region.set_size(vertical ? DOCK_CONFIG.buttonSize : regionLength,

@@ -35,9 +35,6 @@ Item {
     readonly property var groupLabels: ({
         apps: "Apps", zhyprbola: "Zhyprbola", running: "Running"
     })
-    readonly property var groupPlaces: backend.dockPosition === "left"
-        || backend.dockPosition === "right"
-        ? ["Top", "Center", "Bottom"] : ["Left", "Center", "Right"]
     property string draggedGroup: ""
     property bool draggingGroup: false
     property int groupDropIndex: -1
@@ -54,6 +51,10 @@ Item {
     property var componentPreviewHidden: []
     property real dragStartX: 0
     property real dragStartY: 0
+
+    function dockRegionLabel(groupName) {
+        return groupName === "zhyprbola" ? "Region 3" : "Region 2"
+    }
 
     function beginGroupDrag(name, point, offsetX, offsetY) {
         draggedGroup = name
@@ -457,10 +458,7 @@ Item {
                     Text {
                         x: 10
                         y: 9
-                        text: {
-                            const position = panel.groupPreviewOrder.indexOf(groupCard.groupName)
-                            return panel.groupPlaces[position < 0 ? groupCard.index : position]
-                        }
+                        text: panel.dockRegionLabel(groupCard.groupName)
                         color: Theme.secondary
                         font.family: Qt.application.font.family
                         font.pixelSize: 12
@@ -798,10 +796,7 @@ Item {
         Text {
             x: 10
             y: 9
-            text: panel.draggedGroup
-                ? panel.groupPlaces[panel.groupDropIndex >= 0
-                    ? panel.groupDropIndex : backend.dockGroupOrder.indexOf(panel.draggedGroup)]
-                : ""
+            text: panel.draggedGroup ? panel.dockRegionLabel(panel.draggedGroup) : ""
             color: Theme.secondary
             font.family: Qt.application.font.family
             font.pixelSize: 12
