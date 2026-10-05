@@ -12,6 +12,7 @@ Item {
         id: card
 
         anchors.fill: parent
+        focus: true
 
         property color textColor: Theme.text
         property color dimColor: Qt.alpha(textColor, 0.72)
@@ -135,6 +136,14 @@ Item {
             adding = false
         }
 
+        function finishTransientEdit() {
+            if (adding) {
+                commitNewTask()
+                return
+            }
+            forceActiveFocus()
+        }
+
         Rectangle {
             anchors.fill: parent
             radius: card.cornerRadius
@@ -143,8 +152,8 @@ Item {
 
         MouseArea {
             anchors.fill: parent
-            enabled: card.adding
-            onClicked: card.commitNewTask()
+            enabled: card.adding || card.editingTaskId !== ""
+            onClicked: card.finishTransientEdit()
         }
 
         Text {
@@ -265,7 +274,7 @@ Item {
             height: parent.height - y - 18
             clip: true
             interactive: card.draggingTaskId === "" && contentHeight > height
-            boundsBehavior: Flickable.StopAtBounds
+            boundsBehavior: Flickable.DragAndOvershootBounds
             contentWidth: width
             contentHeight: Math.max(height, card.taskContentHeight)
 
@@ -276,9 +285,9 @@ Item {
 
                 MouseArea {
                     anchors.fill: parent
-                    enabled: card.adding
+                    enabled: card.adding || card.editingTaskId !== ""
                     z: 0
-                    onClicked: card.commitNewTask()
+                    onClicked: card.finishTransientEdit()
                 }
 
                 Repeater {
@@ -344,7 +353,7 @@ Item {
                 editInput.text = taskText
                 Qt.callLater(function() {
                     editInput.forceActiveFocus()
-                    editInput.selectAll()
+                    editInput.cursorPosition = editInput.length
                 })
             }
         }
@@ -490,25 +499,21 @@ Item {
             }
         }
 
-        Rectangle {
+        Item {
             id: editSurface
             anchors.left: checkbox.right
-            anchors.leftMargin: 8
+            anchors.leftMargin: 10
             anchors.right: editButton.left
             anchors.rightMargin: 6
-            anchors.verticalCenter: parent.verticalCenter
-            height: 30
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
             visible: row.editing
-            radius: 8
-            color: Theme.cardSurface
-            border.width: 1
-            border.color: Theme.accent
 
             TextInput {
                 id: editInput
                 anchors.fill: parent
-                anchors.leftMargin: 9
-                anchors.rightMargin: 9
+                anchors.leftMargin: 0
+                anchors.rightMargin: 0
                 verticalAlignment: TextInput.AlignVCenter
                 clip: true
                 color: card.textColor
@@ -516,11 +521,13 @@ Item {
                 selectedTextColor: card.textColor
                 font.family: card.family
                 font.pixelSize: 14
+                font.weight: Font.Medium
+                onAccepted: row.commitEdit()
                 Keys.onReturnPressed: row.commitEdit()
                 Keys.onEnterPressed: row.commitEdit()
                 Keys.onEscapePressed: row.cancelEdit()
-                onEditingFinished: {
-                    if (row.editing)
+                onActiveFocusChanged: {
+                    if (!activeFocus && row.editing)
                         row.commitEdit()
                 }
             }
