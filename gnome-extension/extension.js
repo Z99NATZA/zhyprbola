@@ -75,6 +75,9 @@ export default class ZhyprbolaExtension extends Extension {
         this._pendingPanels = new Set();
         this._panelIconSources = new Map();
         this._inputSourceMenu = null;
+        this._inputSourceButton = null;
+        this._inputSourceLabel = null;
+        this._inputSourceMenuCloseId = 0;
         this._runningOrder = new Map();
         this._nextRunningOrder = 0;
         this._themePath = GLib.build_filenamev([
@@ -139,6 +142,13 @@ export default class ZhyprbolaExtension extends Extension {
         this._inputSourceSettings.connectObject(
             'changed::current', () => this._queueInputSourceRefresh(),
             'changed::sources', () => this._queueInputSourceRefresh(), this);
+        try {
+            this._inputSourceManager?.connectObject(
+                'current-source-changed', () => this._queueInputSourceRefresh(),
+                'sources-changed', () => this._queueInputSourceRefresh(), this);
+        } catch (error) {
+            logError(error, 'Failed to watch GNOME input source manager');
+        }
     }
 
     disable() {
@@ -147,6 +157,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._appSystem.disconnectObject(this);
         this._windowTracker.disconnectObject(this);
         this._inputSourceSettings.disconnectObject(this);
+        this._inputSourceManager?.disconnectObject?.(this);
 
         if (this._layoutIdleId) {
             GLib.source_remove(this._layoutIdleId);
@@ -155,6 +166,10 @@ export default class ZhyprbolaExtension extends Extension {
         if (this._appRefreshId) {
             GLib.source_remove(this._appRefreshId);
             this._appRefreshId = 0;
+        }
+        if (this._inputSourceMenuCloseId) {
+            GLib.source_remove(this._inputSourceMenuCloseId);
+            this._inputSourceMenuCloseId = 0;
         }
 
         this._cancelWallpaperRefresh();
@@ -382,12 +397,17 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _queueInputSourceRefresh() {
-        if (!this._dockRenderState)
+        if (!this._dock)
             return;
-        this._inputSourceMenu?.destroy();
-        this._inputSourceMenu = null;
-        this._dockRenderState.delete('zhyprbola');
-        this._queueLayout();
+        if (this._inputSourceMenu && !this._inputSourceMenuCloseId) {
+            this._inputSourceMenuCloseId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                this._inputSourceMenuCloseId = 0;
+                this._inputSourceMenu?.destroy();
+                this._inputSourceMenu = null;
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        this._refreshInputSourceButton();
     }
 
     _readTheme() {
@@ -711,6 +731,12 @@ export default class ZhyprbolaExtension extends Extension {
 
         this._inputSourceMenu?.destroy();
         this._inputSourceMenu = null;
+        if (this._inputSourceMenuCloseId) {
+            GLib.source_remove(this._inputSourceMenuCloseId);
+            this._inputSourceMenuCloseId = 0;
+        }
+        this._inputSourceButton = null;
+        this._inputSourceLabel = null;
         this._powerMenu?.destroy();
         this._powerMenu = null;
         this._overflowMenu?.destroy();
@@ -813,15 +839,20 @@ export default class ZhyprbolaExtension extends Extension {
         }));
     }
 
+    _currentManagerInputSource() {
+        return this._inputSourceManager?.currentSource ??
+            this._inputSourceManager?._currentSource ?? null;
+    }
+
     _currentInputSourceIndex(sources = this._inputSources()) {
         if (sources.length === 0)
             return -1;
-        const currentSource = this._inputSourceManager?.currentSource ??
-            this._inputSourceManager?._currentSource;
+        const currentSource = this._currentManagerInputSource();
         if (currentSource) {
             const current = sources.findIndex(source =>
                 source.managerSource === currentSource ||
-                source.index === currentSource.index ||
+                (currentSource.index !== undefined &&
+                    source.index === currentSource.index) ||
                 (source.type === currentSource.type && source.id === currentSource.id));
             if (current >= 0)
                 return current;
@@ -837,6 +868,8 @@ export default class ZhyprbolaExtension extends Extension {
     _inputSourceCode(source = null) {
         if (source?.code)
             return source.code.toLowerCase();
+        if (source?.shortName)
+            return source.shortName.toLowerCase();
         const id = source?.id ?? '';
         if (id.startsWith('th'))
             return 'th';
@@ -848,6 +881,8 @@ export default class ZhyprbolaExtension extends Extension {
     _inputSourceName(source = null) {
         if (source?.label)
             return source.label;
+        if (source?.displayName)
+            return source.displayName;
         const id = source?.id ?? '';
         if (id.startsWith('th'))
             return 'Thai';
@@ -861,7 +896,15 @@ export default class ZhyprbolaExtension extends Extension {
     _currentInputSourceCode() {
         const sources = this._inputSources();
         const index = this._currentInputSourceIndex(sources);
-        return this._inputSourceCode(sources[index]);
+        return this._inputSourceCode(sources[index] ?? this._currentManagerInputSource());
+    }
+
+    _refreshInputSourceButton() {
+        const code = this._currentInputSourceCode();
+        if (this._inputSourceLabel)
+            this._inputSourceLabel.text = code;
+        if (this._inputSourceButton)
+            this._inputSourceButton.accessible_name = `Input Source: ${code}`;
     }
 
     _createInputSourceButton() {
@@ -877,9 +920,11 @@ export default class ZhyprbolaExtension extends Extension {
             can_focus: true,
             reactive: true,
             track_hover: true,
-            accessible_name: 'Input Source',
+            accessible_name: `Input Source: ${label.text}`,
         });
         button.connect('clicked', () => this._openInputSourceMenu(button));
+        this._inputSourceButton = button;
+        this._inputSourceLabel = label;
         return button;
     }
 
@@ -887,6 +932,10 @@ export default class ZhyprbolaExtension extends Extension {
         if (this._inputSourceMenu?.sourceActor === button) {
             this._inputSourceMenu.toggle();
             return;
+        }
+        if (this._inputSourceMenuCloseId) {
+            GLib.source_remove(this._inputSourceMenuCloseId);
+            this._inputSourceMenuCloseId = 0;
         }
         this._inputSourceMenu?.destroy();
         const side = {
@@ -899,7 +948,7 @@ export default class ZhyprbolaExtension extends Extension {
         const theme = THEMES.find(item => item.name === this._themeName);
         const sources = this._inputSources();
         const current = this._currentInputSourceIndex(sources);
-        menu.actor.add_style_class_name('zhyprbola-overflow-menu');
+        menu.actor.add_style_class_name('zhyprbola-input-source-menu');
         menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor};`);
         for (const [index, source] of sources.entries()) {
             const item = menu.addAction(this._inputSourceName(source), () => {
@@ -909,6 +958,8 @@ export default class ZhyprbolaExtension extends Extension {
                     this._inputSourceSettings.set_uint('current', index);
                 this._queueInputSourceRefresh();
             });
+            item.actor.add_style_class_name('zhyprbola-input-source-item');
+            item.label.x_expand = true;
             item.label.set_style(`color: ${theme.iconColor};`);
             const code = new St.Label({
                 text: this._inputSourceCode(source),
@@ -974,8 +1025,7 @@ export default class ZhyprbolaExtension extends Extension {
             return;
         const items = this._dockItems.get(name) ?? [];
         const state = `${length}:${items.length}:${vertical}:${slot}:` +
-            `${items.map(item => item.kind === 'input-source'
-                ? this._currentInputSourceCode() : item.label).join('|')}`;
+            `${items.map(item => item.label).join('|')}`;
         if (this._dockRenderState.get(name) === state)
             return;
 
@@ -984,6 +1034,12 @@ export default class ZhyprbolaExtension extends Extension {
         if (name === 'zhyprbola') {
             this._inputSourceMenu?.destroy();
             this._inputSourceMenu = null;
+            if (this._inputSourceMenuCloseId) {
+                GLib.source_remove(this._inputSourceMenuCloseId);
+                this._inputSourceMenuCloseId = 0;
+            }
+            this._inputSourceButton = null;
+            this._inputSourceLabel = null;
             this._powerMenu?.destroy();
             this._powerMenu = null;
             this._panelIcons.clear();
