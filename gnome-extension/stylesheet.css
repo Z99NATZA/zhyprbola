@@ -35,6 +35,11 @@
     background-color: rgba(255, 255, 255, 0.18);
 }
 
+.zhyprbola-dock-app-button.zhyprbola-dock-drag-placeholder {
+    background-color: rgba(255, 255, 255, 0.22);
+    border: 1px dashed rgba(255, 255, 255, 0.8);
+}
+
 .zhyprbola-dock-app-indicator {
     background-color: #ffffff;
     border-radius: 4px;

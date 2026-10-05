@@ -5,6 +5,7 @@ import Shell from 'gi://Shell';
 import St from 'gi://St';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Keyboard from 'resource:///org/gnome/shell/ui/status/keyboard.js';
@@ -256,18 +257,41 @@ export default class ZhyprbolaExtension extends Extension {
         this._panelIcons = new Map();
         this._menuManager = new PopupMenu.PopupMenuManager(this._dock);
         for (const name of this._dockGroupOrder) {
-            if (!this._dockGroups.includes(name))
-                continue;
             const region = new St.Widget({
                 style_class: `zhyprbola-dock-region zhyprbola-dock-region-${name}`,
             });
             this._dock.add_child(region);
             this._dockRegions.set(name, region);
+            if (!this._dockGroups.includes(name))
+                continue;
 
             const group = new St.BoxLayout({
                 style_class: `zhyprbola-dock-group zhyprbola-dock-group-${name}`,
                 vertical,
+                reactive: name === 'apps' || name === 'running',
             });
+            if (name === 'apps' || name === 'running') {
+                group._delegate = {
+                    handleDragOver: (source, _actor, x, y) => {
+                        if (!this._previewDockItemDrag(name, group, source,
+                            vertical ? y : x))
+                            return DND.DragMotionResult.CONTINUE;
+                        return DND.DragMotionResult.MOVE_DROP;
+                    },
+                    acceptDrop: (source, _actor, x, y) => {
+                        if (!this._previewDockItemDrag(name, group, source,
+                            vertical ? y : x))
+                            return false;
+                        const keys = group.get_children()
+                            .filter(child => child._delegate?.groupName === name)
+                            .map(child => child._delegate.key);
+                        source.dropAccepted = true;
+                        GLib.idle_add_once(GLib.PRIORITY_DEFAULT_IDLE, () =>
+                            this._commitDockItemOrder(name, keys));
+                        return true;
+                    },
+                };
+            }
             region.add_child(group);
             this._dockGroupsByName.set(name, group);
         }
@@ -311,7 +335,8 @@ export default class ZhyprbolaExtension extends Extension {
         return apps;
     }
 
-    _createAppButton(app, running, window = null) {
+    _createAppButton(item, groupName) {
+        const {app, running, window = null} = item;
         const vertical = [DockPosition.LEFT, DockPosition.RIGHT]
             .includes(this._dockPosition);
         const focused = window
@@ -360,7 +385,119 @@ export default class ZhyprbolaExtension extends Extension {
         });
         button.connect('clicked', () => window
             ? this._activateWindow(window) : this._activateApp(app));
+        const key = this._itemOrderKey(item);
+        button._delegate = {
+            groupName,
+            key,
+            button,
+            dropAccepted: false,
+            originalIndex: -1,
+            getDragActor: () => new St.Icon({
+                gicon: app.get_icon(),
+                icon_size: DOCK_CONFIG.iconSize,
+                style_class: 'zhyprbola-dock-app-icon',
+            }),
+            getDragActorSource: () => button,
+        };
+        const draggable = DND.makeDraggable(button, {timeoutThreshold: 200});
+        draggable.connect('drag-begin', () => {
+            const group = button.get_parent();
+            button._delegate.originalIndex = group.get_children().indexOf(button);
+            button._delegate.dropAccepted = false;
+            button.reactive = false;
+            content.opacity = 0;
+            button.add_style_class_name('zhyprbola-dock-drag-placeholder');
+        });
+        const finishDrag = () => {
+            const group = button.get_parent();
+            if (!group)
+                return;
+            if (!button._delegate.dropAccepted &&
+                button._delegate.originalIndex >= 0)
+                this._moveDockDragPlaceholder(group, button,
+                    button._delegate.originalIndex);
+            button.reactive = true;
+            content.opacity = 255;
+            button.remove_style_class_name('zhyprbola-dock-drag-placeholder');
+        };
+        draggable.connect('drag-end', finishDrag);
+        draggable.connect('drag-cancelled', finishDrag);
         return button;
+    }
+
+    _previewDockItemDrag(groupName, group, source, position) {
+        if (source?.groupName !== groupName || source.button?.get_parent() !== group)
+            return false;
+        const buttons = group.get_children().filter(child =>
+            child._delegate?.groupName === groupName);
+        const step = DOCK_CONFIG.buttonSize + DOCK_CONFIG.groupSpacing;
+        const targetIndex = buttons.filter(child => child !== source.button &&
+            position >= (buttons.indexOf(child) * step + DOCK_CONFIG.buttonSize / 2))
+            .length;
+        this._moveDockDragPlaceholder(group, source.button, targetIndex);
+        return true;
+    }
+
+    _moveDockDragPlaceholder(group, button, targetIndex) {
+        // Reorder the empty button slot while the drag icon follows the pointer.
+        const buttons = group.get_children().filter(child =>
+            child._delegate?.groupName === button._delegate.groupName);
+        if (buttons.indexOf(button) === targetIndex)
+            return;
+        group.set_child_at_index(button, targetIndex);
+        const reordered = group.get_children().filter(child =>
+            child._delegate?.groupName === button._delegate.groupName);
+        const property = [DockPosition.LEFT, DockPosition.RIGHT]
+            .includes(this._dockPosition) ? 'translation_y' : 'translation_x';
+        const step = DOCK_CONFIG.buttonSize + DOCK_CONFIG.groupSpacing;
+        for (const child of buttons) {
+            if (child === button)
+                continue;
+            const delta = (buttons.indexOf(child) - reordered.indexOf(child)) * step;
+            if (delta === 0)
+                continue;
+            child[property] += delta;
+            child.ease({[property]: 0, duration: 130,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        }
+    }
+
+    _commitDockItemOrder(groupName, keys) {
+        const items = this._dockItems?.get(groupName);
+        if (!items)
+            return;
+        const byKey = new Map(items.map(item => [this._itemOrderKey(item), item]));
+        const visible = keys.map(key => byKey.get(key));
+        if (visible.some(item => !item))
+            return;
+        const visibleKeys = new Set(keys);
+        const reordered = [...visible, ...items.filter(item =>
+            !visibleKeys.has(this._itemOrderKey(item)))];
+        if (reordered.every((candidate, index) => candidate === items[index]))
+            return;
+
+        if (groupName === 'apps') {
+            const ids = reordered.map(candidate => candidate.app.get_id());
+            for (const id of this._pinnedApps ?? []) {
+                if (!ids.includes(id))
+                    ids.push(id);
+            }
+            try {
+                GLib.mkdir_with_parents(GLib.path_get_dirname(this._pinnedAppsPath), 0o700);
+                GLib.file_set_contents(this._pinnedAppsPath, `${ids.join(',')}\n`);
+                this._pinnedApps = ids;
+            } catch (error) {
+                logError(error, 'Failed to save dock app order');
+                return;
+            }
+        } else {
+            reordered.forEach((candidate, index) =>
+                this._runningOrder.set(this._itemOrderKey(candidate), index));
+            this._nextRunningOrder = reordered.length;
+        }
+        this._dockItems.set(groupName, reordered);
+        this._dockRenderState.delete(groupName);
+        this._queueLayout();
     }
 
     _activateWindow(window) {
@@ -1203,7 +1340,7 @@ export default class ZhyprbolaExtension extends Extension {
                 : item.kind === 'panel'
                 ? this._createPanelButton({iconName: item.name,
                     accessibleName: item.label, panelName: item.name})
-                : this._createAppButton(item.app, item.running, item.window));
+                : this._createAppButton(item, name));
         }
         if (overflow) {
             const more = new St.Button({
@@ -1463,18 +1600,14 @@ export default class ZhyprbolaExtension extends Extension {
         const width = vertical ? thickness : monitor.width;
         const height = vertical ? monitor.height : thickness;
         const available = (vertical ? height : width) - 2 * DOCK_CONFIG.padding;
-        const activeGroups = this._dockGroupOrder.filter(name =>
-            this._dockRegions.has(name));
-        for (const [index, name] of activeGroups.entries()) {
-            const start = Math.floor(available * index / activeGroups.length);
-            const end = Math.floor(available * (index + 1) / activeGroups.length);
+        for (const [index, name] of this._dockGroupOrder.entries()) {
+            const start = Math.floor(available * index / this._dockGroupOrder.length);
+            const end = Math.floor(available * (index + 1) / this._dockGroupOrder.length);
             const regionLength = Math.max(0, end - start);
             const region = this._dockRegions.get(name);
             region.set_size(vertical ? DOCK_CONFIG.buttonSize : regionLength,
                 vertical ? regionLength : DOCK_CONFIG.buttonSize);
-            const slot = activeGroups.length === 1 ? 1 : index === 0 ? 0
-                : index === activeGroups.length - 1 ? 2 : 1;
-            this._renderDockRegion(name, regionLength, vertical, slot);
+            this._renderDockRegion(name, regionLength, vertical, index);
         }
         this._dock.set_size(width, height);
 
