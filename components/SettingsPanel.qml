@@ -198,6 +198,68 @@ Item {
             backend.moveDockComponent(key, destination, beforeKey)
     }
 
+    component DashedBorder: Item {
+        id: border
+        property color lineColor: Theme.secondary
+        property int lineWidth: 1
+        property int dash: 6
+        property int gap: 5
+        property int cornerRadius: 11
+        opacity: 0.55
+
+        Repeater {
+            model: Math.max(0, Math.floor((border.width - border.cornerRadius * 2)
+                / (border.dash + border.gap)))
+            Rectangle {
+                width: border.dash
+                height: border.lineWidth
+                radius: border.lineWidth / 2
+                x: border.cornerRadius + index * (border.dash + border.gap)
+                y: 0
+                color: border.lineColor
+            }
+        }
+
+        Repeater {
+            model: Math.max(0, Math.floor((border.width - border.cornerRadius * 2)
+                / (border.dash + border.gap)))
+            Rectangle {
+                width: border.dash
+                height: border.lineWidth
+                radius: border.lineWidth / 2
+                x: border.cornerRadius + index * (border.dash + border.gap)
+                y: border.height - border.lineWidth
+                color: border.lineColor
+            }
+        }
+
+        Repeater {
+            model: Math.max(0, Math.floor((border.height - border.cornerRadius * 2)
+                / (border.dash + border.gap)))
+            Rectangle {
+                width: border.lineWidth
+                height: border.dash
+                radius: border.lineWidth / 2
+                x: 0
+                y: border.cornerRadius + index * (border.dash + border.gap)
+                color: border.lineColor
+            }
+        }
+
+        Repeater {
+            model: Math.max(0, Math.floor((border.height - border.cornerRadius * 2)
+                / (border.dash + border.gap)))
+            Rectangle {
+                width: border.lineWidth
+                height: border.dash
+                radius: border.lineWidth / 2
+                x: border.width - border.lineWidth
+                y: border.cornerRadius + index * (border.dash + border.gap)
+                color: border.lineColor
+            }
+        }
+    }
+
     Rectangle {
         anchors.fill: parent
         radius: 22
@@ -436,9 +498,23 @@ Item {
                 radius: 11
                 x: panel.groupPreviewOrder.indexOf(panel.draggedGroup) * panel.dockGroupStep
                 visible: panel.draggingGroup && panel.groupDropIndex >= 0
-                color: Theme.selected
-                border.width: 2
-                border.color: Theme.accent
+                color: "transparent"
+
+                DashedBorder {
+                    anchors.fill: parent
+                    lineColor: Theme.accent
+                    lineWidth: 2
+                    dash: 8
+                    gap: 5
+                    opacity: 0.85
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 1
+                    radius: 8
+                    color: Theme.selected
+                }
             }
 
             Repeater {
@@ -457,9 +533,25 @@ Item {
                     width: panel.dockGroupCardWidth
                     height: 90
                     radius: 11
-                    color: Theme.control
+                    color: "transparent"
                     opacity: panel.draggingGroup && panel.draggedGroup === groupName
                         ? 0 : 1
+
+                    DashedBorder {
+                        anchors.fill: parent
+                        lineColor: Theme.accent
+                        lineWidth: 2
+                        dash: 7
+                        gap: 5
+                        opacity: dragArea.containsMouse ? 0.9 : 0.72
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 1
+                        radius: 8
+                        color: dragArea.containsMouse ? Theme.controlHover : Theme.control
+                    }
 
                     Behavior on x {
                         enabled: panel.draggingGroup
@@ -819,9 +911,23 @@ Item {
         height: 90
         radius: 11
         visible: panel.draggingGroup
-        color: Theme.control
-        border.width: 2
-        border.color: Theme.accent
+        color: "transparent"
+
+        DashedBorder {
+            anchors.fill: parent
+            lineColor: Theme.accent
+            lineWidth: 2
+            dash: 8
+            gap: 5
+            opacity: 0.85
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: 8
+            color: Theme.control
+        }
 
         Text {
             x: 10
