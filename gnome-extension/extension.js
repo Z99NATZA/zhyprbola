@@ -996,6 +996,7 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _stopEdgeSpectrum() {
+        this._edgeWindow = null;
         if (this._edgePlacementId) {
             GLib.source_remove(this._edgePlacementId);
             this._edgePlacementId = 0;
@@ -1019,13 +1020,12 @@ export default class ZhyprbolaExtension extends Extension {
             const actor = window?.get_compositor_private();
             const monitor = Main.layoutManager.primaryMonitor;
             if (actor?.mapped && frame?.width > 0 && frame?.height > 0 && monitor) {
-                let x = monitor.x;
-                let y = monitor.y;
-                if (this._edgePosition === DockPosition.RIGHT)
-                    x += monitor.width - frame.width;
-                else if (this._edgePosition === DockPosition.BOTTOM)
-                    y += monitor.height - frame.height;
-                window.move_frame(false, x, y);
+                this._edgeWindow = window;
+                window.connectObject('unmanaged', () => {
+                    if (this._edgeWindow === window)
+                        this._edgeWindow = null;
+                }, this);
+                this._layoutEdgeSpectrum();
                 this._edgePlacementId = 0;
                 return GLib.SOURCE_REMOVE;
             }
@@ -1035,6 +1035,41 @@ export default class ZhyprbolaExtension extends Extension {
             }
             return GLib.SOURCE_CONTINUE;
         });
+    }
+
+    _layoutEdgeSpectrum() {
+        const window = this._edgeWindow;
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (!window || !monitor)
+            return;
+        const frame = window.get_frame_rect();
+        let x = monitor.x;
+        let y = monitor.y;
+        if (this._edgePosition === DockPosition.RIGHT)
+            x += monitor.width - frame.width;
+        else if (this._edgePosition === DockPosition.BOTTOM)
+            y += monitor.height - frame.height;
+
+        // Attach the spectrum baseline to the dock instead of reserving a
+        // second fixed margin inside the spectrum window.
+        if (this._dock && this._edgePosition === this._dockPosition) {
+            switch (this._edgePosition) {
+            case DockPosition.LEFT:
+                x = this._dock.get_x() + this._dock.get_width();
+                break;
+            case DockPosition.RIGHT:
+                x = this._dock.get_x() - frame.width;
+                break;
+            case DockPosition.TOP:
+                y = this._dock.get_y() + this._dock.get_height();
+                break;
+            case DockPosition.BOTTOM:
+                y = this._dock.get_y() - frame.height;
+                break;
+            }
+        }
+        if (frame.x !== x || frame.y !== y)
+            window.move_frame(false, x, y);
     }
 
     _applyTheme() {
@@ -1828,5 +1863,6 @@ export default class ZhyprbolaExtension extends Extension {
         this._showDesktopButton.set_position(
             vertical ? x : monitor.x + monitor.width - SHOW_DESKTOP_SIZE,
             vertical ? monitor.y + monitor.height - SHOW_DESKTOP_SIZE : y);
+        this._layoutEdgeSpectrum();
     }
 }

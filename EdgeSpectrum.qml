@@ -8,7 +8,6 @@ Window {
     readonly property string edgePosition: backend.edgeSpectrumPosition
     readonly property bool vertical: edgePosition === "left" || edgePosition === "right"
     readonly property int stripSize: 161
-    readonly property int bottomMargin: edgePosition === "bottom" ? 32 : 0
     readonly property int screenWidth: edgeScreenWidth > 0
         ? edgeScreenWidth : Screen.width
     readonly property int screenHeight: edgeScreenHeight > 0
@@ -17,7 +16,7 @@ Window {
 
     visible: true
     width: vertical ? stripSize : screenWidth
-    height: vertical ? screenHeight : stripSize + bottomMargin
+    height: vertical ? screenHeight : stripSize
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
         | Qt.WindowTransparentForInput | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
@@ -25,7 +24,6 @@ Window {
 
     SpectrumBars {
         anchors.centerIn: parent
-        anchors.verticalCenterOffset: -edge.bottomMargin / 2
         width: edge.edgeLength
         height: edge.stripSize
         rotation: edge.edgePosition === "top" ? 180
