@@ -71,6 +71,8 @@ Item {
 
         property date now: new Date()
 
+        readonly property bool isDaytime: now.getHours() >= 6 && now.getHours() < 18
+
         property bool use24Hour: true
 
         property int temperature: backend.temperature
@@ -384,7 +386,7 @@ Item {
 
                         FlatIcon {
                             anchors.fill: parent
-                            name: "weather-sun"
+                            name: card.isDaytime ? "weather-sun" : "weather-moon"
                             ink: card.accentColor
                         }
 
@@ -554,7 +556,7 @@ Item {
                     }
 
                     Text {
-                        text: "☼"
+                        text: card.isDaytime ? "☼" : "☾"
 
                         color:
                             Qt.alpha(

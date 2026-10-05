@@ -103,6 +103,14 @@ Canvas {
             ctx.beginPath()
             ctx.arc(12, 18.5, 1.5, 0, Math.PI * 2)
             ctx.fill()
+        } else if (name === "weather-moon") {
+            ctx.beginPath()
+            ctx.moveTo(10, 2.5)
+            ctx.bezierCurveTo(5, 1, 2, 5, 3.5, 9)
+            ctx.bezierCurveTo(5, 13, 10, 14, 13, 10.5)
+            ctx.bezierCurveTo(8, 11, 6.5, 6, 10, 2.5)
+            ctx.closePath()
+            ctx.stroke()
         } else if (name === "weather" || name === "weather-sun" || name === "weather-cloud") {
             if (name !== "weather-cloud") {
                 ctx.beginPath()
