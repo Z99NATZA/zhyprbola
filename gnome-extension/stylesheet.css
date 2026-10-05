@@ -49,6 +49,20 @@
     icon-size: 16px;
 }
 
+.zhyprbola-dock-language-label {
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.zhyprbola-input-source-code {
+    color: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    padding-left: 18px;
+}
+
 .zhyprbola-dock-white {
     background-color: rgba(70, 123, 157, 0.5);
 }

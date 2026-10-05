@@ -7,6 +7,7 @@ import St from 'gi://St';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import * as Keyboard from 'resource:///org/gnome/shell/ui/status/keyboard.js';
 
 const DockPosition = Object.freeze({
     LEFT: 'left',
@@ -37,6 +38,7 @@ const DOCK_COMPONENTS = [
     ['music', 'Music Player'],
     ['todo', 'Today'],
     ['calendar', 'Calendar'],
+    ['input-source', 'Input Source'],
     ['power', 'Power'],
 ];
 const DEFAULT_PINNED_APPS = [
@@ -81,6 +83,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._settingsMonitor = null;
         this._pendingPanels = new Set();
         this._panelIconSources = new Map();
+        this._inputSourceMenu = null;
         this._themePath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'theme']);
         this._dockPositionPath = GLib.build_filenamev([
@@ -119,6 +122,10 @@ export default class ZhyprbolaExtension extends Extension {
         this._backgroundSettings = new Gio.Settings({
             schema_id: 'org.gnome.desktop.background',
         });
+        this._inputSourceSettings = new Gio.Settings({
+            schema_id: 'org.gnome.desktop.input-sources',
+        });
+        this._inputSourceManager = Keyboard.getInputSourceManager?.() ?? null;
 
         this._createDock();
         this._applyDockPosition();
@@ -139,6 +146,9 @@ export default class ZhyprbolaExtension extends Extension {
             this._queueLayout();
             this._restartEdgeSpectrum();
         }, this);
+        this._inputSourceSettings.connectObject(
+            'changed::current', () => this._queueInputSourceRefresh(),
+            'changed::sources', () => this._queueInputSourceRefresh(), this);
     }
 
     disable() {
@@ -146,6 +156,7 @@ export default class ZhyprbolaExtension extends Extension {
         Main.layoutManager.disconnectObject(this);
         this._appSystem.disconnectObject(this);
         this._windowTracker.disconnectObject(this);
+        this._inputSourceSettings.disconnectObject(this);
 
         if (this._layoutIdleId) {
             GLib.source_remove(this._layoutIdleId);
@@ -172,6 +183,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._appSystem = null;
         this._windowTracker = null;
         this._backgroundSettings = null;
+        this._inputSourceSettings = null;
+        this._inputSourceManager = null;
         this._panelIconSources = null;
     }
 
@@ -230,7 +243,9 @@ export default class ZhyprbolaExtension extends Extension {
 
         const labels = new Map(DOCK_COMPONENTS);
         this._dockItems.set('zhyprbola', this._dockComponents.visible.map(name => ({
-            kind: 'panel', name, label: labels.get(name),
+            kind: name === 'input-source' ? 'input-source' : 'panel',
+            name,
+            label: labels.get(name),
         })));
     }
 
@@ -386,6 +401,15 @@ export default class ZhyprbolaExtension extends Extension {
             this._refreshAppGroups();
             return GLib.SOURCE_REMOVE;
         });
+    }
+
+    _queueInputSourceRefresh() {
+        if (!this._dockRenderState)
+            return;
+        this._inputSourceMenu?.destroy();
+        this._inputSourceMenu = null;
+        this._dockRenderState.delete('zhyprbola');
+        this._queueLayout();
     }
 
     _readTheme() {
@@ -686,6 +710,8 @@ export default class ZhyprbolaExtension extends Extension {
             icon.gicon = this._panelGicon(name);
         this._overflowMenu?.destroy();
         this._overflowMenu = null;
+        this._inputSourceMenu?.destroy();
+        this._inputSourceMenu = null;
     }
 
     _applyDockBackground() {
@@ -713,6 +739,8 @@ export default class ZhyprbolaExtension extends Extension {
         if (!this._dock)
             return;
 
+        this._inputSourceMenu?.destroy();
+        this._inputSourceMenu = null;
         this._powerMenu?.destroy();
         this._powerMenu = null;
         this._overflowMenu?.destroy();
@@ -786,6 +814,148 @@ export default class ZhyprbolaExtension extends Extension {
         this._backgroundSettings.set_string('picture-options', 'zoom');
     }
 
+    _inputSources() {
+        const managerSources = this._managerInputSources();
+        if (managerSources.length > 0)
+            return managerSources;
+        try {
+            return this._inputSourceSettings.get_value('sources').deep_unpack()
+                .map(([type, id]) => ({type, id}));
+        } catch (error) {
+            logError(error, 'Failed to read GNOME input sources');
+            return [];
+        }
+    }
+
+    _managerInputSources() {
+        const sources = this._inputSourceManager?.inputSources ??
+            this._inputSourceManager?._inputSources;
+        if (!sources)
+            return [];
+        const values = Array.isArray(sources) ? sources : Object.values(sources);
+        return values.map((source, index) => ({
+            type: source.type,
+            id: source.id,
+            index: source.index ?? index,
+            code: source.shortName,
+            label: source.displayName,
+            managerSource: source,
+        }));
+    }
+
+    _currentInputSourceIndex(sources = this._inputSources()) {
+        if (sources.length === 0)
+            return -1;
+        const currentSource = this._inputSourceManager?.currentSource ??
+            this._inputSourceManager?._currentSource;
+        if (currentSource) {
+            const current = sources.findIndex(source =>
+                source.managerSource === currentSource ||
+                source.index === currentSource.index ||
+                (source.type === currentSource.type && source.id === currentSource.id));
+            if (current >= 0)
+                return current;
+        }
+        try {
+            const current = this._inputSourceSettings.get_uint('current');
+            return current < sources.length ? current : 0;
+        } catch (error) {
+            return 0;
+        }
+    }
+
+    _inputSourceCode(source = null) {
+        if (source?.code)
+            return source.code.toLowerCase();
+        const id = source?.id ?? '';
+        if (id.startsWith('th'))
+            return 'th';
+        if (id.startsWith('us') || id.startsWith('en'))
+            return 'en';
+        return id.slice(0, 2).toLowerCase() || '--';
+    }
+
+    _inputSourceName(source = null) {
+        if (source?.label)
+            return source.label;
+        const id = source?.id ?? '';
+        if (id.startsWith('th'))
+            return 'Thai';
+        if (id.startsWith('us'))
+            return 'English (US)';
+        if (id.startsWith('en'))
+            return 'English';
+        return id || 'Unknown';
+    }
+
+    _currentInputSourceCode() {
+        const sources = this._inputSources();
+        const index = this._currentInputSourceIndex(sources);
+        return this._inputSourceCode(sources[index]);
+    }
+
+    _createInputSourceButton() {
+        const label = new St.Label({
+            text: this._currentInputSourceCode(),
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+            style_class: 'zhyprbola-dock-language-label',
+        });
+        const button = new St.Button({
+            style_class: 'zhyprbola-dock-button zhyprbola-dock-language-button',
+            child: label,
+            can_focus: true,
+            reactive: true,
+            track_hover: true,
+            accessible_name: 'Input Source',
+        });
+        button.connect('clicked', () => this._openInputSourceMenu(button));
+        return button;
+    }
+
+    _openInputSourceMenu(button) {
+        if (this._inputSourceMenu?.sourceActor === button) {
+            this._inputSourceMenu.toggle();
+            return;
+        }
+        this._inputSourceMenu?.destroy();
+        const side = {
+            [DockPosition.LEFT]: St.Side.RIGHT,
+            [DockPosition.RIGHT]: St.Side.LEFT,
+            [DockPosition.TOP]: St.Side.BOTTOM,
+            [DockPosition.BOTTOM]: St.Side.TOP,
+        }[this._dockPosition];
+        const menu = new PopupMenu.PopupMenu(button, 0.5, side);
+        const theme = THEMES.find(item => item.name === this._themeName);
+        const sources = this._inputSources();
+        const current = this._currentInputSourceIndex(sources);
+        menu.actor.add_style_class_name('zhyprbola-overflow-menu');
+        menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor};`);
+        for (const [index, source] of sources.entries()) {
+            const item = menu.addAction(this._inputSourceName(source), () => {
+                if (source.managerSource?.activate)
+                    source.managerSource.activate(true);
+                else
+                    this._inputSourceSettings.set_uint('current', index);
+                this._queueInputSourceRefresh();
+            });
+            item.label.set_style(`color: ${theme.iconColor};`);
+            const code = new St.Label({
+                text: this._inputSourceCode(source),
+                style_class: 'zhyprbola-input-source-code',
+            });
+            code.set_style(`color: ${theme.iconColor};`);
+            item.actor.add_child(code);
+            if (index === current)
+                item.setOrnament(PopupMenu.Ornament.DOT);
+        }
+        Main.uiGroup.add_child(menu.actor);
+        menu.actor.hide();
+        this._menuManager.addMenu(menu);
+        this._inputSourceMenu = menu;
+        menu.open();
+    }
+
     _createPanelButton({iconName, accessibleName, panelName}) {
         const icon = new St.Icon({
             gicon: this._panelGicon(iconName),
@@ -833,13 +1003,17 @@ export default class ZhyprbolaExtension extends Extension {
         if (!group)
             return;
         const items = this._dockItems.get(name) ?? [];
-        const state = `${length}:${items.length}:${vertical}:${slot}`;
+        const state = `${length}:${items.length}:${vertical}:${slot}:` +
+            `${items.map(item => item.kind === 'input-source'
+                ? this._currentInputSourceCode() : item.label).join('|')}`;
         if (this._dockRenderState.get(name) === state)
             return;
 
         this._overflowMenu?.destroy();
         this._overflowMenu = null;
         if (name === 'zhyprbola') {
+            this._inputSourceMenu?.destroy();
+            this._inputSourceMenu = null;
             this._powerMenu?.destroy();
             this._powerMenu = null;
             this._panelIcons.clear();
@@ -852,7 +1026,9 @@ export default class ZhyprbolaExtension extends Extension {
         const overflow = items.length > maxSlots;
         const visibleCount = overflow ? Math.max(0, maxSlots - 1) : items.length;
         for (const item of items.slice(0, visibleCount)) {
-            group.add_child(item.kind === 'panel'
+            group.add_child(item.kind === 'input-source'
+                ? this._createInputSourceButton()
+                : item.kind === 'panel'
                 ? this._createPanelButton({iconName: item.name,
                     accessibleName: item.label, panelName: item.name})
                 : this._createAppButton(item.app, item.running, item.window));
@@ -902,12 +1078,19 @@ export default class ZhyprbolaExtension extends Extension {
         menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor};`);
         for (const item of items) {
             const icon = item.kind === 'panel'
-                ? this._panelGicon(item.name, theme.iconColor) : item.app.get_icon();
+                ? this._panelGicon(item.name, theme.iconColor)
+                : item.kind === 'input-source' ? null : item.app.get_icon();
             menu.addAction(item.label, () => {
                 if (item.name === 'power') {
                     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
                         if (this._dock)
                             this._openPowerMenu(button);
+                        return GLib.SOURCE_REMOVE;
+                    });
+                } else if (item.kind === 'input-source') {
+                    GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                        if (this._dock)
+                            this._openInputSourceMenu(button);
                         return GLib.SOURCE_REMOVE;
                     });
                 } else if (item.kind === 'panel')

@@ -24,6 +24,8 @@ Region 3: Zhyprbola component buttons
 
 When ungroup windows is enabled, running apps render one icon per window.
 Pinned apps still render as launchers until they have windows to split.
+The Input Source dock component shows the current language code such as `en`
+or `th` and opens a language-only switcher menu.
 
 ## Commands
 
