@@ -135,6 +135,7 @@ public:
     Q_INVOKABLE void moveDockGroup(const QString &source, int targetIndex);
     Q_INVOKABLE void moveDockComponent(const QString &key, const QString &destination,
         const QString &beforeKey);
+    Q_INVOKABLE void openDockComponent(const QString &key);
     Q_INVOKABLE void setDockUngroupWindows(bool enabled);
     Q_INVOKABLE void setUseWallpaper(bool enabled);
     Q_INVOKABLE void setEdgeSpectrumEnabled(bool enabled);

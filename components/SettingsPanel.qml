@@ -72,6 +72,14 @@ Item {
         return "Region " + (index < 0 ? 1 : index + 1)
     }
 
+    function openableComponents() {
+        return backend.dockVisibleComponents
+            .concat(backend.dockHiddenComponents)
+            .filter(key => key !== "settings"
+                && key !== "input-source"
+                && key !== "power")
+    }
+
     function beginGroupDrag(name, point, offsetX, offsetY) {
         draggedGroup = name
         groupDragStartX = point.x
@@ -878,6 +886,78 @@ Item {
         }
     }
 
+    component DockComponentLauncherBox: Rectangle {
+        id: launcherBox
+        required property var items
+
+        width: panel.contentWidth
+        height: 116
+        radius: 12
+        color: Theme.control
+
+        Text {
+            x: 13
+            y: 12
+            text: "Open"
+            color: Theme.text
+            font.family: Qt.application.font.family
+            font.pixelSize: 14
+            font.weight: Font.DemiBold
+        }
+
+        Text {
+            anchors.right: parent.right
+            anchors.rightMargin: 13
+            y: 13
+            text: launcherBox.items.length
+            color: Theme.mutedText
+            font.family: Qt.application.font.family
+            font.pixelSize: 12
+        }
+
+        Item {
+            x: 12
+            y: 45
+            width: parent.width - 24
+            height: 72
+
+            Repeater {
+                model: launcherBox.items
+
+                delegate: Rectangle {
+                    id: launcherTile
+                    required property string modelData
+                    required property int index
+                    readonly property string componentKey: modelData
+                    objectName: "dock-component-launcher-" + componentKey
+                    x: (index % 9) * 37
+                    y: Math.floor(index / 9) * 37
+                    width: 34
+                    height: 34
+                    radius: 9
+                    color: launcherMouse.containsMouse ? Theme.accent : Theme.mutedText
+
+                    Image {
+                        anchors.centerIn: parent
+                        width: 20
+                        height: 20
+                        source: Qt.resolvedUrl("../gnome-extension/icons/"
+                            + launcherTile.componentKey + ".svg")
+                        fillMode: Image.PreserveAspectFit
+                    }
+
+                    MouseArea {
+                        id: launcherMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: backend.openDockComponent(launcherTile.componentKey)
+                    }
+                }
+            }
+        }
+    }
+
     Column {
         x: panel.contentX
         y: 76
@@ -895,6 +975,10 @@ Item {
             id: hiddenZone
             zoneKey: "hidden"
             items: backend.dockHiddenComponents
+        }
+
+        DockComponentLauncherBox {
+            items: panel.openableComponents()
         }
     }
 

@@ -80,6 +80,9 @@ export default class ZhyprbolaExtension extends Extension {
         this._edgeProcess = null;
         this._settingsSyncId = 0;
         this._settingsMonitor = null;
+        this._panelRequestId = 0;
+        this._panelRequestPollId = 0;
+        this._panelRequestMonitor = null;
         this._pendingPanels = new Set();
         this._panelIconSources = new Map();
         this._inputSourceMenu = null;
@@ -110,6 +113,8 @@ export default class ZhyprbolaExtension extends Extension {
             GLib.get_user_config_dir(), 'zhyprbola', 'dock-components']);
         this._pinnedAppsPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'pinned-apps']);
+        this._panelRequestPath = GLib.build_filenamev([
+            GLib.get_user_config_dir(), 'zhyprbola', 'panel-request']);
         this._themeName = this._readTheme();
         this._dockPosition = this._readDockPosition();
         this._dockBgOpacity = this._readDockBgOpacity();
@@ -121,6 +126,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockGroupOrder = this._readDockGroupOrder();
         this._dockComponents = this._readDockComponents();
         this._pinnedApps = this._readPinnedApps();
+        this._panelRequest = this._readPanelRequest();
         this._appSystem = Shell.AppSystem.get_default();
         this._windowTracker = Shell.WindowTracker.get_default();
         this._backgroundSettings = new Gio.Settings({
@@ -136,6 +142,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._applyTheme();
         this._applyWallpaper(true);
         this._watchSettings();
+        this._startPanelRequestPolling();
         this._startEdgeSpectrum();
 
         this._appSystem.connectObject('app-state-changed',
@@ -195,6 +202,16 @@ export default class ZhyprbolaExtension extends Extension {
         }
         this._settingsMonitor?.cancel();
         this._settingsMonitor = null;
+        if (this._panelRequestId) {
+            GLib.source_remove(this._panelRequestId);
+            this._panelRequestId = 0;
+        }
+        if (this._panelRequestPollId) {
+            GLib.source_remove(this._panelRequestPollId);
+            this._panelRequestPollId = 0;
+        }
+        this._panelRequestMonitor?.cancel();
+        this._panelRequestMonitor = null;
         this._destroyDock();
         this._appSystem = null;
         this._windowTracker = null;
@@ -568,6 +585,15 @@ export default class ZhyprbolaExtension extends Extension {
         }
     }
 
+    _readPanelRequest() {
+        try {
+            return new TextDecoder().decode(
+                GLib.file_get_contents(this._panelRequestPath)[1]).trim();
+        } catch (_) {
+            return '';
+        }
+    }
+
     _watchSettings() {
         const directory = GLib.path_get_dirname(this._themePath);
         try {
@@ -583,9 +609,43 @@ export default class ZhyprbolaExtension extends Extension {
                     return GLib.SOURCE_REMOVE;
                 });
             });
+            this._panelRequestMonitor = Gio.File.new_for_path(this._panelRequestPath)
+                .monitor_file(Gio.FileMonitorFlags.NONE, null);
+            this._panelRequestMonitor.connect('changed', () =>
+                this._queuePanelRequest());
         } catch (error) {
             logError(error, 'Failed to watch Zhyprbola settings');
         }
+    }
+
+    _queuePanelRequest() {
+        if (this._panelRequestId)
+            return;
+        this._panelRequestId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 30, () => {
+            this._panelRequestId = 0;
+            this._handlePanelRequest();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _startPanelRequestPolling() {
+        if (this._panelRequestPollId)
+            return;
+        this._panelRequestPollId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+            this._handlePanelRequest();
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    _handlePanelRequest() {
+        const panelRequest = this._readPanelRequest();
+        if (!panelRequest || panelRequest === this._panelRequest)
+            return;
+
+        this._panelRequest = panelRequest;
+        const panelName = panelRequest.split(':').slice(1).join(':');
+        if (PANEL_TITLES[panelName])
+            this._openPanel(panelName);
     }
 
     _syncSettings() {
@@ -626,6 +686,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockComponents = dockComponents;
         this._pinnedApps = pinnedApps;
 
+        this._handlePanelRequest();
         if (positionChanged || groupsChanged || componentsChanged || dockUngroupWindowsChanged)
             this._rebuildDock();
         else if (themeChanged)

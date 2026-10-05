@@ -94,6 +94,34 @@ QStringList commandForApp(const QString &name) {
     return {};
 }
 
+bool panelProcessRunning(const QString &panelName) {
+    const QString appPath = QCoreApplication::applicationFilePath();
+    const QDir proc(QStringLiteral("/proc"));
+    for (const QString &entry : proc.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        bool validPid = false;
+        entry.toInt(&validPid);
+        if (!validPid) continue;
+
+        QFile cmdline(proc.filePath(entry + QStringLiteral("/cmdline")));
+        if (!cmdline.open(QIODevice::ReadOnly)) continue;
+
+        const QList<QByteArray> args = cmdline.readAll().split('\0');
+        bool hasApp = false;
+        bool hasPanelOption = false;
+        bool hasPanelName = false;
+        for (const QByteArray &arg : args) {
+            const QString text = QString::fromLocal8Bit(arg);
+            hasApp = hasApp || text == appPath || QFileInfo(text).fileName()
+                == QFileInfo(appPath).fileName();
+            hasPanelOption = hasPanelOption || text == QLatin1String("--panel");
+            hasPanelName = hasPanelName || text == panelName;
+        }
+        if (hasApp && hasPanelOption && hasPanelName)
+            return true;
+    }
+    return false;
+}
+
 int wifiSignalFromProc() {
     QFile wireless(QStringLiteral("/proc/net/wireless"));
     if (!wireless.open(QIODevice::ReadOnly)) return 0;
@@ -402,6 +430,30 @@ void Backend::moveDockComponent(const QString &key, const QString &destination,
     m_dockVisibleComponents = visible;
     m_dockHiddenComponents = hidden;
     emit dockSettingsChanged();
+}
+
+void Backend::openDockComponent(const QString &key) {
+    static const QStringList panelNames = {
+        QStringLiteral("bluetooth"),
+        QStringLiteral("wifi"),
+        QStringLiteral("clock-weather"),
+        QStringLiteral("system-status"),
+        QStringLiteral("audio-spectrum"),
+        QStringLiteral("music"),
+        QStringLiteral("todo"),
+        QStringLiteral("calendar"),
+    };
+    if (!panelNames.contains(key)) return;
+    if (panelProcessRunning(key)) return;
+
+    const QString request = QString::number(QDateTime::currentMSecsSinceEpoch())
+        + QLatin1Char(':') + key;
+    const bool requested = writeDockConfig(QStringLiteral("panel-request"), request);
+    QTimer::singleShot(requested ? 700 : 0, this, [key]() {
+        if (!panelProcessRunning(key))
+            QProcess::startDetached(QCoreApplication::applicationFilePath(),
+                {QStringLiteral("--panel"), key});
+    });
 }
 
 void Backend::setDockUngroupWindows(bool enabled) {
