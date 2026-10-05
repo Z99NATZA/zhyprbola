@@ -33,7 +33,6 @@ Item {
         property bool adding: false
         property string editingTaskId: ""
         property string draggingTaskId: ""
-        property int taskDropIndex: -1
         property var taskPreviewOrder: []
         property real draggingTaskY: 0
         readonly property int taskRowHeight: 40
@@ -64,43 +63,31 @@ Item {
             return index < 0 ? 0 : index
         }
 
-        function updateTaskPreview(id, targetIndex) {
-            const tasks = copyTasks()
+        function updateTaskPreview(id, rowY) {
+            const tasks = taskPreviewOrder.slice()
             const from = taskIndexIn(tasks, id)
             if (from < 0)
                 return
-            let insertAt = Math.max(0, Math.min(tasks.length, targetIndex))
+            const center = rowY + taskRowHeight / 2
+            let insertAt = 0
+            for (let index = 0; index < tasks.length; index += 1) {
+                if ((tasks[index]["id"] || "") === id)
+                    continue
+                const otherCenter = index * taskPitch + taskRowHeight / 2
+                if (center > otherCenter || (center === otherCenter && index > from))
+                    insertAt += 1
+            }
+            if (from === insertAt)
+                return
             const task = tasks.splice(from, 1)[0]
-            if (from < targetIndex)
-                insertAt = Math.max(0, insertAt - 1)
-            insertAt = Math.max(0, Math.min(tasks.length, insertAt))
             tasks.splice(insertAt, 0, task)
             taskPreviewOrder = tasks
         }
 
         function clearTaskDrag() {
             draggingTaskId = ""
-            taskDropIndex = -1
             taskPreviewOrder = []
             draggingTaskY = 0
-        }
-
-        function taskDropIndexFromMouse(source, x, y) {
-            const point = source.mapToItem(taskContent, x, y)
-            return Math.max(0, Math.min(backend.tasks.length,
-                Math.round(point.y / taskPitch)))
-        }
-
-        function taskDropIndexFromRowY(rowY) {
-            if (backend.tasks.length === 0)
-                return 0
-            if (rowY <= taskRowGap)
-                return 0
-            if (rowY + taskRowHeight >= taskContentHeight - taskRowGap)
-                return backend.tasks.length
-            const center = rowY + taskRowHeight / 2
-            return Math.max(0, Math.min(backend.tasks.length,
-                Math.floor((center + taskRowGap / 2) / taskPitch)))
         }
 
         function maybeScrollTasks(source, x, y) {
@@ -290,6 +277,17 @@ Item {
                     onClicked: card.finishTransientEdit()
                 }
 
+                Rectangle {
+                    width: taskContent.width
+                    height: card.taskRowHeight
+                    y: card.visualTaskIndex(card.draggingTaskId) * card.taskPitch
+                    radius: 8
+                    visible: card.draggingTaskId !== ""
+                    color: Qt.alpha(card.accentColor, 0.10)
+                    border.width: 1
+                    border.color: Qt.alpha(card.accentColor, 0.55)
+                }
+
                 Repeater {
                     model: backend.tasks
 
@@ -308,10 +306,9 @@ Item {
                         editing: card.editingTaskId === taskId
 
                         Behavior on y {
-                            enabled: card.draggingTaskId !== ""
-                                && card.draggingTaskId !== taskId
+                            enabled: card.draggingTaskId !== taskId
                             NumberAnimation {
-                                duration: 160
+                                duration: 130
                                 easing.type: Easing.OutCubic
                             }
                         }
@@ -338,9 +335,10 @@ Item {
 
         function commitEdit() {
             const text = editInput.text.trim()
-            if (text.length > 0)
-                backend.renameTask(row.taskId, text)
+            const taskId = row.taskId
             card.editingTaskId = ""
+            if (text.length > 0)
+                backend.renameTask(taskId, text)
         }
 
         function cancelEdit() {
@@ -453,6 +451,7 @@ Item {
                 onPressed: function(mouse) {
                     row.dragStartX = mouse.x
                     row.dragStartY = mouse.y
+                    row.dragOffsetY = mouse.y
                     row.dragging = false
                 }
 
@@ -467,24 +466,26 @@ Item {
                         row.dragging = true
                         card.draggingTaskId = row.taskId
                         card.taskPreviewOrder = card.copyTasks()
-                        row.dragOffsetY = dragMouse.mapToItem(taskContent,
-                            mouse.x, mouse.y).y - row.y
                     }
                     card.draggingTaskId = row.taskId
                     const dragPoint = dragMouse.mapToItem(taskContent, mouse.x, mouse.y)
                     card.draggingTaskY = Math.max(0, Math.min(
                         Math.max(0, taskContent.height - row.height),
                         dragPoint.y - row.dragOffsetY))
-                    card.taskDropIndex = card.taskDropIndexFromRowY(card.draggingTaskY)
-                    card.updateTaskPreview(row.taskId, card.taskDropIndex)
+                    card.updateTaskPreview(row.taskId, card.draggingTaskY)
                     card.maybeScrollTasks(dragMouse, mouse.x, mouse.y)
                 }
 
                 onReleased: {
-                    if (row.dragging && card.taskDropIndex >= 0)
-                        backend.moveTask(row.taskId, card.taskDropIndex)
+                    const taskId = row.taskId
+                    const wasDragging = row.dragging
+                    const from = wasDragging
+                        ? card.taskIndexIn(card.copyTasks(), taskId) : -1
+                    const to = wasDragging ? card.visualTaskIndex(taskId) : -1
                     row.dragging = false
                     card.clearTaskDrag()
+                    if (from >= 0 && to >= 0 && from !== to)
+                        backend.moveTask(taskId, to > from ? to + 1 : to)
                 }
 
                 onCanceled: {
