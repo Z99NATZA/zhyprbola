@@ -84,6 +84,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._pendingPanels = new Set();
         this._panelIconSources = new Map();
         this._inputSourceMenu = null;
+        this._runningOrder = new Map();
+        this._nextRunningOrder = 0;
         this._themePath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'theme']);
         this._dockPositionPath = GLib.build_filenamev([
@@ -186,6 +188,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._inputSourceSettings = null;
         this._inputSourceManager = null;
         this._panelIconSources = null;
+        this._runningOrder = null;
     }
 
     _createDock() {
@@ -349,6 +352,36 @@ export default class ZhyprbolaExtension extends Extension {
             }));
     }
 
+    _itemOrderKey(item) {
+        if (item.window) {
+            const stableWindowId = item.window.get_stable_sequence?.();
+            const windowId = stableWindowId ?? item.window.get_id?.() ??
+                item.window.get_description?.() ?? item.window.get_title();
+            return `${item.app.get_id()}:window:${windowId}`;
+        }
+        return `${item.app.get_id()}:app`;
+    }
+
+    _orderRunningItems(items) {
+        const activeKeys = new Set();
+        for (const item of items) {
+            const key = this._itemOrderKey(item);
+            activeKeys.add(key);
+            if (!this._runningOrder.has(key))
+                this._runningOrder.set(key, this._nextRunningOrder++);
+        }
+        for (const key of [...this._runningOrder.keys()]) {
+            if (!activeKeys.has(key))
+                this._runningOrder.delete(key);
+        }
+        if (this._runningOrder.size === 0)
+            this._nextRunningOrder = 0;
+        return items.sort((left, right) =>
+            (this._runningOrder.get(this._itemOrderKey(left)) -
+                this._runningOrder.get(this._itemOrderKey(right))) ||
+            left.label.localeCompare(right.label));
+    }
+
     _refreshAppGroups() {
         if (!this._dockGroupsByName)
             return;
@@ -377,7 +410,7 @@ export default class ZhyprbolaExtension extends Extension {
             else
                 running.push({kind: 'app', app, label: app.get_name(), running: true});
         }
-        this._dockItems.set('running', running);
+        this._dockItems.set('running', this._orderRunningItems(running));
         this._dockRenderState.delete('apps');
         this._dockRenderState.delete('running');
         this._dockRenderState.delete('launchers');
