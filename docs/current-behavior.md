@@ -9,6 +9,7 @@ Dock default: bottom
 Dock BG opacity: ~/.config/zhyprbola/dock-bg-opacity (0-100%, default 50%; background only)
 Dock groups: ~/.config/zhyprbola/dock-groups (enabled groups)
 Dock group order: ~/.config/zhyprbola/dock-group-order (drag cards in Settings; apps/running order the shared launcher region)
+Ungroup windows: ~/.config/zhyprbola/dock-ungroup-windows (true/false, default false)
 Pinned apps: ~/.config/zhyprbola/pinned-apps (desktop IDs, one per line)
 Wallpaper toggle: ~/.config/zhyprbola/use-wallpaper
 ```
@@ -20,6 +21,9 @@ Region 1: empty
 Region 2: apps + running, adjacent and ordered by dock-group-order
 Region 3: Zhyprbola component buttons
 ```
+
+When ungroup windows is enabled, running apps render one icon per window.
+Pinned apps still render as launchers until they have windows to split.
 
 ## Commands
 

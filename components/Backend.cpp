@@ -188,6 +188,9 @@ Backend::Backend(QObject *parent) : QObject(parent) {
         if (valid && opacity >= 0 && opacity <= 100)
             m_dockBgOpacity = opacity;
     }
+    QFile dockUngroupWindowsFile(dockConfigPath(QStringLiteral("dock-ungroup-windows")));
+    if (dockUngroupWindowsFile.open(QIODevice::ReadOnly))
+        m_dockUngroupWindows = dockUngroupWindowsFile.readAll().trimmed() == "true";
     QFile dockGroupsFile(dockConfigPath(QStringLiteral("dock-groups")));
     if (dockGroupsFile.open(QIODevice::ReadOnly)) {
         static const QStringList names = {QStringLiteral("apps"),
@@ -390,6 +393,14 @@ void Backend::moveDockComponent(const QString &key, const QString &destination,
             QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact)))) return;
     m_dockVisibleComponents = visible;
     m_dockHiddenComponents = hidden;
+    emit dockSettingsChanged();
+}
+
+void Backend::setDockUngroupWindows(bool enabled) {
+    if (enabled == m_dockUngroupWindows) return;
+    if (!writeDockConfig(QStringLiteral("dock-ungroup-windows"),
+            enabled ? QStringLiteral("true") : QStringLiteral("false"))) return;
+    m_dockUngroupWindows = enabled;
     emit dockSettingsChanged();
 }
 

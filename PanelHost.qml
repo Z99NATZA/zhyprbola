@@ -13,7 +13,7 @@ Window {
         case "audio-spectrum": return 440
         case "system-status": return 528
         case "music": return 414
-        case "settings": return 560
+        case "settings": return 660
         case "todo":
         case "calendar": return 384
         default: return 430

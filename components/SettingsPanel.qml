@@ -3,13 +3,24 @@ import QtQuick
 Item {
     id: panel
 
-    width: 560
+    width: 660
     height: 510
     property string section: "themes"
     signal closeRequested()
     readonly property int contentRowHeight: 46
     readonly property int contentItemGap: 8
     readonly property int contentSectionGap: 16
+    readonly property int contentX: 184
+    readonly property int contentWidth: width - contentX - 18
+    readonly property int dockPositionGap: 8
+    readonly property int dockPositionWidth:
+        Math.floor((contentWidth - dockPositionGap * 3) / 4)
+    readonly property int dockGroupCardGap: 8
+    readonly property int dockGroupCardWidth:
+        Math.floor((contentWidth - dockGroupCardGap * 2) / 3)
+    readonly property int dockGroupStep: dockGroupCardWidth + dockGroupCardGap
+    readonly property int dockToggleWidth:
+        Math.floor((contentWidth - contentItemGap) / 2)
 
     readonly property var sections: [
         {key: "themes", label: "Themes"},
@@ -85,7 +96,7 @@ Item {
         const order = backend.dockGroupOrder.slice()
         if (inside) {
             groupDropIndex = Math.max(0, Math.min(order.length - 1,
-                Math.floor((local.x + 4) / 122)))
+                Math.floor(local.x / panel.dockGroupStep)))
             const preview = order.filter(name => name !== draggedGroup)
             preview.splice(groupDropIndex, 0, draggedGroup)
             if (preview.join(',') !== groupPreviewOrder.join(','))
@@ -255,7 +266,7 @@ Item {
     }
 
     Text {
-        x: 184
+        x: panel.contentX
         y: 29
         text: panel.section === "themes" ? "Themes"
             : (panel.section === "dock" ? "Dock"
@@ -293,9 +304,9 @@ Item {
     }
 
     Column {
-        x: 184
+        x: panel.contentX
         y: 76
-        width: 358
+        width: panel.contentWidth
         spacing: panel.contentItemGap
         visible: panel.section === "themes"
 
@@ -304,7 +315,7 @@ Item {
 
             delegate: Rectangle {
                 required property var modelData
-                width: 358
+                width: panel.contentWidth
                 height: panel.contentRowHeight
                 radius: 11
                 color: backend.themeName === modelData.key
@@ -356,16 +367,16 @@ Item {
 
     Column {
         objectName: "dock-settings-content"
-        x: 184
+        x: panel.contentX
         y: 76
-        width: 358
+        width: panel.contentWidth
         spacing: panel.contentSectionGap
         visible: panel.section === "dock"
 
         Row {
-            width: 358
+            width: panel.contentWidth
             height: panel.contentRowHeight
-            spacing: 6
+            spacing: panel.dockPositionGap
 
             Repeater {
                 model: panel.positions
@@ -373,7 +384,7 @@ Item {
                 delegate: Rectangle {
                     required property var modelData
                     objectName: "dock-position-" + modelData.key
-                    width: 85
+                    width: panel.dockPositionWidth
                     height: panel.contentRowHeight
                     radius: 11
                     color: backend.dockPosition === modelData.key
@@ -416,14 +427,14 @@ Item {
 
         Item {
             id: groupSlots
-            width: 358
+            width: panel.contentWidth
             height: 90
 
             Rectangle {
-                width: 114
+                width: panel.dockGroupCardWidth
                 height: 90
                 radius: 11
-                x: panel.groupPreviewOrder.indexOf(panel.draggedGroup) * 122
+                x: panel.groupPreviewOrder.indexOf(panel.draggedGroup) * panel.dockGroupStep
                 visible: panel.draggingGroup && panel.groupDropIndex >= 0
                 color: Theme.selected
                 border.width: 2
@@ -441,9 +452,9 @@ Item {
                     objectName: "dock-group-" + groupName
                     x: {
                         const position = panel.groupPreviewOrder.indexOf(groupName)
-                        return (position < 0 ? index : position) * 122
+                        return (position < 0 ? index : position) * panel.dockGroupStep
                     }
-                    width: 114
+                    width: panel.dockGroupCardWidth
                     height: 90
                     radius: 11
                     color: Theme.control
@@ -507,20 +518,33 @@ Item {
             }
         }
 
-        Column {
-            width: 358
-            spacing: panel.contentItemGap
+        Grid {
+            width: panel.contentWidth
+            columns: 2
+            columnSpacing: panel.contentItemGap
+            rowSpacing: panel.contentItemGap
 
             Repeater {
-                model: ["zhyprbola", "apps", "running"]
+                model: [
+                    {key: "zhyprbola", label: panel.groupLabels.zhyprbola,
+                        active: backend.dockGroups.includes("zhyprbola"), locked: true},
+                    {key: "apps", label: panel.groupLabels.apps,
+                        active: backend.dockGroups.includes("apps"), locked: false},
+                    {key: "running", label: panel.groupLabels.running,
+                        active: backend.dockGroups.includes("running"), locked: false},
+                    {key: "ungroup-windows", label: "Ungroup Windows",
+                        active: backend.dockUngroupWindows, locked: false}
+                ]
 
                 delegate: Rectangle {
-                    required property string modelData
+                    required property var modelData
                     required property int index
-                    readonly property bool active: backend.dockGroups.includes(modelData)
-                    objectName: "dock-group-toggle-" + modelData
+                    readonly property string itemKey: modelData.key
+                    readonly property bool active: modelData.active
+                    objectName: itemKey === "ungroup-windows"
+                        ? "dock-ungroup-windows" : "dock-group-toggle-" + itemKey
 
-                    width: 358
+                    width: panel.dockToggleWidth
                     height: panel.contentRowHeight
                     radius: 11
                     color: active ? Theme.selected : Theme.control
@@ -528,7 +552,7 @@ Item {
                     Text {
                         x: 16
                         anchors.verticalCenter: parent.verticalCenter
-                        text: panel.groupLabels[modelData]
+                        text: modelData.label
                         color: Theme.text
                         font.family: Qt.application.font.family
                         font.pixelSize: 14
@@ -536,7 +560,8 @@ Item {
                     }
 
                     Rectangle {
-                        x: 299
+                        anchors.right: parent.right
+                        anchors.rightMargin: 14
                         anchors.verticalCenter: parent.verticalCenter
                         width: 44
                         height: 26
@@ -554,9 +579,14 @@ Item {
 
                         MouseArea {
                             anchors.fill: parent
-                            enabled: modelData !== "zhyprbola"
+                            enabled: !modelData.locked
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: backend.setDockGroupEnabled(modelData, !active)
+                            onClicked: {
+                                if (itemKey === "ungroup-windows")
+                                    backend.setDockUngroupWindows(!active)
+                                else
+                                    backend.setDockGroupEnabled(itemKey, !active)
+                            }
                         }
                     }
                 }
@@ -565,7 +595,7 @@ Item {
 
         Rectangle {
             objectName: "dock-bg-opacity"
-            width: 358
+            width: panel.contentWidth
             height: 64
             radius: 11
             color: Theme.control
@@ -593,7 +623,7 @@ Item {
                 id: opacityTrack
                 x: 24
                 y: 42
-                width: 310
+                width: parent.width - 48
                 height: 6
                 radius: 3
                 color: Theme.track
@@ -619,7 +649,7 @@ Item {
                 id: opacityMouse
                 x: 16
                 y: 32
-                width: 326
+                width: parent.width - 32
                 height: 30
                 cursorShape: Qt.PointingHandCursor
 
@@ -648,7 +678,7 @@ Item {
                 : panel.componentPreviewHidden) : items
         objectName: "dock-zone-" + zoneKey
 
-        width: 358
+        width: panel.contentWidth
         height: 136
         radius: 12
         color: dropHovered ? Theme.selected : Theme.control
@@ -679,7 +709,7 @@ Item {
             id: componentRow
             x: 12
             y: 45
-            width: 334
+            width: parent.width - 24
             height: 72
 
             Rectangle {
@@ -762,9 +792,9 @@ Item {
     }
 
     Column {
-        x: 184
+        x: panel.contentX
         y: 76
-        width: 358
+        width: panel.contentWidth
         spacing: panel.contentSectionGap
         visible: panel.section === "components"
 
@@ -785,7 +815,7 @@ Item {
         id: floatingGroup
         objectName: "dock-group-drag-overlay"
         z: 100
-        width: 114
+        width: panel.dockGroupCardWidth
         height: 90
         radius: 11
         visible: panel.draggingGroup
@@ -843,14 +873,14 @@ Item {
     }
 
     Column {
-        x: 184
+        x: panel.contentX
         y: 76
-        width: 358
+        width: panel.contentWidth
         spacing: panel.contentSectionGap
         visible: panel.section === "spectrum"
 
         Rectangle {
-            width: 358
+            width: panel.contentWidth
             height: panel.contentRowHeight
             radius: 11
             color: Theme.control
@@ -891,7 +921,7 @@ Item {
         }
 
         Column {
-            width: 358
+            width: panel.contentWidth
             spacing: panel.contentItemGap
 
             Repeater {
@@ -899,7 +929,7 @@ Item {
 
                 delegate: Rectangle {
                     required property var modelData
-                    width: 358
+                    width: panel.contentWidth
                     height: panel.contentRowHeight
                     radius: 11
                     color: backend.edgeSpectrumPosition === modelData.key
@@ -942,9 +972,9 @@ Item {
     }
 
     Rectangle {
-        x: 184
+        x: panel.contentX
         y: 76
-        width: 358
+        width: panel.contentWidth
         height: panel.contentRowHeight
         radius: 11
         color: Theme.control

@@ -50,6 +50,7 @@ class Backend : public QObject {
     Q_PROPERTY(QStringList dockGroupOrder READ dockGroupOrder NOTIFY dockSettingsChanged)
     Q_PROPERTY(QStringList dockVisibleComponents READ dockVisibleComponents NOTIFY dockSettingsChanged)
     Q_PROPERTY(QStringList dockHiddenComponents READ dockHiddenComponents NOTIFY dockSettingsChanged)
+    Q_PROPERTY(bool dockUngroupWindows READ dockUngroupWindows NOTIFY dockSettingsChanged)
     Q_PROPERTY(bool useWallpaper READ useWallpaper NOTIFY dockSettingsChanged)
     Q_PROPERTY(bool edgeSpectrumEnabled READ edgeSpectrumEnabled NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QString edgeSpectrumPosition READ edgeSpectrumPosition NOTIFY edgeSpectrumSettingsChanged)
@@ -99,6 +100,7 @@ public:
     QStringList dockGroupOrder() const { return m_dockGroupOrder; }
     QStringList dockVisibleComponents() const { return m_dockVisibleComponents; }
     QStringList dockHiddenComponents() const { return m_dockHiddenComponents; }
+    bool dockUngroupWindows() const { return m_dockUngroupWindows; }
     bool useWallpaper() const { return m_useWallpaper; }
     bool edgeSpectrumEnabled() const { return m_edgeSpectrumEnabled; }
     QString edgeSpectrumPosition() const { return m_edgeSpectrumPosition; }
@@ -131,6 +133,7 @@ public:
     Q_INVOKABLE void moveDockGroup(const QString &source, int targetIndex);
     Q_INVOKABLE void moveDockComponent(const QString &key, const QString &destination,
         const QString &beforeKey);
+    Q_INVOKABLE void setDockUngroupWindows(bool enabled);
     Q_INVOKABLE void setUseWallpaper(bool enabled);
     Q_INVOKABLE void setEdgeSpectrumEnabled(bool enabled);
     Q_INVOKABLE void setEdgeSpectrumPosition(const QString &position);
@@ -217,6 +220,7 @@ private:
         QStringLiteral("apps"), QStringLiteral("running")};
     QStringList m_dockVisibleComponents;
     QStringList m_dockHiddenComponents;
+    bool m_dockUngroupWindows = false;
     bool m_useWallpaper = false;
     bool m_edgeSpectrumEnabled = false;
     QString m_edgeSpectrumPosition = QStringLiteral("bottom");

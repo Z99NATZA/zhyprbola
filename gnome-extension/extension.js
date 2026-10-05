@@ -87,6 +87,8 @@ export default class ZhyprbolaExtension extends Extension {
             GLib.get_user_config_dir(), 'zhyprbola', 'dock-position']);
         this._dockBgOpacityPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'dock-bg-opacity']);
+        this._dockUngroupWindowsPath = GLib.build_filenamev([
+            GLib.get_user_config_dir(), 'zhyprbola', 'dock-ungroup-windows']);
         this._useWallpaperPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'use-wallpaper']);
         this._edgeEnabledPath = GLib.build_filenamev([
@@ -104,6 +106,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._themeName = this._readTheme();
         this._dockPosition = this._readDockPosition();
         this._dockBgOpacity = this._readDockBgOpacity();
+        this._dockUngroupWindows = this._readDockUngroupWindows();
         this._useWallpaper = this._readUseWallpaper();
         this._edgeEnabled = this._readEdgeEnabled();
         this._edgePosition = this._readEdgePosition();
@@ -247,10 +250,12 @@ export default class ZhyprbolaExtension extends Extension {
         return apps;
     }
 
-    _createAppButton(app, running) {
+    _createAppButton(app, running, window = null) {
         const vertical = [DockPosition.LEFT, DockPosition.RIGHT]
             .includes(this._dockPosition);
-        const focused = app.get_windows().some(window => window.has_focus());
+        const focused = window
+            ? window.has_focus()
+            : app.get_windows().some(appWindow => appWindow.has_focus());
         const content = new St.Widget({
             width: DOCK_CONFIG.buttonSize,
             height: DOCK_CONFIG.buttonSize,
@@ -290,10 +295,23 @@ export default class ZhyprbolaExtension extends Extension {
             can_focus: true,
             reactive: true,
             track_hover: true,
-            accessible_name: app.get_name(),
+            accessible_name: window?.get_title() ?? app.get_name(),
         });
-        button.connect('clicked', () => this._activateApp(app));
+        button.connect('clicked', () => window
+            ? this._activateWindow(window) : this._activateApp(app));
         return button;
+    }
+
+    _activateWindow(window) {
+        if (!window)
+            return;
+        if (window.has_focus()) {
+            window.minimize();
+            return;
+        }
+        if (window.minimized)
+            window.unminimize();
+        window.activate(global.get_current_time());
     }
 
     _activateApp(app) {
@@ -304,13 +322,33 @@ export default class ZhyprbolaExtension extends Extension {
             app.activate();
     }
 
+    _windowItemsForApp(app) {
+        return app.get_windows()
+            .filter(window => !window.get_title()?.startsWith('Zhyprbola '))
+            .map(window => ({
+                kind: 'app',
+                app,
+                window,
+                label: window.get_title() || app.get_name(),
+                running: true,
+            }));
+    }
+
     _refreshAppGroups() {
         if (!this._dockGroupsByName)
             return;
         const pinned = this._pinnedShellApps();
-        this._dockItems.set('apps', pinned.map(app => ({
-            kind: 'app', app, label: app.get_name(), running: app.get_n_windows() > 0,
-        })));
+        const pinnedItems = [];
+        for (const app of pinned) {
+            const windows = this._windowItemsForApp(app);
+            if (this._dockUngroupWindows && windows.length > 0)
+                pinnedItems.push(...windows);
+            else
+                pinnedItems.push({
+                    kind: 'app', app, label: app.get_name(), running: windows.length > 0,
+                });
+        }
+        this._dockItems.set('apps', pinnedItems);
 
         const pinnedIds = new Set(pinned.map(app => app.get_id()));
         const running = [];
@@ -319,7 +357,10 @@ export default class ZhyprbolaExtension extends Extension {
             if (pinnedIds.has(app.get_id()) || windows.length === 0 ||
                 windows.every(window => window.get_title()?.startsWith('Zhyprbola ')))
                 continue;
-            running.push({kind: 'app', app, label: app.get_name(), running: true});
+            if (this._dockUngroupWindows)
+                running.push(...this._windowItemsForApp(app));
+            else
+                running.push({kind: 'app', app, label: app.get_name(), running: true});
         }
         this._dockItems.set('running', running);
         this._dockRenderState.delete('apps');
@@ -376,6 +417,15 @@ export default class ZhyprbolaExtension extends Extension {
                 ? opacity : 50;
         } catch (_) {
             return 50;
+        }
+    }
+
+    _readDockUngroupWindows() {
+        try {
+            const [, contents] = GLib.file_get_contents(this._dockUngroupWindowsPath);
+            return new TextDecoder().decode(contents).trim() === 'true';
+        } catch (_) {
+            return false;
         }
     }
 
@@ -489,6 +539,7 @@ export default class ZhyprbolaExtension extends Extension {
         const theme = this._readTheme();
         const position = this._readDockPosition();
         const bgOpacity = this._readDockBgOpacity();
+        const dockUngroupWindows = this._readDockUngroupWindows();
         const useWallpaper = this._readUseWallpaper();
         const edgeEnabled = this._readEdgeEnabled();
         const edgePosition = this._readEdgePosition();
@@ -499,6 +550,7 @@ export default class ZhyprbolaExtension extends Extension {
         const themeChanged = theme !== this._themeName;
         const positionChanged = position !== this._dockPosition;
         const bgOpacityChanged = bgOpacity !== this._dockBgOpacity;
+        const dockUngroupWindowsChanged = dockUngroupWindows !== this._dockUngroupWindows;
         const wallpaperChanged = useWallpaper !== this._useWallpaper;
         const edgeChanged = edgeEnabled !== this._edgeEnabled ||
             edgePosition !== this._edgePosition;
@@ -512,6 +564,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._themeName = theme;
         this._dockPosition = position;
         this._dockBgOpacity = bgOpacity;
+        this._dockUngroupWindows = dockUngroupWindows;
         this._useWallpaper = useWallpaper;
         this._edgeEnabled = edgeEnabled;
         this._edgePosition = edgePosition;
@@ -520,7 +573,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockComponents = dockComponents;
         this._pinnedApps = pinnedApps;
 
-        if (positionChanged || groupsChanged || componentsChanged)
+        if (positionChanged || groupsChanged || componentsChanged || dockUngroupWindowsChanged)
             this._rebuildDock();
         else if (themeChanged)
             this._applyTheme();
@@ -802,7 +855,7 @@ export default class ZhyprbolaExtension extends Extension {
             group.add_child(item.kind === 'panel'
                 ? this._createPanelButton({iconName: item.name,
                     accessibleName: item.label, panelName: item.name})
-                : this._createAppButton(item.app, item.running));
+                : this._createAppButton(item.app, item.running, item.window));
         }
         if (overflow) {
             const more = new St.Button({
@@ -860,7 +913,7 @@ export default class ZhyprbolaExtension extends Extension {
                 } else if (item.kind === 'panel')
                     this._openPanel(item.name);
                 else
-                    this._activateApp(item.app);
+                    item.window ? this._activateWindow(item.window) : this._activateApp(item.app);
             }, icon);
         }
         Main.uiGroup.add_child(menu.actor);
