@@ -9,11 +9,15 @@ Window {
     readonly property bool vertical: edgePosition === "left" || edgePosition === "right"
     readonly property int stripSize: 161
     readonly property int bottomMargin: edgePosition === "bottom" ? 32 : 0
-    readonly property int edgeLength: vertical ? Screen.height : Screen.width
+    readonly property int screenWidth: edgeScreenWidth > 0
+        ? edgeScreenWidth : Screen.width
+    readonly property int screenHeight: edgeScreenHeight > 0
+        ? edgeScreenHeight : Screen.height
+    readonly property int edgeLength: vertical ? screenHeight : screenWidth
 
     visible: true
-    width: vertical ? stripSize : Screen.width
-    height: vertical ? Screen.height : stripSize + bottomMargin
+    width: vertical ? stripSize : screenWidth
+    height: vertical ? screenHeight : stripSize + bottomMargin
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
         | Qt.WindowTransparentForInput | Qt.WindowDoesNotAcceptFocus
     color: "transparent"

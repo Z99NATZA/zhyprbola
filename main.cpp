@@ -7,6 +7,14 @@
 #include <QFileInfo>
 #include <QCommandLineParser>
 
+namespace {
+int environmentInt(const char *name, int fallback) {
+    bool valid = false;
+    const int value = qEnvironmentVariableIntValue(name, &valid);
+    return valid && value > 0 ? value : fallback;
+}
+}
+
 int main(int argc, char *argv[]) {
     QGuiApplication app(argc, argv);
     app.setOrganizationName(QStringLiteral("zhyprbola"));
@@ -26,6 +34,10 @@ int main(int argc, char *argv[]) {
     Backend backend;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+    engine.rootContext()->setContextProperty(QStringLiteral("edgeScreenWidth"),
+        environmentInt("ZHYPRBOLA_EDGE_SCREEN_WIDTH", 0));
+    engine.rootContext()->setContextProperty(QStringLiteral("edgeScreenHeight"),
+        environmentInt("ZHYPRBOLA_EDGE_SCREEN_HEIGHT", 0));
 
     const QString panelName = parser.value(panelOption).trimmed();
     const QStringList positional = parser.positionalArguments();

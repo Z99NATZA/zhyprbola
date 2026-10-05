@@ -648,8 +648,15 @@ export default class ZhyprbolaExtension extends Extension {
             return;
 
         try {
-            const process = Gio.Subprocess.new(
-                ['bash', launcher, 'edge-spectrum'], Gio.SubprocessFlags.NONE);
+            const processLauncher =
+                Gio.SubprocessLauncher.new(Gio.SubprocessFlags.NONE);
+            processLauncher.setenv('ZHYPRBOLA_EDGE_SCREEN_X', String(monitor.x), true);
+            processLauncher.setenv('ZHYPRBOLA_EDGE_SCREEN_Y', String(monitor.y), true);
+            processLauncher.setenv('ZHYPRBOLA_EDGE_SCREEN_WIDTH',
+                String(monitor.width), true);
+            processLauncher.setenv('ZHYPRBOLA_EDGE_SCREEN_HEIGHT',
+                String(monitor.height), true);
+            const process = processLauncher.spawnv(['bash', launcher, 'edge-spectrum']);
             this._edgeProcess = process;
             this._placeEdgeSpectrum(process);
             process.wait_async(null, (source, result) => {
@@ -696,7 +703,7 @@ export default class ZhyprbolaExtension extends Extension {
                     x += monitor.width - frame.width;
                 else if (this._edgePosition === DockPosition.BOTTOM)
                     y += monitor.height - frame.height;
-                window.move_frame(true, x, y);
+                window.move_frame(false, x, y);
                 this._edgePlacementId = 0;
                 return GLib.SOURCE_REMOVE;
             }
