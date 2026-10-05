@@ -1235,12 +1235,7 @@ export default class ZhyprbolaExtension extends Extension {
                 (panelName === 'bluetooth' && window.get_title() === 'Zhyprbola Panel')));
 
         if (existingWindow) {
-            if (existingWindow.minimized) {
-                existingWindow.unminimize();
-                existingWindow.activate(global.get_current_time());
-            } else {
-                existingWindow.minimize();
-            }
+            this._activateWindow(existingWindow);
             return;
         }
 
