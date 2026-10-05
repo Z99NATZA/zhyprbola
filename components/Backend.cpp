@@ -162,7 +162,7 @@ QStringList dockComponentKeys() {
         QStringLiteral("system-status"), QStringLiteral("audio-spectrum"),
         QStringLiteral("music"), QStringLiteral("todo"),
         QStringLiteral("calendar"), QStringLiteral("input-source"),
-        QStringLiteral("power")};
+        QStringLiteral("power"), QStringLiteral("components")};
 }
 
 QList<QByteArray> splitNetworkRow(const QByteArray &row) {
@@ -273,9 +273,18 @@ Backend::Backend(QObject *parent) : QObject(parent) {
                     && !m_dockHiddenComponents.contains(name))
                     m_dockHiddenComponents.append(name);
             }
+            for (const auto &entry : object.value(QStringLiteral("quick")).toArray()) {
+                const QString name = entry.toString();
+                if (name != QLatin1String("components") && componentNames.contains(name)
+                    && !m_dockVisibleComponents.contains(name)
+                    && !m_dockHiddenComponents.contains(name)
+                    && !m_dockQuickComponents.contains(name))
+                    m_dockQuickComponents.append(name);
+            }
             for (const QString &name : componentNames)
                 if (!m_dockVisibleComponents.contains(name)
-                    && !m_dockHiddenComponents.contains(name))
+                    && !m_dockHiddenComponents.contains(name)
+                    && !m_dockQuickComponents.contains(name))
                     m_dockVisibleComponents.append(name);
         }
     }
@@ -410,25 +419,34 @@ void Backend::moveDockComponent(const QString &key, const QString &destination,
     const QString &beforeKey) {
     if (!dockComponentKeys().contains(key) || beforeKey == key
         || (destination != QLatin1String("visible")
-            && destination != QLatin1String("hidden"))) return;
+            && destination != QLatin1String("hidden")
+            && destination != QLatin1String("quick"))
+        || (key == QLatin1String("components")
+            && destination == QLatin1String("quick"))) return;
 
     QStringList visible = m_dockVisibleComponents;
     QStringList hidden = m_dockHiddenComponents;
+    QStringList quick = m_dockQuickComponents;
     visible.removeAll(key);
     hidden.removeAll(key);
-    QStringList &target = destination == QLatin1String("visible") ? visible : hidden;
+    quick.removeAll(key);
+    QStringList &target = destination == QLatin1String("visible") ? visible
+        : destination == QLatin1String("hidden") ? hidden : quick;
     int index = beforeKey.isEmpty() ? target.size() : target.indexOf(beforeKey);
     if (index < 0) return;
     target.insert(index, key);
-    if (visible == m_dockVisibleComponents && hidden == m_dockHiddenComponents) return;
+    if (visible == m_dockVisibleComponents && hidden == m_dockHiddenComponents
+        && quick == m_dockQuickComponents) return;
 
     QJsonObject object;
     object.insert(QStringLiteral("visible"), QJsonArray::fromStringList(visible));
     object.insert(QStringLiteral("hidden"), QJsonArray::fromStringList(hidden));
+    object.insert(QStringLiteral("quick"), QJsonArray::fromStringList(quick));
     if (!writeDockConfig(QStringLiteral("dock-components"),
             QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact)))) return;
     m_dockVisibleComponents = visible;
     m_dockHiddenComponents = hidden;
+    m_dockQuickComponents = quick;
     emit dockSettingsChanged();
 }
 

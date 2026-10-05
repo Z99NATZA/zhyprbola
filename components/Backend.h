@@ -50,6 +50,7 @@ class Backend : public QObject {
     Q_PROPERTY(QStringList dockGroupOrder READ dockGroupOrder NOTIFY dockSettingsChanged)
     Q_PROPERTY(QStringList dockVisibleComponents READ dockVisibleComponents NOTIFY dockSettingsChanged)
     Q_PROPERTY(QStringList dockHiddenComponents READ dockHiddenComponents NOTIFY dockSettingsChanged)
+    Q_PROPERTY(QStringList dockQuickComponents READ dockQuickComponents NOTIFY dockSettingsChanged)
     Q_PROPERTY(bool dockUngroupWindows READ dockUngroupWindows NOTIFY dockSettingsChanged)
     Q_PROPERTY(bool useWallpaper READ useWallpaper NOTIFY dockSettingsChanged)
     Q_PROPERTY(bool edgeSpectrumEnabled READ edgeSpectrumEnabled NOTIFY edgeSpectrumSettingsChanged)
@@ -101,6 +102,7 @@ public:
     QStringList dockGroupOrder() const { return m_dockGroupOrder; }
     QStringList dockVisibleComponents() const { return m_dockVisibleComponents; }
     QStringList dockHiddenComponents() const { return m_dockHiddenComponents; }
+    QStringList dockQuickComponents() const { return m_dockQuickComponents; }
     bool dockUngroupWindows() const { return m_dockUngroupWindows; }
     bool useWallpaper() const { return m_useWallpaper; }
     bool edgeSpectrumEnabled() const { return m_edgeSpectrumEnabled; }
@@ -231,6 +233,7 @@ private:
         QStringLiteral("zhyprbola")};
     QStringList m_dockVisibleComponents;
     QStringList m_dockHiddenComponents;
+    QStringList m_dockQuickComponents;
     bool m_dockUngroupWindows = false;
     bool m_useWallpaper = false;
     bool m_edgeSpectrumEnabled = false;

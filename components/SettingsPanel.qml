@@ -62,6 +62,7 @@ Item {
     property string componentBeforeKey: ""
     property var componentPreviewShow: []
     property var componentPreviewHidden: []
+    property var componentPreviewQuick: []
     property real dragStartX: 0
     property real dragStartY: 0
 
@@ -75,9 +76,11 @@ Item {
     function openableComponents() {
         return backend.dockVisibleComponents
             .concat(backend.dockHiddenComponents)
+            .concat(backend.dockQuickComponents)
             .filter(key => key !== "settings"
                 && key !== "input-source"
-                && key !== "power")
+                && key !== "power"
+                && key !== "components")
     }
 
     function beginGroupDrag(name, point, offsetX, offsetY) {
@@ -139,6 +142,7 @@ Item {
         dragStartY = point.y
         componentPreviewShow = backend.dockVisibleComponents.slice()
         componentPreviewHidden = backend.dockHiddenComponents.slice()
+        componentPreviewQuick = backend.dockQuickComponents.slice()
     }
 
     function updateComponentDrag(point) {
@@ -156,10 +160,11 @@ Item {
         floatingComponent.y = point.y - floatingComponent.height / 2
         let destination = null
         let localPoint = null
-        for (const zone of [showZone, hiddenZone]) {
+        for (const zone of [showZone, hiddenZone, quickZone]) {
             const local = zone.mapFromItem(panel, point.x, point.y)
             if (local.x >= 0 && local.x < zone.width
-                && local.y >= 0 && local.y < zone.height) {
+                && local.y >= 0 && local.y < zone.height
+                && (zone.zoneKey !== "quick" || draggedComponent !== "components")) {
                 destination = zone
                 localPoint = local
                 break
@@ -167,6 +172,7 @@ Item {
         }
         showZone.dropHovered = destination === showZone
         hiddenZone.dropHovered = destination === hiddenZone
+        quickZone.dropHovered = destination === quickZone
         componentDropZone = destination ? destination.zoneKey : ""
         componentBeforeKey = ""
 
@@ -174,8 +180,11 @@ Item {
             .filter(key => key !== draggedComponent)
         const hidden = backend.dockHiddenComponents.slice()
             .filter(key => key !== draggedComponent)
+        const quick = backend.dockQuickComponents.slice()
+            .filter(key => key !== draggedComponent)
         if (destination) {
-            const target = destination.zoneKey === "visible" ? show : hidden
+            const target = destination.zoneKey === "visible" ? show
+                : destination.zoneKey === "hidden" ? hidden : quick
             const row = Math.max(0, Math.floor((localPoint.y - 45 + 18.5) / 37))
             const column = Math.max(0, Math.floor((localPoint.x - 12 + 18.5) / 37))
             const position = Math.max(0, Math.min(target.length, row * 9 + column))
@@ -185,13 +194,19 @@ Item {
             show.splice(backend.dockVisibleComponents.indexOf(draggedComponent),
                 0, draggedComponent)
         } else {
-            hidden.splice(backend.dockHiddenComponents.indexOf(draggedComponent),
-                0, draggedComponent)
+            const original = backend.dockHiddenComponents.includes(draggedComponent)
+                ? hidden : quick
+            const index = backend.dockHiddenComponents.includes(draggedComponent)
+                ? backend.dockHiddenComponents.indexOf(draggedComponent)
+                : backend.dockQuickComponents.indexOf(draggedComponent)
+            original.splice(index, 0, draggedComponent)
         }
         if (show.join(',') !== componentPreviewShow.join(','))
             componentPreviewShow = show
         if (hidden.join(',') !== componentPreviewHidden.join(','))
             componentPreviewHidden = hidden
+        if (quick.join(',') !== componentPreviewQuick.join(','))
+            componentPreviewQuick = quick
     }
 
     function finishComponentDrag() {
@@ -205,8 +220,10 @@ Item {
         componentBeforeKey = ""
         componentPreviewShow = []
         componentPreviewHidden = []
+        componentPreviewQuick = []
         showZone.dropHovered = false
         hiddenZone.dropHovered = false
+        quickZone.dropHovered = false
         if (commit)
             backend.moveDockComponent(key, destination, beforeKey)
     }
@@ -770,7 +787,8 @@ Item {
         property bool dropHovered: false
         readonly property var displayOrder: panel.draggingComponent
             ? (zoneKey === "visible" ? panel.componentPreviewShow
-                : panel.componentPreviewHidden) : items
+                : zoneKey === "hidden" ? panel.componentPreviewHidden
+                : panel.componentPreviewQuick) : items
         objectName: "dock-zone-" + zoneKey
 
         width: panel.contentWidth
@@ -783,7 +801,8 @@ Item {
         Text {
             x: 13
             y: 12
-            text: zone.zoneKey === "visible" ? "Show" : "Hidden"
+            text: zone.zoneKey === "visible" ? "Show"
+                : zone.zoneKey === "hidden" ? "Hidden" : "Quick"
             color: Theme.text
             font.family: Qt.application.font.family
             font.pixelSize: 14
@@ -840,7 +859,8 @@ Item {
                     width: 34
                     height: 34
                     radius: 9
-                    color: zone.zoneKey === "visible" ? Theme.accent : Theme.mutedText
+                    color: zone.zoneKey === "visible" ? Theme.accent
+                        : zone.zoneKey === "quick" ? Theme.accent : Theme.mutedText
                     opacity: panel.draggingComponent && panel.draggedComponent === componentKey
                         ? 0 : 1
 
@@ -958,27 +978,43 @@ Item {
         }
     }
 
-    Column {
+    Flickable {
         x: panel.contentX
         y: 76
         width: panel.contentWidth
-        spacing: panel.contentSectionGap
+        height: panel.height - y - 12
+        contentWidth: width
+        contentHeight: componentColumn.height
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
         visible: panel.section === "components"
 
-        DockComponentZone {
-            id: showZone
-            zoneKey: "visible"
-            items: backend.dockVisibleComponents
-        }
+        Column {
+            id: componentColumn
+            width: parent.width
+            spacing: panel.contentSectionGap
 
-        DockComponentZone {
-            id: hiddenZone
-            zoneKey: "hidden"
-            items: backend.dockHiddenComponents
-        }
+            DockComponentZone {
+                id: showZone
+                zoneKey: "visible"
+                items: backend.dockVisibleComponents
+            }
 
-        DockComponentLauncherBox {
-            items: panel.openableComponents()
+            DockComponentZone {
+                id: hiddenZone
+                zoneKey: "hidden"
+                items: backend.dockHiddenComponents
+            }
+
+            DockComponentZone {
+                id: quickZone
+                zoneKey: "quick"
+                items: backend.dockQuickComponents
+            }
+
+            DockComponentLauncherBox {
+                items: panel.openableComponents()
+            }
         }
     }
 

@@ -25,6 +25,9 @@ const DOCK_CONFIG = Object.freeze({
     groupSpacing: 4,
     padding: 4,
 });
+const QUICK_MENU_CONFIG = Object.freeze({
+    maxColumns: 5,
+});
 
 const DOCK_GROUPS = ['apps', 'running', 'zhyprbola'];
 const DEFAULT_ENABLED_DOCK_GROUPS = ['zhyprbola', 'running'];
@@ -41,6 +44,7 @@ const DOCK_COMPONENTS = [
     ['calendar', 'Calendar'],
     ['input-source', 'Input Source'],
     ['power', 'Power'],
+    ['components', 'Components'],
 ];
 const DEFAULT_PINNED_APPS = [
     ['google-chrome.desktop', 'com.google.Chrome.desktop', 'chromium.desktop'],
@@ -741,13 +745,17 @@ export default class ZhyprbolaExtension extends Extension {
             const visible = [...new Set(saved.visible.filter(name => known.has(name)))];
             const hidden = [...new Set(saved.hidden.filter(name =>
                 known.has(name) && !visible.includes(name)))];
+            const quick = [...new Set((Array.isArray(saved.quick) ? saved.quick : [])
+                .filter(name => name !== 'components' && known.has(name) &&
+                    !visible.includes(name) && !hidden.includes(name)))];
             for (const name of defaults) {
-                if (!visible.includes(name) && !hidden.includes(name))
+                if (!visible.includes(name) && !hidden.includes(name) &&
+                    !quick.includes(name))
                     visible.push(name);
             }
-            return {visible, hidden};
+            return {visible, hidden, quick};
         } catch (_) {
-            return {visible: defaults, hidden: []};
+            return {visible: defaults, hidden: [], quick: []};
         }
     }
 
@@ -848,7 +856,8 @@ export default class ZhyprbolaExtension extends Extension {
             JSON.stringify(pinnedApps) !== JSON.stringify(this._pinnedApps);
         const componentsChanged = dockComponents.visible.join(',') !==
             this._dockComponents.visible.join(',') || dockComponents.hidden.join(',') !==
-            this._dockComponents.hidden.join(',');
+            this._dockComponents.hidden.join(',') || dockComponents.quick.join(',') !==
+            this._dockComponents.quick.join(',');
 
         this._themeName = theme;
         this._dockPosition = position;
@@ -983,6 +992,8 @@ export default class ZhyprbolaExtension extends Extension {
             icon.gicon = this._panelGicon(name);
         this._overflowMenu?.destroy();
         this._overflowMenu = null;
+        this._quickMenu?.destroy();
+        this._quickMenu = null;
         this._inputSourceMenu?.destroy();
         this._inputSourceMenu = null;
     }
@@ -1024,6 +1035,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._powerMenu = null;
         this._overflowMenu?.destroy();
         this._overflowMenu = null;
+        this._quickMenu?.destroy();
+        this._quickMenu = null;
         Main.layoutManager.removeChrome(this._dock);
         this._dock.destroy();
         this._dock = null;
@@ -1279,6 +1292,8 @@ export default class ZhyprbolaExtension extends Extension {
         button.connect('clicked', () => {
             if (panelName === 'power')
                 this._openPowerMenu(button);
+            else if (panelName === 'components')
+                this._openQuickMenu(button);
             else
                 this._openPanel(panelName);
         });
@@ -1314,6 +1329,10 @@ export default class ZhyprbolaExtension extends Extension {
 
         this._overflowMenu?.destroy();
         this._overflowMenu = null;
+        if (name === 'zhyprbola') {
+            this._quickMenu?.destroy();
+            this._quickMenu = null;
+        }
         if (name === 'zhyprbola') {
             this._inputSourceMenu?.destroy();
             this._inputSourceMenu = null;
@@ -1396,6 +1415,9 @@ export default class ZhyprbolaExtension extends Extension {
                             this._openPowerMenu(button);
                         return GLib.SOURCE_REMOVE;
                     });
+                } else if (item.name === 'components') {
+                    GLib.idle_add_once(GLib.PRIORITY_DEFAULT_IDLE, () =>
+                        this._dock && this._openQuickMenu(button));
                 } else if (item.kind === 'input-source') {
                     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
                         if (this._dock)
@@ -1412,6 +1434,83 @@ export default class ZhyprbolaExtension extends Extension {
         menu.actor.hide();
         this._menuManager.addMenu(menu);
         this._overflowMenu = menu;
+        menu.open();
+    }
+
+    _openQuickMenu(button) {
+        if (this._quickMenu?.sourceActor === button) {
+            this._quickMenu.toggle();
+            return;
+        }
+        this._quickMenu?.destroy();
+        const side = {
+            [DockPosition.LEFT]: St.Side.RIGHT,
+            [DockPosition.RIGHT]: St.Side.LEFT,
+            [DockPosition.TOP]: St.Side.BOTTOM,
+            [DockPosition.BOTTOM]: St.Side.TOP,
+        }[this._dockPosition];
+        const menu = new PopupMenu.PopupMenu(button, 0.5, side);
+        const theme = THEMES.find(item => item.name === this._themeName);
+        menu.actor.add_style_class_name('zhyprbola-quick-menu');
+        const item = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
+        const grid = new St.BoxLayout({vertical: true,
+            x_align: Clutter.ActorAlign.CENTER,
+            style_class: 'zhyprbola-quick-grid'});
+        const names = this._dockComponents.quick;
+        let columns = 1;
+        if (names.length === 0) {
+            grid.add_child(new St.Label({text: 'No quick components',
+                style_class: 'zhyprbola-quick-empty'}));
+        } else {
+            const rowCount = Math.ceil(names.length / QUICK_MENU_CONFIG.maxColumns);
+            columns = Math.ceil(names.length / rowCount);
+            for (let start = 0; start < names.length; start += columns) {
+                const row = new St.BoxLayout({
+                    x_align: Clutter.ActorAlign.CENTER,
+                    style_class: 'zhyprbola-quick-row',
+                });
+                for (const name of names.slice(start, start + columns)) {
+                    const icon = new St.Icon({
+                        gicon: this._panelGicon(name),
+                        style_class: 'zhyprbola-quick-icon',
+                    });
+                    const buttonItem = new St.Button({
+                        child: icon,
+                        style_class: 'zhyprbola-quick-button',
+                        reactive: true,
+                        can_focus: true,
+                        track_hover: true,
+                        accessible_name: new Map(DOCK_COMPONENTS).get(name),
+                    });
+                    buttonItem.connect('clicked', () => {
+                        menu.close();
+                        GLib.idle_add_once(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                            if (!this._dock)
+                                return;
+                            if (name === 'power')
+                                this._openPowerMenu(button);
+                            else if (name === 'input-source')
+                                this._openInputSourceMenu(button);
+                            else
+                                this._openPanel(name);
+                        });
+                    });
+                    row.add_child(buttonItem);
+                }
+                grid.add_child(row);
+            }
+        }
+        // Let the rows determine the natural width. St adds CSS padding outside
+        // a declared width, so including it here would reserve it twice.
+        menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor}; ` +
+            'min-width: 0px;');
+        item.set_style('min-width: 0px;');
+        item.add_child(grid);
+        menu.addMenuItem(item);
+        Main.uiGroup.add_child(menu.actor);
+        menu.actor.hide();
+        this._menuManager.addMenu(menu);
+        this._quickMenu = menu;
         menu.open();
     }
 
