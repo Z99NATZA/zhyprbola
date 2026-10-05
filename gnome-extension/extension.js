@@ -84,6 +84,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._panelRequestPollId = 0;
         this._panelRequestMonitor = null;
         this._pendingPanels = new Set();
+        this._lastFocusedWindow = global.display.focus_window;
+        this._windowBeforeSettings = null;
         this._panelIconSources = new Map();
         this._inputSourceMenu = null;
         this._inputSourceButton = null;
@@ -152,7 +154,17 @@ export default class ZhyprbolaExtension extends Extension {
 
         global.display.connectObject(
             'workareas-changed', () => this._queueLayout(),
-            'notify::focus-window', () => this._queueAppRefresh(), this);
+            'notify::focus-window', () => {
+                const focused = global.display.focus_window;
+                // Clicking a launcher in Settings gives Settings focus first.
+                if (focused?.get_title() === PANEL_TITLES.settings)
+                    this._windowBeforeSettings = this._lastFocusedWindow;
+                else if (focused)
+                    this._windowBeforeSettings = null;
+                if (focused)
+                    this._lastFocusedWindow = focused;
+                this._queueAppRefresh();
+            }, this);
         Main.layoutManager.connectObject('monitors-changed', () => {
             this._queueLayout();
             this._restartEdgeSpectrum();
@@ -220,6 +232,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._inputSourceManager = null;
         this._panelIconSources = null;
         this._runningOrder = null;
+        this._lastFocusedWindow = null;
+        this._windowBeforeSettings = null;
     }
 
     _createDock() {
@@ -645,7 +659,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._panelRequest = panelRequest;
         const panelName = panelRequest.split(':').slice(1).join(':');
         if (PANEL_TITLES[panelName])
-            this._openPanel(panelName);
+            this._openPanel(panelName, true);
     }
 
     _syncSettings() {
@@ -1289,14 +1303,19 @@ export default class ZhyprbolaExtension extends Extension {
             });
     }
 
-    _openPanel(panelName) {
+    _openPanel(panelName, fromSettings = false) {
         const title = PANEL_TITLES[panelName];
         const existingWindow = global.display.list_all_windows()
             .find(window => window && (window.get_title() === title ||
                 (panelName === 'bluetooth' && window.get_title() === 'Zhyprbola Panel')));
 
         if (existingWindow) {
-            this._activateWindow(existingWindow);
+            if (fromSettings && !existingWindow.minimized &&
+                global.display.focus_window?.get_title() === PANEL_TITLES.settings &&
+                this._windowBeforeSettings === existingWindow)
+                existingWindow.minimize();
+            else
+                this._activateWindow(existingWindow);
             return;
         }
 

@@ -444,7 +444,6 @@ void Backend::openDockComponent(const QString &key) {
         QStringLiteral("calendar"),
     };
     if (!panelNames.contains(key)) return;
-    if (panelProcessRunning(key)) return;
 
     const QString request = QString::number(QDateTime::currentMSecsSinceEpoch())
         + QLatin1Char(':') + key;
