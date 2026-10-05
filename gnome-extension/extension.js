@@ -36,7 +36,7 @@ const DOCK_COMPONENTS = [
     ['system-status', 'System Status'],
     ['audio-spectrum', 'Audio Spectrum'],
     ['music', 'Music Player'],
-    ['todo', 'Today'],
+    ['todo', 'Tasks'],
     ['calendar', 'Calendar'],
     ['input-source', 'Input Source'],
     ['power', 'Power'],
@@ -65,7 +65,7 @@ const PANEL_TITLES = Object.freeze({
     'system-status': 'Zhyprbola System Status',
     'audio-spectrum': 'Zhyprbola Audio Spectrum',
     music: 'Zhyprbola Music Player',
-    todo: 'Zhyprbola Today',
+    todo: 'Zhyprbola Tasks',
     calendar: 'Zhyprbola Calendar',
     settings: 'Zhyprbola Settings',
 });

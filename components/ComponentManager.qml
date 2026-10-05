@@ -14,7 +14,7 @@ Item {
         { key: "music", title: "Music Player", detail: "MPRIS player controls" },
         { key: "apps", title: "Launcher", detail: "Application shortcuts" },
         { key: "system", title: "System Status", detail: "CPU, RAM, and disk" },
-        { key: "todo", title: "Todo", detail: "Today checklist" },
+        { key: "todo", title: "Tasks", detail: "Local checklist" },
         { key: "calendar", title: "Calendar", detail: "Monthly calendar" },
         { key: "spectrum", title: "Audio Spectrum", detail: "Bottom music visualizer" }
     ]

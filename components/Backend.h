@@ -54,6 +54,7 @@ class Backend : public QObject {
     Q_PROPERTY(bool useWallpaper READ useWallpaper NOTIFY dockSettingsChanged)
     Q_PROPERTY(bool edgeSpectrumEnabled READ edgeSpectrumEnabled NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QString edgeSpectrumPosition READ edgeSpectrumPosition NOTIFY edgeSpectrumSettingsChanged)
+    Q_PROPERTY(QVariantList tasks READ tasks NOTIFY tasksChanged)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -104,6 +105,7 @@ public:
     bool useWallpaper() const { return m_useWallpaper; }
     bool edgeSpectrumEnabled() const { return m_edgeSpectrumEnabled; }
     QString edgeSpectrumPosition() const { return m_edgeSpectrumPosition; }
+    QVariantList tasks() const { return m_tasks; }
 
     Q_INVOKABLE void togglePlayback();
     Q_INVOKABLE void nextTrack();
@@ -137,6 +139,11 @@ public:
     Q_INVOKABLE void setUseWallpaper(bool enabled);
     Q_INVOKABLE void setEdgeSpectrumEnabled(bool enabled);
     Q_INVOKABLE void setEdgeSpectrumPosition(const QString &position);
+    Q_INVOKABLE void addTask(const QString &text);
+    Q_INVOKABLE void toggleTask(const QString &id);
+    Q_INVOKABLE void renameTask(const QString &id, const QString &text);
+    Q_INVOKABLE void moveTask(const QString &id, int targetIndex);
+    Q_INVOKABLE void deleteTask(const QString &id);
 
 signals:
     void systemChanged();
@@ -151,6 +158,7 @@ signals:
     void themeChanged();
     void dockSettingsChanged();
     void edgeSpectrumSettingsChanged();
+    void tasksChanged();
 
 private:
     void refreshSystem();
@@ -165,6 +173,9 @@ private:
     QStringList mprisPlayers() const;
     QVariant mprisProperty(const QString &service, const QString &property) const;
     void playerCommand(const QStringList &args);
+    void loadTasks();
+    bool saveTasks() const;
+    int taskIndex(const QString &id) const;
 
     QNetworkAccessManager m_network;
     QTimer m_systemTimer;
@@ -224,4 +235,5 @@ private:
     bool m_useWallpaper = false;
     bool m_edgeSpectrumEnabled = false;
     QString m_edgeSpectrumPosition = QStringLiteral("bottom");
+    QVariantList m_tasks;
 };

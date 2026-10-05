@@ -6,7 +6,8 @@ Window {
     id: host
 
     property string requestedPanel: "bluetooth"
-    readonly property string panelName: requestedPanel
+    readonly property string panelName: requestedPanel === "tasks" || requestedPanel === "task"
+        ? "todo" : requestedPanel
     readonly property int panelWidth: {
         switch (panelName) {
         case "clock-weather": return 480
@@ -27,7 +28,7 @@ Window {
         case "system-status": return 195
         case "music": return 254
         case "settings": return 510
-        case "todo": return 304
+        case "todo": return 360
         case "calendar": return 314
         default: return 548
         }
@@ -44,7 +45,7 @@ Window {
         if (panelName === "music")
             return "Zhyprbola Music Player"
         if (panelName === "todo")
-            return "Zhyprbola Today"
+            return "Zhyprbola Tasks"
         if (panelName === "calendar")
             return "Zhyprbola Calendar"
         if (panelName === "settings")

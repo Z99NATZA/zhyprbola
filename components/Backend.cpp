@@ -9,6 +9,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSettings>
@@ -16,6 +17,7 @@
 #include <QSet>
 #include <QStandardPaths>
 #include <QStorageInfo>
+#include <QUuid>
 #include <QVariantMap>
 #include <QUrlQuery>
 #include <QtMath>
@@ -41,6 +43,10 @@ bool writeDockConfig(const QString &name, const QString &value) {
     if (!file.open(QIODevice::WriteOnly)) return false;
     if (file.write((value + QLatin1Char('\n')).toUtf8()) < 0) return false;
     return file.commit();
+}
+
+QString timestamp() {
+    return QDateTime::currentDateTime().toString(Qt::ISODateWithMs);
 }
 
 QString formatGiB(quint64 bytes) {
@@ -258,6 +264,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
             || position == QLatin1String("top") || position == QLatin1String("bottom"))
             m_edgeSpectrumPosition = position;
     }
+    loadTasks();
 
     m_location = qEnvironmentVariable("ZHYPRBOLA_LOCATION", "Bangkok");
     m_userName = qEnvironmentVariable("USER", "User");
@@ -428,6 +435,147 @@ void Backend::setEdgeSpectrumPosition(const QString &position) {
     if (!writeDockConfig(QStringLiteral("edge-spectrum-position"), position)) return;
     m_edgeSpectrumPosition = position;
     emit edgeSpectrumSettingsChanged();
+}
+
+void Backend::loadTasks() {
+    QFile file(dockConfigPath(QStringLiteral("tasks.json")));
+    if (!file.open(QIODevice::ReadOnly))
+        return;
+
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
+    if (!document.isArray())
+        return;
+
+    QVariantList tasks;
+    for (const QJsonValue &value : document.array()) {
+        const QJsonObject object = value.toObject();
+        const QString id = object.value(QStringLiteral("id")).toString();
+        const QString text = object.value(QStringLiteral("text")).toString().trimmed();
+        if (id.isEmpty() || text.isEmpty())
+            continue;
+
+        QVariantMap task;
+        task.insert(QStringLiteral("id"), id);
+        task.insert(QStringLiteral("text"), text);
+        task.insert(QStringLiteral("done"), object.value(QStringLiteral("done")).toBool());
+        task.insert(QStringLiteral("createdAt"),
+            object.value(QStringLiteral("createdAt")).toString());
+        task.insert(QStringLiteral("doneAt"),
+            object.value(QStringLiteral("doneAt")).toString());
+        tasks.append(task);
+    }
+    m_tasks = tasks;
+}
+
+bool Backend::saveTasks() const {
+    const QString path = dockConfigPath(QStringLiteral("tasks.json"));
+    if (!QDir().mkpath(QFileInfo(path).absolutePath()))
+        return false;
+
+    QJsonArray array;
+    for (const QVariant &entry : m_tasks) {
+        const QVariantMap task = entry.toMap();
+        QJsonObject object;
+        object.insert(QStringLiteral("id"), task.value(QStringLiteral("id")).toString());
+        object.insert(QStringLiteral("text"), task.value(QStringLiteral("text")).toString());
+        object.insert(QStringLiteral("done"), task.value(QStringLiteral("done")).toBool());
+        object.insert(QStringLiteral("createdAt"),
+            task.value(QStringLiteral("createdAt")).toString());
+        object.insert(QStringLiteral("doneAt"), task.value(QStringLiteral("doneAt")).toString());
+        array.append(object);
+    }
+
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly))
+        return false;
+    if (file.write(QJsonDocument(array).toJson(QJsonDocument::Indented)) < 0)
+        return false;
+    return file.commit();
+}
+
+int Backend::taskIndex(const QString &id) const {
+    for (int index = 0; index < m_tasks.size(); ++index) {
+        if (m_tasks.at(index).toMap().value(QStringLiteral("id")).toString() == id)
+            return index;
+    }
+    return -1;
+}
+
+void Backend::addTask(const QString &text) {
+    const QString trimmed = text.trimmed();
+    if (trimmed.isEmpty())
+        return;
+
+    QVariantMap task;
+    task.insert(QStringLiteral("id"), QStringLiteral("%1-%2")
+        .arg(QDateTime::currentMSecsSinceEpoch())
+        .arg(QUuid::createUuid().toString(QUuid::Id128).left(8)));
+    task.insert(QStringLiteral("text"), trimmed);
+    task.insert(QStringLiteral("done"), false);
+    task.insert(QStringLiteral("createdAt"), timestamp());
+    task.insert(QStringLiteral("doneAt"), QString());
+
+    QVariantList next = m_tasks;
+    next.append(task);
+    m_tasks = next;
+    if (saveTasks())
+        emit tasksChanged();
+}
+
+void Backend::toggleTask(const QString &id) {
+    const int index = taskIndex(id);
+    if (index < 0)
+        return;
+
+    QVariantMap task = m_tasks.at(index).toMap();
+    const bool done = !task.value(QStringLiteral("done")).toBool();
+    task.insert(QStringLiteral("done"), done);
+    task.insert(QStringLiteral("doneAt"), done ? timestamp() : QString());
+    m_tasks[index] = task;
+    if (saveTasks())
+        emit tasksChanged();
+}
+
+void Backend::renameTask(const QString &id, const QString &text) {
+    const int index = taskIndex(id);
+    const QString trimmed = text.trimmed();
+    if (index < 0 || trimmed.isEmpty())
+        return;
+
+    QVariantMap task = m_tasks.at(index).toMap();
+    if (task.value(QStringLiteral("text")).toString() == trimmed)
+        return;
+    task.insert(QStringLiteral("text"), trimmed);
+    m_tasks[index] = task;
+    if (saveTasks())
+        emit tasksChanged();
+}
+
+void Backend::moveTask(const QString &id, int targetIndex) {
+    const int from = taskIndex(id);
+    if (from < 0 || m_tasks.size() < 2)
+        return;
+
+    targetIndex = qBound(0, targetIndex, m_tasks.size());
+    if (from == targetIndex || from + 1 == targetIndex)
+        return;
+
+    const QVariant task = m_tasks.takeAt(from);
+    if (from < targetIndex)
+        --targetIndex;
+    m_tasks.insert(targetIndex, task);
+    if (saveTasks())
+        emit tasksChanged();
+}
+
+void Backend::deleteTask(const QString &id) {
+    const int index = taskIndex(id);
+    if (index < 0)
+        return;
+
+    m_tasks.removeAt(index);
+    if (saveTasks())
+        emit tasksChanged();
 }
 
 Backend::~Backend() {

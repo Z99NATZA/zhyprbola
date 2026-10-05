@@ -200,7 +200,7 @@ Item {
 
     component DashedBorder: Item {
         id: border
-        property color lineColor: Theme.secondary
+        property color lineColor: "#CFD7DC"
         property int lineWidth: 1
         property int dash: 6
         property int gap: 5
@@ -216,7 +216,7 @@ Item {
                 radius: border.lineWidth / 2
                 x: border.cornerRadius + index * (border.dash + border.gap)
                 y: 0
-                color: border.lineColor
+                color: border.lineColor === undefined ? "#CFD7DC" : border.lineColor
             }
         }
 
@@ -229,7 +229,7 @@ Item {
                 radius: border.lineWidth / 2
                 x: border.cornerRadius + index * (border.dash + border.gap)
                 y: border.height - border.lineWidth
-                color: border.lineColor
+                color: border.lineColor === undefined ? "#CFD7DC" : border.lineColor
             }
         }
 
@@ -242,7 +242,7 @@ Item {
                 radius: border.lineWidth / 2
                 x: 0
                 y: border.cornerRadius + index * (border.dash + border.gap)
-                color: border.lineColor
+                color: border.lineColor === undefined ? "#CFD7DC" : border.lineColor
             }
         }
 
@@ -255,7 +255,7 @@ Item {
                 radius: border.lineWidth / 2
                 x: border.width - border.lineWidth
                 y: border.cornerRadius + index * (border.dash + border.gap)
-                color: border.lineColor
+                color: border.lineColor === undefined ? "#CFD7DC" : border.lineColor
             }
         }
     }

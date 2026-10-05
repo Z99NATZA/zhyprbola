@@ -125,7 +125,7 @@ Window {
                 anchors.rightMargin: 70 - 35 * stage.layoutProgress
                 y: 305 + 30 * stage.layoutProgress
                 width: 360 * stage.rightScale
-                height: 280 * stage.rightScale
+                height: 336 * stage.rightScale
                 visible: stage.todoEnabled
                 enabled: visible
 
@@ -138,7 +138,7 @@ Window {
             Item {
                 anchors.right: parent.right
                 anchors.rightMargin: 70 - 35 * stage.layoutProgress
-                y: 600 + 100 * stage.layoutProgress
+                y: 656 + 100 * stage.layoutProgress
                 width: 360 * stage.rightScale
                 height: 290 * stage.rightScale
                 visible: stage.calendarEnabled
