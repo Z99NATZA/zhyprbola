@@ -18,6 +18,7 @@ const DockPosition = Object.freeze({
 });
 
 const DEFAULT_DOCK_POSITION = DockPosition.BOTTOM;
+const SHOW_DESKTOP_SIZE = 10;
 
 const DOCK_CONFIG = Object.freeze({
     iconSize: 16,
@@ -77,6 +78,8 @@ const PANEL_TITLES = Object.freeze({
 export default class ZhyprbolaExtension extends Extension {
     enable() {
         this._dock = null;
+        this._showDesktopButton = null;
+        this._desktopWindows = null;
         this._layoutIdleId = 0;
         this._appRefreshId = 0;
         this._wallpaperRefreshId = 0;
@@ -230,6 +233,7 @@ export default class ZhyprbolaExtension extends Extension {
         }
         this._panelRequestMonitor?.cancel();
         this._panelRequestMonitor = null;
+        this._restoreDesktopWindows();
         this._destroyDock();
         this._appSystem = null;
         this._windowTracker = null;
@@ -307,7 +311,77 @@ export default class ZhyprbolaExtension extends Extension {
             affectsStruts: true,
             trackFullscreen: true,
         });
+        this._showDesktopButton = new St.Button({
+            style_class: 'zhyprbola-show-desktop',
+            reactive: true,
+            can_focus: true,
+            track_hover: true,
+            accessible_name: 'Show desktop / Restore windows',
+        });
+        this._showDesktopButton.connect('clicked', () => this._toggleDesktop());
+        if (this._desktopWindows)
+            this._showDesktopButton.add_style_pseudo_class('checked');
+        Main.layoutManager.addChrome(this._showDesktopButton, {
+            affectsStruts: false,
+            trackFullscreen: true,
+        });
         this._layoutDock();
+    }
+
+    _isComponentWindow(window) {
+        const title = window.get_title() ?? '';
+        const wmClass = window.get_wm_class() ?? '';
+        return title.startsWith('Zhyprbola ') || /zhyprbola/i.test(wmClass);
+    }
+
+    _toggleDesktop() {
+        const windows = global.display.list_all_windows();
+        const savedIds = new Set(this._desktopWindows?.ids ?? []);
+        if (windows.some(window => savedIds.has(window.get_stable_sequence()) &&
+            window.minimized)) {
+            this._restoreDesktopWindows();
+            return;
+        }
+
+        const workspace = global.workspace_manager.get_active_workspace();
+        const targets = global.display.sort_windows_by_stacking(windows.filter(window =>
+            !this._isComponentWindow(window) && !window.minimized &&
+            window.can_minimize() && window.located_on_workspace(workspace)));
+        const focused = global.display.focus_window;
+        this._desktopWindows = targets.length > 0 ? {
+            ids: targets.map(window => window.get_stable_sequence()),
+            focusedId: focused?.get_stable_sequence(),
+        } : null;
+        for (const window of targets)
+            window.minimize();
+        if (this._desktopWindows)
+            this._showDesktopButton.add_style_pseudo_class('checked');
+        else
+            this._showDesktopButton.remove_style_pseudo_class('checked');
+    }
+
+    _restoreDesktopWindows() {
+        const saved = this._desktopWindows;
+        this._desktopWindows = null;
+        this._showDesktopButton?.remove_style_pseudo_class('checked');
+        if (!saved)
+            return;
+
+        // Resolve live windows by ID so closed windows cannot leave stale objects.
+        const live = new Map(global.display.list_all_windows()
+            .map(window => [window.get_stable_sequence(), window]));
+        let restoreFocus = null;
+        for (const id of saved.ids) {
+            const window = live.get(id);
+            if (!window || this._isComponentWindow(window) || !window.minimized)
+                continue;
+            window.unminimize();
+            if (id === saved.focusedId)
+                restoreFocus = window;
+        }
+        if (restoreFocus?.located_on_workspace(
+            global.workspace_manager.get_active_workspace()))
+            restoreFocus.activate(global.get_current_time());
     }
 
     _createComponentButtons() {
@@ -1037,6 +1111,11 @@ export default class ZhyprbolaExtension extends Extension {
         this._overflowMenu = null;
         this._quickMenu?.destroy();
         this._quickMenu = null;
+        if (this._showDesktopButton) {
+            Main.layoutManager.removeChrome(this._showDesktopButton);
+            this._showDesktopButton.destroy();
+            this._showDesktopButton = null;
+        }
         Main.layoutManager.removeChrome(this._dock);
         this._dock.destroy();
         this._dock = null;
@@ -1706,7 +1785,10 @@ export default class ZhyprbolaExtension extends Extension {
             const region = this._dockRegions.get(name);
             region.set_size(vertical ? DOCK_CONFIG.buttonSize : regionLength,
                 vertical ? regionLength : DOCK_CONFIG.buttonSize);
-            this._renderDockRegion(name, regionLength, vertical, index);
+            const reserved = index === this._dockGroupOrder.length - 1
+                ? SHOW_DESKTOP_SIZE : 0;
+            this._renderDockRegion(name, Math.max(0, regionLength - reserved),
+                vertical, index);
         }
         this._dock.set_size(width, height);
 
@@ -1729,5 +1811,15 @@ export default class ZhyprbolaExtension extends Extension {
         }
 
         this._dock.set_position(x, y);
+        // A separate chrome actor bypasses dock padding and reaches both screen
+        // edges at the final corner, regardless of the Region 3 icon contents.
+        this._showDesktopButton.set_style(vertical
+            ? 'border-top-width: 1px; border-left-width: 0;'
+            : 'border-left-width: 1px; border-top-width: 0;');
+        this._showDesktopButton.set_size(vertical ? thickness : SHOW_DESKTOP_SIZE,
+            vertical ? SHOW_DESKTOP_SIZE : thickness);
+        this._showDesktopButton.set_position(
+            vertical ? x : monitor.x + monitor.width - SHOW_DESKTOP_SIZE,
+            vertical ? monitor.y + monitor.height - SHOW_DESKTOP_SIZE : y);
     }
 }

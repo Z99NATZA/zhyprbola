@@ -20,6 +20,23 @@
     spacing: 4px;
 }
 
+.zhyprbola-show-desktop {
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+    border: 0 solid rgba(255, 255, 255, 0.45);
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.zhyprbola-show-desktop:hover,
+.zhyprbola-show-desktop:focus {
+    background-color: rgba(255, 255, 255, 0.30);
+}
+
+.zhyprbola-show-desktop:checked {
+    background-color: rgba(255, 255, 255, 0.20);
+}
+
 .zhyprbola-dock-app-button,
 .zhyprbola-dock-button {
     width: 27px;
