@@ -25,9 +25,8 @@ const DOCK_CONFIG = Object.freeze({
     padding: 4,
 });
 
-const DEFAULT_DOCK_GROUPS = ['zhyprbola', 'apps', 'running'];
-const DOCK_REGIONS = ['empty', 'launchers', 'zhyprbola'];
-const LAUNCHER_GROUPS = ['apps', 'running'];
+const DEFAULT_DOCK_GROUPS = ['zhyprbola', 'running'];
+const DOCK_REGIONS = ['empty', 'running', 'zhyprbola'];
 const DOCK_COMPONENTS = [
     ['settings', 'Zhyprbola settings'],
     ['bluetooth', 'Bluetooth'],
@@ -41,14 +40,6 @@ const DOCK_COMPONENTS = [
     ['input-source', 'Input Source'],
     ['power', 'Power'],
 ];
-const DEFAULT_PINNED_APPS = [
-    ['google-chrome.desktop', 'com.google.Chrome.desktop', 'chromium.desktop'],
-    ['org.gnome.Terminal.desktop', 'org.gnome.Console.desktop', 'kgx.desktop',
-        'kitty.desktop'],
-    ['org.gnome.TextEditor.desktop', 'org.gnome.gedit.desktop', 'xpad.desktop'],
-    ['code.desktop', 'code-oss.desktop'],
-];
-
 const THEMES = [
     {name: 'current', wallpaper: '1.png', iconColor: '#875a82'},
     {name: 'white', wallpaper: '2.png', iconColor: '#467b9d'},
@@ -106,8 +97,6 @@ export default class ZhyprbolaExtension extends Extension {
             GLib.get_user_config_dir(), 'zhyprbola', 'dock-group-order']);
         this._dockComponentsPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'dock-components']);
-        this._pinnedAppsPath = GLib.build_filenamev([
-            GLib.get_user_config_dir(), 'zhyprbola', 'pinned-apps']);
         this._themeName = this._readTheme();
         this._dockPosition = this._readDockPosition();
         this._dockBgOpacity = this._readDockBgOpacity();
@@ -118,7 +107,6 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockGroups = this._readDockGroups();
         this._dockGroupOrder = this._readDockGroupOrder();
         this._dockComponents = this._readDockComponents();
-        this._pinnedApps = this._readPinnedApps();
         this._appSystem = Shell.AppSystem.get_default();
         this._windowTracker = Shell.WindowTracker.get_default();
         this._backgroundSettings = new Gio.Settings({
@@ -217,8 +205,7 @@ export default class ZhyprbolaExtension extends Extension {
             this._dockRegions.set(name, region);
             if (name === 'empty')
                 continue;
-            if (name === 'launchers' &&
-                !LAUNCHER_GROUPS.some(group => this._dockGroups.includes(group)))
+            if (name === 'running' && !this._dockGroups.includes(name))
                 continue;
 
             const group = new St.BoxLayout({
@@ -250,22 +237,6 @@ export default class ZhyprbolaExtension extends Extension {
             name,
             label: labels.get(name),
         })));
-    }
-
-    _pinnedShellApps() {
-        const entries = this._pinnedApps
-            ? this._pinnedApps.map(id => [id]) : DEFAULT_PINNED_APPS;
-        const apps = [];
-        const ids = new Set();
-        for (const candidates of entries) {
-            const app = candidates.map(id => this._appSystem.lookup_app(id))
-                .find(candidate => candidate);
-            if (app && !ids.has(app.get_id())) {
-                apps.push(app);
-                ids.add(app.get_id());
-            }
-        }
-        return apps;
     }
 
     _createAppButton(app, running, window = null) {
@@ -385,45 +356,19 @@ export default class ZhyprbolaExtension extends Extension {
     _refreshAppGroups() {
         if (!this._dockGroupsByName)
             return;
-        const pinned = this._pinnedShellApps();
-        const pinnedItems = [];
-        for (const app of pinned) {
-            const windows = this._windowItemsForApp(app);
-            if (this._dockUngroupWindows && windows.length > 0)
-                pinnedItems.push(...windows);
-            else
-                pinnedItems.push({
-                    kind: 'app', app, label: app.get_name(), running: windows.length > 0,
-                });
-        }
-        this._dockItems.set('apps', pinnedItems);
-
-        const pinnedIds = new Set(pinned.map(app => app.get_id()));
         const running = [];
         for (const app of this._appSystem.get_running()) {
-            const windows = app.get_windows();
-            if (pinnedIds.has(app.get_id()) || windows.length === 0 ||
-                windows.every(window => window.get_title()?.startsWith('Zhyprbola ')))
+            const windows = this._windowItemsForApp(app);
+            if (windows.length === 0)
                 continue;
             if (this._dockUngroupWindows)
-                running.push(...this._windowItemsForApp(app));
+                running.push(...windows);
             else
                 running.push({kind: 'app', app, label: app.get_name(), running: true});
         }
         this._dockItems.set('running', this._orderRunningItems(running));
-        this._dockRenderState.delete('apps');
         this._dockRenderState.delete('running');
-        this._dockRenderState.delete('launchers');
         this._queueLayout();
-    }
-
-    _launcherItems() {
-        const items = [];
-        for (const name of this._dockGroupOrder) {
-            if (LAUNCHER_GROUPS.includes(name) && this._dockGroups.includes(name))
-                items.push(...(this._dockItems.get(name) ?? []));
-        }
-        return items;
     }
 
     _queueAppRefresh() {
@@ -518,9 +463,15 @@ export default class ZhyprbolaExtension extends Extension {
     _readDockGroups() {
         try {
             const [, contents] = GLib.file_get_contents(this._dockGroupsPath);
-            const names = new TextDecoder().decode(contents).trim()
-                .split(/[\s,]+/).filter(name => DEFAULT_DOCK_GROUPS.includes(name));
-            const groups = [...new Set(names)];
+            const names = new TextDecoder().decode(contents).trim().split(/[\s,]+/)
+                .filter(Boolean);
+            const groups = [];
+            for (const name of names) {
+                if (DEFAULT_DOCK_GROUPS.includes(name) && !groups.includes(name))
+                    groups.push(name);
+                else if (name === 'apps' && !groups.includes('running'))
+                    groups.push('running');
+            }
             if (!groups.includes('zhyprbola'))
                 groups.push('zhyprbola');
             return groups;
@@ -562,16 +513,6 @@ export default class ZhyprbolaExtension extends Extension {
         }
     }
 
-    _readPinnedApps() {
-        try {
-            const [, contents] = GLib.file_get_contents(this._pinnedAppsPath);
-            return new TextDecoder().decode(contents).trim()
-                .split(/[\s,]+/).filter(Boolean);
-        } catch (_) {
-            return null;
-        }
-    }
-
     _watchSettings() {
         const directory = GLib.path_get_dirname(this._themePath);
         try {
@@ -603,7 +544,6 @@ export default class ZhyprbolaExtension extends Extension {
         const dockGroups = this._readDockGroups();
         const dockGroupOrder = this._readDockGroupOrder();
         const dockComponents = this._readDockComponents();
-        const pinnedApps = this._readPinnedApps();
         const themeChanged = theme !== this._themeName;
         const positionChanged = position !== this._dockPosition;
         const bgOpacityChanged = bgOpacity !== this._dockBgOpacity;
@@ -612,8 +552,7 @@ export default class ZhyprbolaExtension extends Extension {
         const edgeChanged = edgeEnabled !== this._edgeEnabled ||
             edgePosition !== this._edgePosition;
         const groupsChanged = dockGroups.join(',') !== this._dockGroups.join(',') ||
-            dockGroupOrder.join(',') !== this._dockGroupOrder.join(',') ||
-            JSON.stringify(pinnedApps) !== JSON.stringify(this._pinnedApps);
+            dockGroupOrder.join(',') !== this._dockGroupOrder.join(',');
         const componentsChanged = dockComponents.visible.join(',') !==
             this._dockComponents.visible.join(',') || dockComponents.hidden.join(',') !==
             this._dockComponents.hidden.join(',');
@@ -628,8 +567,6 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockGroups = dockGroups;
         this._dockGroupOrder = dockGroupOrder;
         this._dockComponents = dockComponents;
-        this._pinnedApps = pinnedApps;
-
         if (positionChanged || groupsChanged || componentsChanged || dockUngroupWindowsChanged)
             this._rebuildDock();
         else if (themeChanged)
@@ -1324,7 +1261,6 @@ export default class ZhyprbolaExtension extends Extension {
         const width = vertical ? thickness : monitor.width;
         const height = vertical ? monitor.height : thickness;
         const available = (vertical ? height : width) - 2 * DOCK_CONFIG.padding;
-        this._dockItems.set('launchers', this._launcherItems());
         for (const [index, name] of DOCK_REGIONS.entries()) {
             const start = Math.floor(available * index / DOCK_REGIONS.length);
             const end = Math.floor(available * (index + 1) / DOCK_REGIONS.length);

@@ -225,10 +225,8 @@ private:
     QString m_themeName = QStringLiteral("current");
     QString m_dockPosition = QStringLiteral("bottom");
     int m_dockBgOpacity = 50;
-    QStringList m_dockGroups = {QStringLiteral("zhyprbola"),
-        QStringLiteral("apps"), QStringLiteral("running")};
-    QStringList m_dockGroupOrder = {QStringLiteral("zhyprbola"),
-        QStringLiteral("apps"), QStringLiteral("running")};
+    QStringList m_dockGroups = {QStringLiteral("zhyprbola"), QStringLiteral("running")};
+    QStringList m_dockGroupOrder = {QStringLiteral("zhyprbola"), QStringLiteral("running")};
     QStringList m_dockVisibleComponents;
     QStringList m_dockHiddenComponents;
     bool m_dockUngroupWindows = false;

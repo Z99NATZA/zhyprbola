@@ -17,7 +17,7 @@ Item {
         Math.floor((contentWidth - dockPositionGap * 3) / 4)
     readonly property int dockGroupCardGap: 8
     readonly property int dockGroupCardWidth:
-        Math.floor((contentWidth - dockGroupCardGap * 2) / 3)
+        Math.floor((contentWidth - dockGroupCardGap) / 2)
     readonly property int dockGroupStep: dockGroupCardWidth + dockGroupCardGap
     readonly property int dockToggleWidth:
         Math.floor((contentWidth - contentItemGap) / 2)
@@ -44,7 +44,7 @@ Item {
         {key: "bottom", label: "Bottom"}
     ]
     readonly property var groupLabels: ({
-        apps: "Apps", zhyprbola: "Zhyprbola", running: "Running"
+        zhyprbola: "Zhyprbola", running: "Running"
     })
     property string draggedGroup: ""
     property bool draggingGroup: false
@@ -620,8 +620,6 @@ Item {
                 model: [
                     {key: "zhyprbola", label: panel.groupLabels.zhyprbola,
                         active: backend.dockGroups.includes("zhyprbola"), locked: true},
-                    {key: "apps", label: panel.groupLabels.apps,
-                        active: backend.dockGroups.includes("apps"), locked: false},
                     {key: "running", label: panel.groupLabels.running,
                         active: backend.dockGroups.includes("running"), locked: false},
                     {key: "ungroup-windows", label: "Ungroup Windows",
