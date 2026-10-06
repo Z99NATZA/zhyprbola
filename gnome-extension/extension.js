@@ -1516,6 +1516,7 @@ export default class ZhyprbolaExtension extends Extension {
         const sources = this._inputSources();
         const current = this._currentInputSourceIndex(sources);
         menu.actor.add_style_class_name('zhyprbola-input-source-menu');
+        menu.actor.add_style_class_name(`zhyprbola-input-source-${theme.name}`);
         menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor};`);
         for (const [index, source] of sources.entries()) {
             const item = menu.addAction(this._inputSourceName(source), () => {
@@ -1526,6 +1527,7 @@ export default class ZhyprbolaExtension extends Extension {
                 this._queueInputSourceRefresh();
             });
             item.actor.add_style_class_name('zhyprbola-input-source-item');
+            item.set_style(`color: ${theme.iconColor};`);
             item.label.x_expand = true;
             item.label.set_style(`color: ${theme.iconColor};`);
             const code = new St.Label({
@@ -1534,8 +1536,8 @@ export default class ZhyprbolaExtension extends Extension {
             });
             code.set_style(`color: ${theme.iconColor};`);
             item.actor.add_child(code);
-            if (index === current)
-                item.setOrnament(PopupMenu.Ornament.DOT);
+            // NONE keeps the ornament column visible, unlike the default HIDDEN.
+            item.setOrnament(index === current ? PopupMenu.Ornament.DOT : PopupMenu.Ornament.NONE);
         }
         Main.uiGroup.add_child(menu.actor);
         menu.actor.hide();

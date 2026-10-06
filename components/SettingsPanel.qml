@@ -716,7 +716,7 @@ Item {
             Text {
                 x: 16
                 y: 10
-                text: "BG Opacity"
+                text: "Dock Background Opacity"
                 color: Theme.text
                 font.family: Qt.application.font.family
                 font.pixelSize: 14

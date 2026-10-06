@@ -226,15 +226,65 @@
     -slider-handle-radius: 6px;
 }
 
-.zhyprbola-input-source-item {
+.zhyprbola-input-source-menu .zhyprbola-input-source-item {
     border-radius: 8px;
     padding: 7px 10px;
     spacing: 14px;
 }
 
-.zhyprbola-input-source-item:hover,
-.zhyprbola-input-source-item:selected {
-    background-color: rgba(70, 123, 157, 0.10);
+.zhyprbola-input-source-menu .zhyprbola-input-source-item .popup-menu-ornament {
+    width: 16px;
+    min-width: 16px;
+    color: inherit;
+}
+
+.zhyprbola-input-source-menu .zhyprbola-input-source-item:hover,
+.zhyprbola-input-source-menu .zhyprbola-input-source-item:focus,
+.zhyprbola-input-source-menu .zhyprbola-input-source-item:active,
+.zhyprbola-input-source-menu .zhyprbola-input-source-item:selected {
+    background-color: #e9dde9 !important;
+}
+
+.zhyprbola-input-source-white .zhyprbola-input-source-item:hover,
+.zhyprbola-input-source-white .zhyprbola-input-source-item:focus,
+.zhyprbola-input-source-white .zhyprbola-input-source-item:active,
+.zhyprbola-input-source-white .zhyprbola-input-source-item:selected {
+    background-color: #ddeaf0 !important;
+}
+
+.zhyprbola-input-source-white-sky .zhyprbola-input-source-item:hover,
+.zhyprbola-input-source-white-sky .zhyprbola-input-source-item:focus,
+.zhyprbola-input-source-white-sky .zhyprbola-input-source-item:active,
+.zhyprbola-input-source-white-sky .zhyprbola-input-source-item:selected {
+    background-color: #dceeff !important;
+}
+
+.zhyprbola-input-source-forest .zhyprbola-input-source-item:hover,
+.zhyprbola-input-source-forest .zhyprbola-input-source-item:focus,
+.zhyprbola-input-source-forest .zhyprbola-input-source-item:active,
+.zhyprbola-input-source-forest .zhyprbola-input-source-item:selected {
+    background-color: #d9eae1 !important;
+}
+
+.zhyprbola-input-source-one-half-gray .zhyprbola-input-source-item:hover,
+.zhyprbola-input-source-one-half-gray .zhyprbola-input-source-item:focus,
+.zhyprbola-input-source-one-half-gray .zhyprbola-input-source-item:active,
+.zhyprbola-input-source-one-half-gray .zhyprbola-input-source-item:selected {
+    background-color: #e0e5e8 !important;
+}
+
+.zhyprbola-input-source-red .zhyprbola-input-source-item:hover,
+.zhyprbola-input-source-red .zhyprbola-input-source-item:focus,
+.zhyprbola-input-source-red .zhyprbola-input-source-item:active,
+.zhyprbola-input-source-red .zhyprbola-input-source-item:selected {
+    background-color: #f5dce4 !important;
+}
+
+.zhyprbola-input-source-mauve .zhyprbola-input-source-item:hover,
+.zhyprbola-input-source-mauve .zhyprbola-input-source-item:focus,
+.zhyprbola-input-source-mauve .zhyprbola-input-source-item:active,
+.zhyprbola-input-source-mauve .zhyprbola-input-source-item:selected {
+    background-color: #f7dce5 !important;
 }
 
 .zhyprbola-input-source-code {
