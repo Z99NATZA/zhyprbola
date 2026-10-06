@@ -17,6 +17,9 @@ class Actor {
         callbacks.push(callback);
         this.signals.set(name, callbacks);
     }
+    add_action(action) { (this.actions ??= []).push(action); }
+    hide() { this.visible = false; }
+    navigate_focus() { this.focusNavigated = true; }
     emit(name) {
         for (const callback of this.signals.get(name) ?? [])
             callback(this);
@@ -54,17 +57,32 @@ class Actor {
     ease(props) { this.live(); Object.assign(this, props); }
 }
 
+class NativeAppMenu {
+    constructor(sourceActor, side, options) {
+        Object.assign(this, {sourceActor, side, options, actor: new Actor(), isOpen: false});
+    }
+    setApp(app) { this.app = app; }
+    open() { this.isOpen = true; }
+    close() { this.isOpen = false; }
+    toggle() { this.isOpen = !this.isOpen; }
+    destroy() { this.close(); this.actor.destroy(); this.destroyed = true; }
+}
+
 function fixture(length = 400) {
     const idles = new Map();
     let nextId = 0;
     const context = vm.createContext({
-        St: {Widget: Actor, Icon: Actor, Button: Actor},
-        Clutter: {FixedLayout: class {}, AnimationMode: {EASE_OUT_QUAD: 0}},
+        St: {Widget: Actor, Icon: Actor, Button: Actor, ButtonMask: {ONE: 1},
+            Side: {LEFT: 0, RIGHT: 1, TOP: 2, BOTTOM: 3},
+            DirectionType: {TAB_FORWARD: 0}},
+        Clutter: {FixedLayout: class {}, AnimationMode: {EASE_OUT_QUAD: 0},
+            ClickGesture: Actor, BUTTON_SECONDARY: 3},
         DND: {makeDraggable: actor => (actor.draggable = new Actor())},
         GLib: {PRIORITY_DEFAULT_IDLE: 0, SOURCE_REMOVE: false,
             idle_add: (_, callback) => { idles.set(++nextId, callback); return nextId; }},
         Main: {layoutManager: {primaryMonitor: {x: 0, y: 0, width: length + 8, height: 900},
-            removeChrome() {}}},
+            removeChrome() {}}, uiGroup: new Actor()},
+        AppMenu: NativeAppMenu,
         Extension: class {},
     });
     const source = readFileSync(new URL('../gnome-extension/extension.js', import.meta.url), 'utf8');
@@ -80,6 +98,7 @@ function fixture(length = 400) {
         _dockRegions: new Map([['running', new Actor()]]),
         _dockItems: new Map([['running', []]]), _dockRenderState: new Map(),
         _showDesktopButton: new Actor(), _panelIcons: new Map(),
+        _menuManager: {menus: [], addMenu(menu) { this.menus.push(menu); }},
         _layoutEdgeSpectrum() {},
     });
     const flush = () => {
@@ -370,4 +389,80 @@ test('Sound appears in Quick on a fresh configuration', () => {
     const layout = dock._readDockComponents();
     assert.equal(layout.visible.includes('sound'), false);
     assert.equal(layout.quick.includes('sound'), true);
+});
+
+test('right-click opens GNOME menus for Apps and Running without activating a window', () => {
+    for (const name of ['apps', 'running']) {
+        const {dock, group} = fixture();
+        const entry = item(1);
+        const button = dock._createAppButton(entry, name);
+        group.add_child(button);
+        let activations = 0;
+        dock._activateWindow = () => { activations++; };
+        assert.equal(button.button_mask, 1);
+        const gesture = button.actions[0];
+        assert.equal(gesture.required_button, 3);
+        assert.equal(gesture.recognize_on_press, true);
+        gesture.emit('recognize');
+        assert.equal(activations, 0);
+        assert.equal(dock._appMenu.app, entry.app);
+        assert.equal(dock._appMenu.isOpen, true);
+        assert.equal(dock._appMenu.options.favoritesSection, false);
+        assert.equal(dock._appMenu.options.showSingleWindows, true);
+        button.emit('clicked');
+        assert.equal(activations, 1);
+    }
+});
+
+test('repeated right-click toggles the existing menu and switching icons destroys it', () => {
+    const {dock, group, render} = fixture();
+    render([item(1), item(2)]);
+    const [a, b] = group.children;
+    a.actions[0].emit('recognize');
+    const menu = dock._appMenu;
+    a.actions[0].emit('recognize');
+    assert.equal(menu.isOpen, false);
+    assert.equal(dock._appMenu, menu);
+    b.actions[0].emit('recognize');
+    assert.equal(menu.destroyed, true);
+    assert.equal(dock._appMenu.sourceActor, b);
+    assert.equal(dock._appMenu.isOpen, true);
+});
+
+test('a menu survives focus refresh but is destroyed when its source window closes', () => {
+    const {dock, group, render} = fixture();
+    const entry = item(1);
+    render([entry]);
+    group.children[0].actions[0].emit('recognize');
+    const menu = dock._appMenu;
+    render([{...entry, label: 'New title'}, item(2)]);
+    assert.equal(dock._appMenu, menu);
+    assert.equal(menu.isOpen, true);
+    render([item(2)]);
+    assert.equal(menu.destroyed, true);
+    assert.equal(dock._appMenu, null);
+});
+
+test('keyboard popup focuses the menu and dragging closes it without reopening', () => {
+    const {dock, group, render} = fixture();
+    render([item(1)]);
+    const button = group.children[0];
+    button.emit('popup-menu');
+    const menu = dock._appMenu;
+    assert.equal(menu.actor.focusNavigated, true);
+    button.draggable.emit('drag-begin');
+    assert.equal(menu.isOpen, false);
+    button.actions[0].emit('recognize');
+    assert.equal(menu.isOpen, false);
+    button.draggable.emit('drag-end');
+});
+
+test('dock teardown destroys the context menu before its source actor', () => {
+    const {dock, group, render} = fixture();
+    render([item(1)]);
+    group.children[0].actions[0].emit('recognize');
+    const menu = dock._appMenu;
+    dock._destroyDock();
+    assert.equal(menu.destroyed, true);
+    assert.equal(dock._appMenu, null);
 });

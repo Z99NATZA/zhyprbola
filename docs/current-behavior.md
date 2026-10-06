@@ -24,6 +24,10 @@ Regions are ordered by dock-group-order and may contain Apps launchers, running 
 
 When ungroup windows is enabled, running apps render one icon per window.
 Running apps include open windows even when the app also appears in Apps.
+Right-click an Apps or Running icon to open GNOME's app menu, including open
+windows, New Window, desktop actions, and Quit when supported by the app.
+The keyboard menu key / Shift+F10 opens the same menu. Pin to Dash is omitted
+because this dock keeps its Apps launchers in its own pinned-apps config.
 The Show Desktop strip hides visible, minimizable windows on the current
 workspace first, excluding Zhyprbola panels. When no such windows are visible,
 it restores the windows it hid on that workspace. Hide history is retained per

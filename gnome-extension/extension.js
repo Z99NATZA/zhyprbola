@@ -5,6 +5,7 @@ import Shell from 'gi://Shell';
 import St from 'gi://St';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {AppMenu} from 'resource:///org/gnome/shell/ui/appMenu.js';
 import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -85,6 +86,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockRebuildPending = false;
         this._dock = null;
         this._showDesktopButton = null;
+        this._appMenu = null;
+        this._appMenuApp = null;
         this._desktopWindows = new Map();
         this._layoutIdleId = 0;
         this._appRefreshId = 0;
@@ -461,6 +464,7 @@ export default class ZhyprbolaExtension extends Extension {
         content.add_child(indicator);
         const button = new St.Button({
             style_class: 'zhyprbola-dock-app-button',
+            button_mask: St.ButtonMask.ONE,
             child: content,
             can_focus: true,
             reactive: true,
@@ -497,9 +501,24 @@ export default class ZhyprbolaExtension extends Extension {
             getDragActorSource: () => button,
         };
         const delegate = button._delegate;
+        const rightClick = new Clutter.ClickGesture({
+            required_button: Clutter.BUTTON_SECONDARY,
+            recognize_on_press: true,
+        });
+        rightClick.connect('recognize', () => this._openAppMenu(button));
+        button.add_action(rightClick);
+        button.connect('popup-menu', () => {
+            this._openAppMenu(button);
+            this._appMenu?.actor.navigate_focus(null, St.DirectionType.TAB_FORWARD, false);
+        });
         button.connect('notify::pressed', () => this._trackDockInteraction(delegate));
         button.connect('destroy', () => {
             delegate.destroyed = true;
+            if (this._appMenu?.sourceActor === button) {
+                this._appMenu.destroy();
+                this._appMenu = null;
+                this._appMenuApp = null;
+            }
             this._dockInteractions.delete(delegate);
         });
         this._updateAppButton(button, item);
@@ -507,6 +526,7 @@ export default class ZhyprbolaExtension extends Extension {
         draggable.connect('drag-begin', () => {
             if (delegate.destroyed)
                 return;
+            this._appMenu?.close();
             delegate.dragging = true;
             this._trackDockInteraction(delegate);
             const group = button.get_parent();
@@ -539,6 +559,37 @@ export default class ZhyprbolaExtension extends Extension {
         // until drag-end, when DND releases its modal grab and source actor.
         draggable.connect('drag-cancelled', finishDrag);
         return button;
+    }
+
+    _openAppMenu(button) {
+        const delegate = button._delegate;
+        if (!this._dock || delegate.destroyed || delegate.dragging)
+            return;
+        const {app} = delegate.item;
+        if (this._appMenu?.sourceActor === button && this._appMenuApp === app) {
+            this._appMenu.toggle();
+            return;
+        }
+        this._appMenu?.destroy();
+        const side = {
+            [DockPosition.LEFT]: St.Side.RIGHT,
+            [DockPosition.RIGHT]: St.Side.LEFT,
+            [DockPosition.TOP]: St.Side.BOTTOM,
+            [DockPosition.BOTTOM]: St.Side.TOP,
+        }[this._dockPosition];
+        // Apps has its own pinned-apps config; GNOME's Pin to Dash action
+        // would update a different list and have no effect on this dock.
+        const menu = new AppMenu(button, side, {
+            favoritesSection: false,
+            showSingleWindows: true,
+        });
+        menu.setApp(app);
+        Main.uiGroup.add_child(menu.actor);
+        menu.actor.hide();
+        this._menuManager.addMenu(menu);
+        this._appMenu = menu;
+        this._appMenuApp = app;
+        menu.open();
     }
 
     _trackDockInteraction(delegate) {
@@ -1140,6 +1191,9 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _applyTheme() {
+        this._appMenu?.destroy();
+        this._appMenu = null;
+        this._appMenuApp = null;
         if (this._themeName === 'white' || this._themeName === 'white-sky') {
             this._dock.add_style_class_name('zhyprbola-dock-white');
         } else {
@@ -1210,6 +1264,10 @@ export default class ZhyprbolaExtension extends Extension {
     _destroyDock() {
         if (!this._dock)
             return;
+
+        this._appMenu?.destroy();
+        this._appMenu = null;
+        this._appMenuApp = null;
 
         // Destroy the drag clone while its source is still alive so DND can
         // cancel and release its modal grab before the dock is destroyed.
