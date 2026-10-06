@@ -49,6 +49,8 @@ class Actor {
     set_style() { this.live(); }
     add_style_class_name() { this.live(); }
     remove_style_class_name() { this.live(); }
+    add_style_pseudo_class() { this.live(); }
+    remove_style_pseudo_class() { this.live(); }
     ease(props) { this.live(); Object.assign(this, props); }
 }
 
@@ -93,7 +95,7 @@ function fixture(length = 400) {
         dock._queueLayout();
         flush();
     };
-    return {dock, group, render, flush, idles};
+    return {dock, group, render, flush, idles, context};
 }
 
 function item(id, label = id) {
@@ -225,4 +227,115 @@ test('dock teardown cancels the drag clone while the source is still alive', () 
     assert.equal(button.destroyed, true);
     assert.equal(dock._dockInteractions.size, 0);
     assert.equal(idles.size, 0);
+});
+
+function desktopFixture() {
+    const {dock, context} = fixture();
+    const workspace = {}, otherWorkspace = {};
+    let activeWorkspace = workspace;
+    const windows = [];
+    const display = {focus_window: null, list_all_windows: () => windows,
+        sort_windows_by_stacking: values => values};
+    context.global = {display, get_current_time: () => 123,
+        workspace_manager: {get_active_workspace: () => activeWorkspace}};
+    dock._desktopWindows = new Map();
+    const addWindow = (id, options = {}) => {
+        const window = {id, minimized: false, workspace, title: 'Example', wmClass: 'Example',
+            minimizable: true, minimizeCalls: 0, restoreCalls: 0, activateCalls: 0,
+            get_stable_sequence() { return this.id; }, get_title() { return this.title; },
+            get_wm_class() { return this.wmClass; }, can_minimize() { return this.minimizable; },
+            located_on_workspace(value) { return this.workspace === value; },
+            minimize() { this.minimized = true; this.minimizeCalls++; },
+            unminimize() { this.minimized = false; this.restoreCalls++; },
+            activate() { this.activateCalls++; }, ...options};
+        windows.push(window);
+        return window;
+    };
+    return {dock, display, windows, workspace, otherWorkspace, addWindow,
+        switchWorkspace(value) { activeWorkspace = value; }};
+}
+
+test('show desktop hides on the first click and restores only its own windows', () => {
+    const {dock, display, addWindow} = desktopFixture();
+    const a = addWindow(1), b = addWindow(2), preMinimized = addWindow(3, {minimized: true});
+    const component = addWindow(4, {title: 'Zhyprbola Settings'});
+    const fixed = addWindow(5, {minimizable: false});
+    display.focus_window = a;
+    dock._toggleDesktop();
+    assert.equal(a.minimized, true);
+    assert.equal(b.minimized, true);
+    assert.equal(component.minimized, false);
+    assert.equal(fixed.minimized, false);
+    dock._toggleDesktop();
+    assert.equal(a.minimized, false);
+    assert.equal(b.minimized, false);
+    assert.equal(preMinimized.minimized, true);
+    assert.equal(a.activateCalls, 1);
+});
+
+test('partially reopening saved windows still hides visible windows in one click', () => {
+    const {dock, addWindow} = desktopFixture();
+    const a = addWindow(1), b = addWindow(2);
+    dock._toggleDesktop();
+    a.unminimize();
+    dock._toggleDesktop();
+    assert.equal(a.minimized, true);
+    assert.equal(b.minimized, true);
+    assert.equal(b.restoreCalls, 0);
+    dock._toggleDesktop();
+    assert.equal(a.minimized, false);
+    assert.equal(b.minimized, false);
+});
+
+test('a new visible window is hidden without restoring windows from the previous round', () => {
+    const {dock, addWindow} = desktopFixture();
+    const a = addWindow(1);
+    dock._toggleDesktop();
+    const b = addWindow(2);
+    dock._toggleDesktop();
+    assert.equal(a.minimized, true);
+    assert.equal(b.minimized, true);
+    dock._toggleDesktop();
+    assert.equal(a.minimized, false);
+    assert.equal(b.minimized, false);
+});
+
+test('each workspace retains its own hide and restore history', () => {
+    const {dock, addWindow, workspace, otherWorkspace, switchWorkspace} = desktopFixture();
+    const a = addWindow(1), b = addWindow(2, {workspace: otherWorkspace});
+    dock._toggleDesktop();
+    switchWorkspace(otherWorkspace);
+    dock._toggleDesktop();
+    assert.equal(a.minimized, true);
+    assert.equal(b.minimized, true);
+    dock._toggleDesktop();
+    assert.equal(a.minimized, true);
+    assert.equal(b.minimized, false);
+    switchWorkspace(workspace);
+    dock._toggleDesktop();
+    assert.equal(a.minimized, false);
+});
+
+test('restoring ignores closed windows and windows moved to another workspace', () => {
+    const {dock, addWindow, windows, otherWorkspace} = desktopFixture();
+    const closed = addWindow(1), moved = addWindow(2), live = addWindow(3);
+    dock._toggleDesktop();
+    windows.splice(windows.indexOf(closed), 1);
+    moved.workspace = otherWorkspace;
+    dock._toggleDesktop();
+    assert.equal(closed.restoreCalls, 0);
+    assert.equal(moved.minimized, true);
+    assert.equal(live.minimized, false);
+});
+
+test('disabling restores windows hidden on every workspace', () => {
+    const {dock, addWindow, otherWorkspace, switchWorkspace} = desktopFixture();
+    const a = addWindow(1), b = addWindow(2, {workspace: otherWorkspace});
+    dock._toggleDesktop();
+    switchWorkspace(otherWorkspace);
+    dock._toggleDesktop();
+    dock._restoreDesktopWindows();
+    assert.equal(a.minimized, false);
+    assert.equal(b.minimized, false);
+    assert.equal(dock._desktopWindows.size, 0);
 });

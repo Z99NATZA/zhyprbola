@@ -83,7 +83,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockRebuildPending = false;
         this._dock = null;
         this._showDesktopButton = null;
-        this._desktopWindows = null;
+        this._desktopWindows = new Map();
         this._layoutIdleId = 0;
         this._appRefreshId = 0;
         this._wallpaperRefreshId = 0;
@@ -176,8 +176,11 @@ export default class ZhyprbolaExtension extends Extension {
                     this._windowBeforeSettings = null;
                 if (focused)
                     this._lastFocusedWindow = focused;
+                this._updateShowDesktopState();
                 this._queueAppRefresh();
             }, this);
+        global.workspace_manager.connectObject('active-workspace-changed',
+            () => this._updateShowDesktopState(), this);
         Main.layoutManager.connectObject('monitors-changed', () => {
             this._queueLayout();
             this._restartEdgeSpectrum();
@@ -197,6 +200,7 @@ export default class ZhyprbolaExtension extends Extension {
     disable() {
         this._disabling = true;
         global.display.disconnectObject(this);
+        global.workspace_manager.disconnectObject(this);
         Main.layoutManager.disconnectObject(this);
         this._appSystem.disconnectObject(this);
         this._windowTracker.disconnectObject(this);
@@ -324,8 +328,7 @@ export default class ZhyprbolaExtension extends Extension {
             accessible_name: 'Show desktop / Restore windows',
         });
         this._showDesktopButton.connect('clicked', () => this._toggleDesktop());
-        if (this._desktopWindows)
-            this._showDesktopButton.add_style_pseudo_class('checked');
+        this._updateShowDesktopState();
         Main.layoutManager.addChrome(this._showDesktopButton, {
             affectsStruts: false,
             trackFullscreen: true,
@@ -341,52 +344,67 @@ export default class ZhyprbolaExtension extends Extension {
 
     _toggleDesktop() {
         const windows = global.display.list_all_windows();
-        const savedIds = new Set(this._desktopWindows?.ids ?? []);
-        if (windows.some(window => savedIds.has(window.get_stable_sequence()) &&
-            window.minimized)) {
-            this._restoreDesktopWindows();
-            return;
-        }
-
         const workspace = global.workspace_manager.get_active_workspace();
         const targets = global.display.sort_windows_by_stacking(windows.filter(window =>
             !this._isComponentWindow(window) && !window.minimized &&
             window.can_minimize() && window.located_on_workspace(workspace)));
+        // Visible windows take priority over an earlier hide operation. A
+        // partially restored desktop must not require two clicks to hide again.
+        if (targets.length === 0) {
+            this._restoreDesktopWindows(workspace);
+            return;
+        }
+
+        const savedIds = new Set(this._desktopWindows.get(workspace)?.ids ?? []);
+        const stillHidden = windows.filter(window =>
+            savedIds.has(window.get_stable_sequence()) && window.minimized &&
+            !this._isComponentWindow(window) && window.located_on_workspace(workspace));
         const focused = global.display.focus_window;
-        this._desktopWindows = targets.length > 0 ? {
-            ids: targets.map(window => window.get_stable_sequence()),
+        this._desktopWindows.set(workspace, {
+            ids: [...stillHidden, ...targets].map(window => window.get_stable_sequence()),
             focusedId: focused?.get_stable_sequence(),
-        } : null;
+        });
         for (const window of targets)
             window.minimize();
-        if (this._desktopWindows)
+        this._updateShowDesktopState();
+    }
+
+    _updateShowDesktopState() {
+        if (!this._showDesktopButton)
+            return;
+        const workspace = global.workspace_manager.get_active_workspace();
+        const savedIds = new Set(this._desktopWindows.get(workspace)?.ids ?? []);
+        const hidden = global.display.list_all_windows().some(window =>
+            savedIds.has(window.get_stable_sequence()) && window.minimized &&
+            window.located_on_workspace(workspace));
+        if (hidden)
             this._showDesktopButton.add_style_pseudo_class('checked');
         else
             this._showDesktopButton.remove_style_pseudo_class('checked');
     }
 
-    _restoreDesktopWindows() {
-        const saved = this._desktopWindows;
-        this._desktopWindows = null;
-        this._showDesktopButton?.remove_style_pseudo_class('checked');
-        if (!saved)
-            return;
-
+    _restoreDesktopWindows(workspace = null) {
         // Resolve live windows by ID so closed windows cannot leave stale objects.
         const live = new Map(global.display.list_all_windows()
             .map(window => [window.get_stable_sequence(), window]));
+        const activeWorkspace = global.workspace_manager.get_active_workspace();
         let restoreFocus = null;
-        for (const id of saved.ids) {
-            const window = live.get(id);
-            if (!window || this._isComponentWindow(window) || !window.minimized)
+        for (const [savedWorkspace, saved] of this._desktopWindows) {
+            if (workspace && savedWorkspace !== workspace)
                 continue;
-            window.unminimize();
-            if (id === saved.focusedId)
-                restoreFocus = window;
+            this._desktopWindows.delete(savedWorkspace);
+            for (const id of saved.ids) {
+                const window = live.get(id);
+                if (!window || this._isComponentWindow(window) || !window.minimized ||
+                    (workspace && !window.located_on_workspace(workspace)))
+                    continue;
+                window.unminimize();
+                if (id === saved.focusedId && window.located_on_workspace(activeWorkspace))
+                    restoreFocus = window;
+            }
         }
-        if (restoreFocus?.located_on_workspace(
-            global.workspace_manager.get_active_workspace()))
-            restoreFocus.activate(global.get_current_time());
+        restoreFocus?.activate(global.get_current_time());
+        this._updateShowDesktopState();
     }
 
     _createComponentButtons() {
@@ -1653,6 +1671,7 @@ export default class ZhyprbolaExtension extends Extension {
         const menu = new PopupMenu.PopupMenu(button, 0.5, side);
         const theme = THEMES.find(item => item.name === this._themeName);
         menu.actor.add_style_class_name('zhyprbola-quick-menu');
+        menu.actor.add_style_class_name(`zhyprbola-quick-${theme.name}`);
         const item = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
         const grid = new St.BoxLayout({vertical: true,
             x_align: Clutter.ActorAlign.CENTER,

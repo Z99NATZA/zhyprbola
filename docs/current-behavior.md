@@ -24,6 +24,11 @@ Regions are ordered by dock-group-order and may contain Apps launchers, running 
 
 When ungroup windows is enabled, running apps render one icon per window.
 Running apps include open windows even when the app also appears in Apps.
+The Show Desktop strip hides visible, minimizable windows on the current
+workspace first, excluding Zhyprbola panels. When no such windows are visible,
+it restores the windows it hid on that workspace. Hide history is retained per
+workspace, including windows still hidden after a partial manual restore.
+Windows minimized before Show Desktop was used remain minimized.
 The Input Source dock component shows the current language code such as `en`
 or `th` and opens a language-only switcher menu.
 The Tasks panel stores local checklist items, supports add/edit/toggle/delete

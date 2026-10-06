@@ -112,12 +112,74 @@
     width: 34px;
     height: 34px;
     border-radius: 9px;
-    background-color: #687f8e;
+    background-color: #875a82;
+    color: #ffffff;
 }
 
 .zhyprbola-quick-button:hover,
-.zhyprbola-quick-button:focus {
+.zhyprbola-quick-button:focus,
+.zhyprbola-quick-button:active {
+    background-color: #734d6f;
+}
+
+.zhyprbola-quick-white .zhyprbola-quick-button {
     background-color: #467b9d;
+}
+
+.zhyprbola-quick-white .zhyprbola-quick-button:hover,
+.zhyprbola-quick-white .zhyprbola-quick-button:focus,
+.zhyprbola-quick-white .zhyprbola-quick-button:active {
+    background-color: #3c6985;
+}
+
+.zhyprbola-quick-white-sky .zhyprbola-quick-button {
+    background-color: #1e73e7;
+}
+
+.zhyprbola-quick-white-sky .zhyprbola-quick-button:hover,
+.zhyprbola-quick-white-sky .zhyprbola-quick-button:focus,
+.zhyprbola-quick-white-sky .zhyprbola-quick-button:active {
+    background-color: #1a62c4;
+}
+
+.zhyprbola-quick-forest .zhyprbola-quick-button {
+    background-color: #477f6d;
+}
+
+.zhyprbola-quick-forest .zhyprbola-quick-button:hover,
+.zhyprbola-quick-forest .zhyprbola-quick-button:focus,
+.zhyprbola-quick-forest .zhyprbola-quick-button:active {
+    background-color: #3c6c5d;
+}
+
+.zhyprbola-quick-one-half-gray .zhyprbola-quick-button {
+    background-color: #68717d;
+}
+
+.zhyprbola-quick-one-half-gray .zhyprbola-quick-button:hover,
+.zhyprbola-quick-one-half-gray .zhyprbola-quick-button:focus,
+.zhyprbola-quick-one-half-gray .zhyprbola-quick-button:active {
+    background-color: #58606a;
+}
+
+.zhyprbola-quick-red .zhyprbola-quick-button {
+    background-color: #b83252;
+}
+
+.zhyprbola-quick-red .zhyprbola-quick-button:hover,
+.zhyprbola-quick-red .zhyprbola-quick-button:focus,
+.zhyprbola-quick-red .zhyprbola-quick-button:active {
+    background-color: #9c2b46;
+}
+
+.zhyprbola-quick-mauve .zhyprbola-quick-button {
+    background-color: #c45478;
+}
+
+.zhyprbola-quick-mauve .zhyprbola-quick-button:hover,
+.zhyprbola-quick-mauve .zhyprbola-quick-button:focus,
+.zhyprbola-quick-mauve .zhyprbola-quick-button:active {
+    background-color: #a74766;
 }
 
 .zhyprbola-quick-icon {
