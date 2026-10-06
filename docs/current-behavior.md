@@ -34,9 +34,12 @@ it restores the windows it hid on that workspace. Hide history is retained per
 workspace, including windows still hidden after a partial manual restore.
 Windows minimized before Show Desktop was used remain minimized.
 The Sound component appears in Quick by default and can be moved through
-Settings. Its panel controls the default microphone and speaker volume (0–100%)
-and mute independently using WirePlumber's `wpctl`. Device state refreshes every
-second while the panel is visible; unavailable devices disable their controls.
+Settings. It opens a Shell popup like Quick Components, with microphone and
+speaker icons, volume sliders (0–100%), and independent mute controls. It uses
+GNOME's shared mixer and follows device and volume changes immediately.
+Unavailable devices disable their controls. Dock and Settings actions never
+launch a separate Sound window; the standalone development panel remains
+available through `scripts/run-panel sound`.
 The Input Source dock component shows the current language code such as `en`
 or `th` and opens a language-only switcher menu.
 The Tasks panel stores local checklist items, supports add/edit/toggle/delete

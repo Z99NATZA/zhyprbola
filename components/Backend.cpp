@@ -473,6 +473,8 @@ void Backend::openDockComponent(const QString &key) {
     const QString request = QString::number(QDateTime::currentMSecsSinceEpoch())
         + QLatin1Char(':') + key;
     const bool requested = writeDockConfig(QStringLiteral("panel-request"), request);
+    // Sound is a Shell popup, so it must not spawn a fallback panel window.
+    if (key == QLatin1String("sound")) return;
     QTimer::singleShot(requested ? 700 : 0, this, [key]() {
         if (!panelProcessRunning(key))
             QProcess::startDetached(QCoreApplication::applicationFilePath(),

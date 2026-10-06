@@ -83,6 +83,7 @@ function fixture(length = 400) {
         Main: {layoutManager: {primaryMonitor: {x: 0, y: 0, width: length + 8, height: 900},
             removeChrome() {}}, uiGroup: new Actor()},
         AppMenu: NativeAppMenu,
+        SoundMenu: NativeAppMenu,
         Extension: class {},
     });
     const source = readFileSync(new URL('../gnome-extension/extension.js', import.meta.url), 'utf8');
@@ -465,4 +466,20 @@ test('dock teardown destroys the context menu before its source actor', () => {
     dock._destroyDock();
     assert.equal(menu.destroyed, true);
     assert.equal(dock._appMenu, null);
+});
+
+test('Sound requests open a Shell popup anchored to Components without launching a panel', () => {
+    const {dock, group} = fixture();
+    dock._themeName = 'mauve';
+    dock._dockGroupsByName.set('zhyprbola', group);
+    const button = new Actor({_panelName: 'components'});
+    group.add_child(button);
+    dock._openPanel('sound', true);
+    const menu = dock._soundMenu;
+    assert.equal(menu.sourceActor, button);
+    assert.equal(menu.isOpen, true);
+    dock._openPanel('sound', true);
+    assert.equal(menu.isOpen, false);
+    dock._destroyDock();
+    assert.equal(menu.destroyed, true);
 });

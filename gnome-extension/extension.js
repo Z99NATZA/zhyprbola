@@ -10,6 +10,7 @@ import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Keyboard from 'resource:///org/gnome/shell/ui/status/keyboard.js';
+import {SoundMenu} from './soundMenu.js';
 
 const DockPosition = Object.freeze({
     LEFT: 'left',
@@ -88,6 +89,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._showDesktopButton = null;
         this._appMenu = null;
         this._appMenuApp = null;
+        this._soundMenu = null;
         this._desktopWindows = new Map();
         this._layoutIdleId = 0;
         this._appRefreshId = 0;
@@ -1191,6 +1193,8 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _applyTheme() {
+        this._soundMenu?.destroy();
+        this._soundMenu = null;
         this._appMenu?.destroy();
         this._appMenu = null;
         this._appMenuApp = null;
@@ -1264,6 +1268,9 @@ export default class ZhyprbolaExtension extends Extension {
     _destroyDock() {
         if (!this._dock)
             return;
+
+        this._soundMenu?.destroy();
+        this._soundMenu = null;
 
         this._appMenu?.destroy();
         this._appMenu = null;
@@ -1545,12 +1552,15 @@ export default class ZhyprbolaExtension extends Extension {
             track_hover: true,
             accessible_name: accessibleName,
         });
+        button._panelName = panelName;
 
         button.connect('clicked', () => {
             if (panelName === 'power')
                 this._openPowerMenu(button);
             else if (panelName === 'components')
                 this._openQuickMenu(button);
+            else if (panelName === 'sound')
+                this._openSoundMenu(button);
             else
                 this._openPanel(panelName);
         });
@@ -1598,6 +1608,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._overflowMenu?.destroy();
         this._overflowMenu = null;
         if (name === 'zhyprbola') {
+            this._soundMenu?.destroy();
+            this._soundMenu = null;
             this._quickMenu?.destroy();
             this._quickMenu = null;
         }
@@ -1705,7 +1717,7 @@ export default class ZhyprbolaExtension extends Extension {
                         return GLib.SOURCE_REMOVE;
                     });
                 } else if (item.kind === 'panel')
-                    this._openPanel(item.name);
+                    item.name === 'sound' ? this._openSoundMenu(button) : this._openPanel(item.name);
                 else
                     item.window ? this._activateWindow(item.window) : this._activateApp(item.app);
             }, icon);
@@ -1772,6 +1784,8 @@ export default class ZhyprbolaExtension extends Extension {
                                 this._openPowerMenu(button);
                             else if (name === 'input-source')
                                 this._openInputSourceMenu(button);
+                            else if (name === 'sound')
+                                this._openSoundMenu(button);
                             else
                                 this._openPanel(name);
                         });
@@ -1792,6 +1806,27 @@ export default class ZhyprbolaExtension extends Extension {
         menu.actor.hide();
         this._menuManager.addMenu(menu);
         this._quickMenu = menu;
+        menu.open();
+    }
+
+    _openSoundMenu(button) {
+        if (this._soundMenu?.sourceActor === button) {
+            this._soundMenu.toggle();
+            return;
+        }
+        this._soundMenu?.destroy();
+        const side = {
+            [DockPosition.LEFT]: St.Side.RIGHT,
+            [DockPosition.RIGHT]: St.Side.LEFT,
+            [DockPosition.TOP]: St.Side.BOTTOM,
+            [DockPosition.BOTTOM]: St.Side.TOP,
+        }[this._dockPosition];
+        const theme = THEMES.find(item => item.name === this._themeName) ?? THEMES[0];
+        const menu = new SoundMenu(button, side, theme.iconColor);
+        Main.uiGroup.add_child(menu.actor);
+        menu.actor.hide();
+        this._menuManager.addMenu(menu);
+        this._soundMenu = menu;
         menu.open();
     }
 
@@ -1817,16 +1852,16 @@ export default class ZhyprbolaExtension extends Extension {
             const item = menu.addAction(label, callback);
             item.label.set_style(`color: ${theme.iconColor};`);
         };
+        addAction('Power Off', () => this._sessionBusCall(
+            'org.gnome.SessionManager', '/org/gnome/SessionManager',
+            'org.gnome.SessionManager', 'Shutdown'));
+        addAction('Restart', () => this._sessionBusCall(
+            'org.gnome.SessionManager', '/org/gnome/SessionManager',
+            'org.gnome.SessionManager', 'Reboot'));
         addAction('Log Out', () => this._sessionBusCall(
             'org.gnome.SessionManager', '/org/gnome/SessionManager',
             'org.gnome.SessionManager', 'Logout',
             new GLib.Variant('(u)', [0])));
-        addAction('Restart', () => this._sessionBusCall(
-            'org.gnome.SessionManager', '/org/gnome/SessionManager',
-            'org.gnome.SessionManager', 'Reboot'));
-        addAction('Power Off', () => this._sessionBusCall(
-            'org.gnome.SessionManager', '/org/gnome/SessionManager',
-            'org.gnome.SessionManager', 'Shutdown'));
         Main.uiGroup.add_child(menu.actor);
         menu.actor.hide();
         this._menuManager.addMenu(menu);
@@ -1846,6 +1881,14 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _openPanel(panelName, fromSettings = false) {
+        if (panelName === 'sound') {
+            const buttons = this._dockGroupsByName.get('zhyprbola')?.get_children() ?? [];
+            const source = buttons.find(button => button._panelName === 'sound')
+                ?? buttons.find(button => button._panelName === 'components') ?? this._dock;
+            if (source)
+                this._openSoundMenu(source);
+            return;
+        }
         const title = PANEL_TITLES[panelName];
         const existingWindow = global.display.list_all_windows()
             .find(window => window && (window.get_title() === title ||
