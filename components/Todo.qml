@@ -32,6 +32,8 @@ Item {
         }
         property bool adding: false
         property string editingTaskId: ""
+        property string pendingDeleteTaskId: ""
+        property string pendingDeleteTaskText: ""
         property string draggingTaskId: ""
         property var taskPreviewOrder: []
         property real draggingTaskY: 0
@@ -121,6 +123,25 @@ Item {
         function cancelNewTask() {
             newTaskInput.text = ""
             adding = false
+        }
+
+        function requestDeleteTask(id, text) {
+            pendingDeleteTaskId = id
+            pendingDeleteTaskText = text
+            Qt.callLater(function() { deleteConfirmOverlay.forceActiveFocus() })
+        }
+
+        function cancelDeleteTask() {
+            pendingDeleteTaskId = ""
+            pendingDeleteTaskText = ""
+            forceActiveFocus()
+        }
+
+        function confirmDeleteTask() {
+            const taskId = pendingDeleteTaskId
+            cancelDeleteTask()
+            if (taskId.length > 0)
+                backend.deleteTask(taskId)
         }
 
         function finishTransientEdit() {
@@ -315,6 +336,128 @@ Item {
                     }
                 }
 
+            }
+        }
+
+        Item {
+            id: deleteConfirmOverlay
+
+            anchors.fill: parent
+            z: 20
+            visible: card.pendingDeleteTaskId !== ""
+            enabled: visible
+            focus: visible
+            Keys.onEscapePressed: card.cancelDeleteTask()
+
+            Rectangle {
+                anchors.fill: parent
+                radius: card.cornerRadius
+                color: Qt.rgba(63 / 255, 43 / 255, 65 / 255, 0.16)
+            }
+
+            MouseArea {
+                anchors.fill: parent
+            }
+
+            Rectangle {
+                id: deleteConfirmDialog
+
+                anchors.centerIn: parent
+                width: Math.min(parent.width - 44, 280)
+                height: 128
+                radius: 14
+                color: Theme.cardSurface
+                border.width: 1
+                border.color: Qt.alpha(card.accentColor, 0.18)
+
+                Text {
+                    id: deleteMessage
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.leftMargin: 18
+                    anchors.rightMargin: 18
+                    anchors.topMargin: 20
+                    text: card.pendingDeleteTaskText
+                    color: card.dimColor
+                    font.family: card.family
+                    font.pixelSize: 13
+                    font.weight: Font.Medium
+                    elide: Text.ElideRight
+                    maximumLineCount: 2
+                    wrapMode: Text.Wrap
+                }
+
+                Item {
+                    id: deleteActions
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.leftMargin: 18
+                    anchors.rightMargin: 18
+                    anchors.bottomMargin: 16
+                    height: 34
+
+                    Rectangle {
+                        id: cancelDeleteButton
+
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        width: Math.floor((parent.width - 10) / 2)
+                        height: parent.height
+                        radius: 9
+                        color: cancelDeleteMouse.containsMouse ? Theme.controlHover : Theme.control
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "ยกเลิก"
+                            color: card.textColor
+                            font.family: card.family
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                        }
+
+                        MouseArea {
+                            id: cancelDeleteMouse
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: card.cancelDeleteTask()
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        width: Math.floor((parent.width - 10) / 2)
+                        height: parent.height
+                        radius: 9
+                        color: confirmDeleteMouse.containsMouse
+                            ? Qt.darker(Theme.accent, 1.08)
+                            : Theme.accent
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "ลบ"
+                            color: Theme.accentText
+                            font.family: card.family
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                        }
+
+                        MouseArea {
+                            id: confirmDeleteMouse
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: card.confirmDeleteTask()
+                        }
+                    }
+                }
             }
         }
     }
@@ -600,7 +743,7 @@ Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: backend.deleteTask(row.taskId)
+                onClicked: card.requestDeleteTask(row.taskId, row.taskText)
             }
         }
 
