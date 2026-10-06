@@ -80,6 +80,13 @@ const PANEL_TITLES = Object.freeze({
     settings: 'Zhyprbola Settings',
 });
 
+class ClickOnlyPopupMenuManager extends PopupMenu.PopupMenuManager {
+    _changeMenu() {
+        // GNOME calls this on hover and focus changes. Dock menus are opened
+        // explicitly by their button handlers, so neither should switch menus.
+    }
+}
+
 export default class ZhyprbolaExtension extends Extension {
     enable() {
         this._disabling = false;
@@ -279,7 +286,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockItems = new Map();
         this._dockRenderState = new Map();
         this._panelIcons = new Map();
-        this._menuManager = new PopupMenu.PopupMenuManager(this._dock);
+        this._menuManager = new ClickOnlyPopupMenuManager(this._dock);
         for (const name of this._dockGroupOrder) {
             const region = new St.Widget({
                 style_class: `zhyprbola-dock-region zhyprbola-dock-region-${name}`,

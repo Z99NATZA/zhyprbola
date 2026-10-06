@@ -84,6 +84,7 @@ function fixture(length = 400) {
             removeChrome() {}}, uiGroup: new Actor()},
         AppMenu: NativeAppMenu,
         SoundMenu: NativeAppMenu,
+        PopupMenu: {PopupMenuManager: class {}},
         Extension: class {},
     });
     const source = readFileSync(new URL('../gnome-extension/extension.js', import.meta.url), 'utf8');

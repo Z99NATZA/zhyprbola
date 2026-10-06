@@ -40,6 +40,8 @@ GNOME's shared mixer and follows device and volume changes immediately.
 Unavailable devices disable their controls. Dock and Settings actions never
 launch a separate Sound window; the standalone development panel remains
 available through `scripts/run-panel sound`.
+Dock popups open only through explicit activation. Hovering over another dock
+button or moving keyboard focus does not switch the currently open popup.
 The Input Source dock component shows the current language code such as `en`
 or `th` and opens a language-only switcher menu.
 The Tasks panel stores local checklist items, supports add/edit/toggle/delete
