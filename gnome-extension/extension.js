@@ -78,6 +78,9 @@ const PANEL_TITLES = Object.freeze({
 
 export default class ZhyprbolaExtension extends Extension {
     enable() {
+        this._disabling = false;
+        this._dockInteractions = new Set();
+        this._dockRebuildPending = false;
         this._dock = null;
         this._showDesktopButton = null;
         this._desktopWindows = null;
@@ -192,6 +195,7 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     disable() {
+        this._disabling = true;
         global.display.disconnectObject(this);
         Main.layoutManager.disconnectObject(this);
         this._appSystem.disconnectObject(this);
@@ -415,12 +419,7 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _createAppButton(item, groupName) {
-        const {app, running, window = null} = item;
-        const vertical = [DockPosition.LEFT, DockPosition.RIGHT]
-            .includes(this._dockPosition);
-        const focused = window
-            ? window.has_focus()
-            : app.get_windows().some(appWindow => appWindow.has_focus());
+        const {app} = item;
         const content = new St.Widget({
             width: DOCK_CONFIG.buttonSize,
             height: DOCK_CONFIG.buttonSize,
@@ -436,50 +435,60 @@ export default class ZhyprbolaExtension extends Extension {
             y: iconY,
         });
         content.add_child(icon);
-        if (running) {
-            const indicatorWidth = vertical ? 4 : (focused ? 14 : 4);
-            const indicatorHeight = vertical ? (focused ? 14 : 4) : 4;
-            const indicator = new St.Widget({
-                style_class: 'zhyprbola-dock-app-indicator',
-                width: indicatorWidth,
-                height: indicatorHeight,
-                x: this._dockPosition === DockPosition.LEFT ? 0
-                    : this._dockPosition === DockPosition.RIGHT
-                        ? DOCK_CONFIG.buttonSize - indicatorWidth
-                        : iconX + (DOCK_CONFIG.iconSize - indicatorWidth) / 2,
-                y: this._dockPosition === DockPosition.TOP ? 0
-                    : this._dockPosition === DockPosition.BOTTOM
-                        ? DOCK_CONFIG.buttonSize - indicatorHeight
-                        : iconY + (DOCK_CONFIG.iconSize - indicatorHeight) / 2,
-            });
-            content.add_child(indicator);
-        }
+        const indicator = new St.Widget({
+            style_class: 'zhyprbola-dock-app-indicator',
+        });
+        content.add_child(indicator);
         const button = new St.Button({
             style_class: 'zhyprbola-dock-app-button',
             child: content,
             can_focus: true,
             reactive: true,
             track_hover: true,
-            accessible_name: window?.get_title() ?? app.get_name(),
+            accessible_name: item.label,
         });
-        button.connect('clicked', () => window
-            ? this._activateWindow(window) : this._activateApp(app));
+        button.connect('clicked', () => {
+            const current = button._delegate.item;
+            current.window ? this._activateWindow(current.window)
+                : this._activateApp(current.app);
+        });
         const key = this._itemOrderKey(item);
         button._delegate = {
             groupName,
             key,
             button,
+            item,
+            indicator,
+            destroyed: false,
+            dragging: false,
+            dragActor: null,
             dropAccepted: false,
             originalIndex: -1,
-            getDragActor: () => new St.Icon({
-                gicon: app.get_icon(),
-                icon_size: DOCK_CONFIG.iconSize,
-                style_class: 'zhyprbola-dock-app-icon',
-            }),
+            getDragActor: () => {
+                const actor = new St.Icon({
+                    gicon: button._delegate.item.app.get_icon(),
+                    icon_size: DOCK_CONFIG.iconSize,
+                    style_class: 'zhyprbola-dock-app-icon',
+                });
+                button._delegate.dragActor = actor;
+                actor.connect('destroy', () => { button._delegate.dragActor = null; });
+                return actor;
+            },
             getDragActorSource: () => button,
         };
+        const delegate = button._delegate;
+        button.connect('notify::pressed', () => this._trackDockInteraction(delegate));
+        button.connect('destroy', () => {
+            delegate.destroyed = true;
+            this._dockInteractions.delete(delegate);
+        });
+        this._updateAppButton(button, item);
         const draggable = DND.makeDraggable(button, {timeoutThreshold: 200});
         draggable.connect('drag-begin', () => {
+            if (delegate.destroyed)
+                return;
+            delegate.dragging = true;
+            this._trackDockInteraction(delegate);
             const group = button.get_parent();
             button._delegate.originalIndex = group.get_children().indexOf(button);
             button._delegate.dropAccepted = false;
@@ -488,6 +497,8 @@ export default class ZhyprbolaExtension extends Extension {
             button.add_style_class_name('zhyprbola-dock-drag-placeholder');
         });
         const finishDrag = () => {
+            if (delegate.destroyed)
+                return;
             const group = button.get_parent();
             if (!group)
                 return;
@@ -499,13 +510,50 @@ export default class ZhyprbolaExtension extends Extension {
             content.opacity = 255;
             button.remove_style_class_name('zhyprbola-dock-drag-placeholder');
         };
-        draggable.connect('drag-end', finishDrag);
+        draggable.connect('drag-end', () => {
+            finishDrag();
+            delegate.dragging = false;
+            this._trackDockInteraction(delegate);
+        });
+        // Cancellation starts a snap-back animation. Keep the source alive
+        // until drag-end, when DND releases its modal grab and source actor.
         draggable.connect('drag-cancelled', finishDrag);
         return button;
     }
 
+    _trackDockInteraction(delegate) {
+        if (!delegate.destroyed && (delegate.dragging || delegate.button.pressed))
+            this._dockInteractions.add(delegate);
+        else if (this._dockInteractions.delete(delegate))
+            this._queueLayout();
+    }
+
+    _updateAppButton(button, item) {
+        const {app, window = null, running} = item;
+        button._delegate.item = item;
+        button.accessible_name = item.label;
+        const indicator = button._delegate.indicator;
+        indicator.visible = running;
+        const focused = window ? window.has_focus()
+            : app.get_windows().some(appWindow => appWindow.has_focus());
+        const vertical = [DockPosition.LEFT, DockPosition.RIGHT]
+            .includes(this._dockPosition);
+        const width = vertical ? 4 : (focused ? 14 : 4);
+        const height = vertical ? (focused ? 14 : 4) : 4;
+        const iconX = this._dockPosition === DockPosition.LEFT ? 5 : 6;
+        const iconY = this._dockPosition === DockPosition.TOP ? 5 : 6;
+        indicator.set_size(width, height);
+        indicator.set_position(this._dockPosition === DockPosition.LEFT ? 0
+            : this._dockPosition === DockPosition.RIGHT ? DOCK_CONFIG.buttonSize - width
+            : iconX + (DOCK_CONFIG.iconSize - width) / 2,
+        this._dockPosition === DockPosition.TOP ? 0
+            : this._dockPosition === DockPosition.BOTTOM ? DOCK_CONFIG.buttonSize - height
+            : iconY + (DOCK_CONFIG.iconSize - height) / 2);
+    }
+
     _previewDockItemDrag(groupName, group, source, position) {
-        if (source?.groupName !== groupName || source.button?.get_parent() !== group)
+        if (source?.destroyed || source?.groupName !== groupName ||
+            source.button?.get_parent() !== group)
             return false;
         const buttons = group.get_children().filter(child =>
             child._delegate?.groupName === groupName);
@@ -683,9 +731,7 @@ export default class ZhyprbolaExtension extends Extension {
                 running.push({kind: 'app', app, label: app.get_name(), running: true,
                     window: app.get_windows().length === 0 ? windows[0] : null});
         }
-        this._dockRenderState.delete('apps');
         this._dockItems.set('running', this._orderRunningItems(running));
-        this._dockRenderState.delete('running');
         this._queueLayout();
     }
 
@@ -1129,6 +1175,11 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _rebuildDock() {
+        if (this._dockInteractions.size > 0) {
+            this._dockRebuildPending = true;
+            return;
+        }
+        this._dockRebuildPending = false;
         this._destroyDock();
         this._createDock();
         this._applyTheme();
@@ -1138,6 +1189,12 @@ export default class ZhyprbolaExtension extends Extension {
     _destroyDock() {
         if (!this._dock)
             return;
+
+        // Destroy the drag clone while its source is still alive so DND can
+        // cancel and release its modal grab before the dock is destroyed.
+        for (const delegate of [...this._dockInteractions])
+            delegate.dragActor?.destroy();
+        this._dockInteractions.clear();
 
         this._inputSourceMenu?.destroy();
         this._inputSourceMenu = null;
@@ -1444,9 +1501,20 @@ export default class ZhyprbolaExtension extends Extension {
             return;
         const items = this._dockItems.get(name) ?? [];
         const state = `${length}:${items.length}:${vertical}:${slot}:` +
-            `${items.map(item => item.label).join('|')}`;
-        if (this._dockRenderState.get(name) === state)
+            JSON.stringify(items.map(item => item.kind === 'app'
+                ? this._itemOrderKey(item) : item.name));
+        const appButtons = new Map(group.get_children()
+            .filter(child => child._delegate?.groupName === name)
+            .map(child => [child._delegate.key, child]));
+        if (this._dockRenderState.get(name) === state) {
+            for (const item of items) {
+                const button = item.kind === 'app'
+                    ? appButtons.get(this._itemOrderKey(item)) : null;
+                if (button)
+                    this._updateAppButton(button, item);
+            }
             return;
+        }
 
         this._overflowMenu?.destroy();
         this._overflowMenu = null;
@@ -1467,20 +1535,31 @@ export default class ZhyprbolaExtension extends Extension {
             this._powerMenu = null;
             this._panelIcons.clear();
         }
-        for (const child of group.get_children())
-            child.destroy();
-
         const maxSlots = Math.max(0, Math.floor((length + DOCK_CONFIG.groupSpacing) /
             (DOCK_CONFIG.buttonSize + DOCK_CONFIG.groupSpacing)));
         const overflow = items.length > maxSlots;
         const visibleCount = overflow ? Math.max(0, maxSlots - 1) : items.length;
+        const visibleKeys = new Set(items.slice(0, visibleCount)
+            .filter(item => item.kind === 'app').map(item => this._itemOrderKey(item)));
+        for (const child of group.get_children()) {
+            if (!visibleKeys.has(child._delegate?.key))
+                child.destroy();
+        }
         for (const item of items.slice(0, visibleCount)) {
-            group.add_child(item.kind === 'input-source'
+            const existing = item.kind === 'app'
+                ? appButtons.get(this._itemOrderKey(item)) : null;
+            if (existing) {
+                this._updateAppButton(existing, item);
+                group.set_child_at_index(existing, items.indexOf(item));
+                continue;
+            }
+            const button = item.kind === 'input-source'
                 ? this._createInputSourceButton()
                 : item.kind === 'panel'
                 ? this._createPanelButton({iconName: item.name,
                     accessibleName: item.label, panelName: item.name})
-                : this._createAppButton(item, name));
+                : this._createAppButton(item, name);
+            group.insert_child_at_index(button, items.indexOf(item));
         }
         if (overflow) {
             const more = new St.Button({
@@ -1493,7 +1572,8 @@ export default class ZhyprbolaExtension extends Extension {
                 accessible_name: `More ${name}`,
             });
             more.connect('clicked', () =>
-                this._showOverflow(more, items.slice(visibleCount)));
+                this._showOverflow(more,
+                    (this._dockItems.get(name) ?? []).slice(visibleCount)));
             group.add_child(more);
         }
 
@@ -1796,7 +1876,7 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _queueLayout() {
-        if (this._layoutIdleId)
+        if (this._disabling || this._layoutIdleId)
             return;
 
         this._layoutIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
@@ -1807,8 +1887,12 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _layoutDock() {
-        if (!this._dock)
+        if (!this._dock || this._dockInteractions.size > 0)
             return;
+        if (this._dockRebuildPending) {
+            this._rebuildDock();
+            return;
+        }
 
         const monitor = Main.layoutManager.primaryMonitor;
         if (!monitor)
