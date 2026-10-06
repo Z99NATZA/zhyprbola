@@ -2,7 +2,7 @@
 
 ```text
 Flow: GNOME dock extension -> focused QML panels
-Panels: bluetooth, wifi, clock-weather, system-status, audio-spectrum
+Panels: bluetooth, wifi, clock-weather, system-status, audio-spectrum, sound
 Theme: ~/.config/zhyprbola/theme
 Dock position: ~/.config/zhyprbola/dock-position
 Dock default: bottom
@@ -29,6 +29,10 @@ workspace first, excluding Zhyprbola panels. When no such windows are visible,
 it restores the windows it hid on that workspace. Hide history is retained per
 workspace, including windows still hidden after a partial manual restore.
 Windows minimized before Show Desktop was used remain minimized.
+The Sound component appears in Quick by default and can be moved through
+Settings. Its panel controls the default microphone and speaker volume (0–100%)
+and mute independently using WirePlumber's `wpctl`. Device state refreshes every
+second while the panel is visible; unavailable devices disable their controls.
 The Input Source dock component shows the current language code such as `en`
 or `th` and opens a language-only switcher menu.
 The Tasks panel stores local checklist items, supports add/edit/toggle/delete
@@ -46,6 +50,7 @@ make dock
 ./scripts/run-panel clock-weather
 ./scripts/run-panel system-status
 ./scripts/run-panel audio-spectrum
+./scripts/run-panel sound
 ./scripts/run-panel tasks
 ```
 

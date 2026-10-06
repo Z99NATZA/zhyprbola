@@ -339,3 +339,35 @@ test('disabling restores windows hidden on every workspace', () => {
     assert.equal(b.minimized, false);
     assert.equal(dock._desktopWindows.size, 0);
 });
+
+test('Sound defaults to Quick when adding it to an existing component layout', () => {
+    const {dock, context} = fixture();
+    context.TextDecoder = TextDecoder;
+    context.GLib.file_get_contents = () => [true,
+        new TextEncoder().encode(JSON.stringify({visible: ['settings'], hidden: [], quick: ['wifi']}))];
+    const layout = dock._readDockComponents();
+    assert.equal(layout.visible.includes('sound'), false);
+    assert.equal(layout.quick.filter(name => name === 'sound').length, 1);
+    assert.equal(layout.quick[0], 'wifi');
+});
+
+test('Sound respects explicit visible and hidden placement', () => {
+    for (const zone of ['visible', 'hidden']) {
+        const {dock, context} = fixture();
+        context.TextDecoder = TextDecoder;
+        const saved = {visible: [], hidden: [], quick: []};
+        saved[zone] = ['sound'];
+        context.GLib.file_get_contents = () => [true,
+            new TextEncoder().encode(JSON.stringify(saved))];
+        const layout = dock._readDockComponents();
+        assert.equal(layout[zone].includes('sound'), true);
+        assert.equal(layout.quick.includes('sound'), false);
+    }
+});
+
+test('Sound appears in Quick on a fresh configuration', () => {
+    const {dock} = fixture();
+    const layout = dock._readDockComponents();
+    assert.equal(layout.visible.includes('sound'), false);
+    assert.equal(layout.quick.includes('sound'), true);
+});

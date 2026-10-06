@@ -1,4 +1,5 @@
 #include "components/Backend.h"
+#include "components/SoundBackend.h"
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
@@ -32,8 +33,10 @@ int main(int argc, char *argv[]) {
     parser.process(app);
 
     Backend backend;
+    SoundBackend sound;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+    engine.rootContext()->setContextProperty(QStringLiteral("sound"), &sound);
     engine.rootContext()->setContextProperty(QStringLiteral("edgeScreenWidth"),
         environmentInt("ZHYPRBOLA_EDGE_SCREEN_WIDTH", 0));
     engine.rootContext()->setContextProperty(QStringLiteral("edgeScreenHeight"),

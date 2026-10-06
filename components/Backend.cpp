@@ -160,7 +160,7 @@ QStringList dockComponentKeys() {
     return {QStringLiteral("settings"), QStringLiteral("bluetooth"),
         QStringLiteral("wifi"), QStringLiteral("clock-weather"),
         QStringLiteral("system-status"), QStringLiteral("audio-spectrum"),
-        QStringLiteral("music"), QStringLiteral("todo"),
+        QStringLiteral("music"), QStringLiteral("sound"), QStringLiteral("todo"),
         QStringLiteral("calendar"), QStringLiteral("input-source"),
         QStringLiteral("power"), QStringLiteral("components")};
 }
@@ -255,6 +255,8 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     }
     const QStringList componentNames = dockComponentKeys();
     m_dockVisibleComponents = componentNames;
+    m_dockVisibleComponents.removeAll(QStringLiteral("sound"));
+    m_dockQuickComponents = {QStringLiteral("sound")};
     QFile dockComponentsFile(dockConfigPath(QStringLiteral("dock-components")));
     if (dockComponentsFile.open(QIODevice::ReadOnly)) {
         const QJsonDocument document = QJsonDocument::fromJson(dockComponentsFile.readAll());
@@ -262,6 +264,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
         if (object.value(QStringLiteral("visible")).isArray()
             && object.value(QStringLiteral("hidden")).isArray()) {
             m_dockVisibleComponents.clear();
+            m_dockQuickComponents.clear();
             for (const auto &entry : object.value(QStringLiteral("visible")).toArray()) {
                 const QString name = entry.toString();
                 if (componentNames.contains(name) && !m_dockVisibleComponents.contains(name))
@@ -285,7 +288,8 @@ Backend::Backend(QObject *parent) : QObject(parent) {
                 if (!m_dockVisibleComponents.contains(name)
                     && !m_dockHiddenComponents.contains(name)
                     && !m_dockQuickComponents.contains(name))
-                    m_dockVisibleComponents.append(name);
+                    (name == QLatin1String("sound") ? m_dockQuickComponents
+                        : m_dockVisibleComponents).append(name);
         }
     }
     QFile wallpaperFile(dockConfigPath(QStringLiteral("use-wallpaper")));
@@ -460,6 +464,7 @@ void Backend::openDockComponent(const QString &key) {
         QStringLiteral("system-status"),
         QStringLiteral("audio-spectrum"),
         QStringLiteral("music"),
+        QStringLiteral("sound"),
         QStringLiteral("todo"),
         QStringLiteral("calendar"),
     };

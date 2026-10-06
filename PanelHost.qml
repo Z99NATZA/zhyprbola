@@ -15,6 +15,7 @@ Window {
         case "audio-spectrum": return 440
         case "system-status": return 528
         case "music": return 414
+        case "sound": return 384
         case "settings": return 660
         case "todo":
         case "calendar": return 384
@@ -28,6 +29,7 @@ Window {
         case "audio-spectrum": return 172
         case "system-status": return 195
         case "music": return 254
+        case "sound": return sound.error.length > 0 ? 214 : 184
         case "settings": return 510
         case "todo": return 360
         case "calendar": return 314
@@ -45,6 +47,8 @@ Window {
             return "Zhyprbola Audio Spectrum"
         if (panelName === "music")
             return "Zhyprbola Music Player"
+        if (panelName === "sound")
+            return "Zhyprbola Sound"
         if (panelName === "todo")
             return "Zhyprbola Tasks"
         if (panelName === "calendar")
@@ -107,6 +111,12 @@ Window {
     MusicPlayer {
         anchors.centerIn: parent
         visible: host.panelName === "music"
+    }
+
+    SoundPanel {
+        anchors.centerIn: parent
+        visible: host.panelName === "sound"
+        onCloseRequested: host.showMinimized()
     }
 
     Todo {

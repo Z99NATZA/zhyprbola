@@ -41,6 +41,7 @@ const DOCK_COMPONENTS = [
     ['system-status', 'System Status'],
     ['audio-spectrum', 'Audio Spectrum'],
     ['music', 'Music Player'],
+    ['sound', 'Sound'],
     ['todo', 'Tasks'],
     ['calendar', 'Calendar'],
     ['input-source', 'Input Source'],
@@ -71,6 +72,7 @@ const PANEL_TITLES = Object.freeze({
     'system-status': 'Zhyprbola System Status',
     'audio-spectrum': 'Zhyprbola Audio Spectrum',
     music: 'Zhyprbola Music Player',
+    sound: 'Zhyprbola Sound',
     todo: 'Zhyprbola Tasks',
     calendar: 'Zhyprbola Calendar',
     settings: 'Zhyprbola Settings',
@@ -891,11 +893,12 @@ export default class ZhyprbolaExtension extends Extension {
             for (const name of defaults) {
                 if (!visible.includes(name) && !hidden.includes(name) &&
                     !quick.includes(name))
-                    visible.push(name);
+                    (name === 'sound' ? quick : visible).push(name);
             }
             return {visible, hidden, quick};
         } catch (_) {
-            return {visible: defaults, hidden: [], quick: []};
+            return {visible: defaults.filter(name => name !== 'sound'),
+                hidden: [], quick: ['sound']};
         }
     }
 
