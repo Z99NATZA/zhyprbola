@@ -880,6 +880,8 @@ Item {
                         height: 20
                         source: Qt.resolvedUrl("../gnome-extension/icons/"
                             + tile.componentKey + ".svg")
+                        asynchronous: true
+                        sourceSize: Qt.size(width, height)
                         fillMode: Image.PreserveAspectFit
                     }
 
@@ -964,6 +966,8 @@ Item {
                         height: 20
                         source: Qt.resolvedUrl("../gnome-extension/icons/"
                             + launcherTile.componentKey + ".svg")
+                        asynchronous: true
+                        sourceSize: Qt.size(width, height)
                         fillMode: Image.PreserveAspectFit
                     }
 
@@ -987,13 +991,26 @@ Item {
         contentWidth: width
         contentHeight: componentColumn.height
         clip: true
-        boundsBehavior: Flickable.StopAtBounds
+        boundsBehavior: Flickable.DragAndOvershootBounds
+        flickableDirection: Flickable.VerticalFlick
         visible: panel.section === "components"
+
+        rebound: Transition {
+            NumberAnimation {
+                properties: "x,y"
+                duration: 240
+                easing.type: Easing.OutCubic
+            }
+        }
 
         Column {
             id: componentColumn
             width: parent.width
             spacing: panel.contentSectionGap
+            // Cache the full column, including cards below the viewport,
+            // so the first rebound can move an already prepared texture.
+            layer.enabled: true
+            layer.smooth: true
 
             DockComponentZone {
                 id: showZone
