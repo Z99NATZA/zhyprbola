@@ -1,11 +1,13 @@
 #include "../components/Backend.h"
 
 #include <QGuiApplication>
+#include <QDir>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QFile>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -74,8 +76,21 @@ private slots:
         QVERIFY2(settingsComponent.isReady(), qPrintable(settingsComponent.errorString()));
         QScopedPointer<QObject> settings(settingsComponent.create());
         QVERIFY2(settings, qPrintable(settingsComponent.errorString()));
-        settings->setProperty("section", QStringLiteral("date-time"));
-        QCOMPARE(settings->property("section").toString(), QStringLiteral("date-time"));
+        const QVariantList sections = settings->property("sections").toList();
+        QVERIFY(!sections.isEmpty());
+        QString previousLabel;
+        for (const QVariant &section : sections) {
+            const QString label = section.toMap().value(QStringLiteral("label")).toString();
+            QVERIFY(!label.isEmpty());
+            QVERIFY(QString::compare(previousLabel, label, Qt::CaseInsensitive) <= 0);
+            previousLabel = label;
+        }
+        QCOMPARE(settings->property("section").toString(), QStringLiteral("themes"));
+        QFile request(directory.filePath(QStringLiteral("zhyprbola/settings-section-request")));
+        QVERIFY(request.open(QIODevice::WriteOnly));
+        QVERIFY(request.write("1:date-time\n") > 0);
+        request.close();
+        QTRY_COMPARE(settings->property("section").toString(), QStringLiteral("date-time"));
         auto *settingsItem = qobject_cast<QQuickItem *>(settings.data());
         QVERIFY(settingsItem);
         QQuickWindow window;
@@ -98,6 +113,28 @@ private slots:
         const QString bottomScreenshot = qEnvironmentVariable("ZHYPRBOLA_TEST_BOTTOM_SCREENSHOT");
         if (!bottomScreenshot.isEmpty())
             QVERIFY(bottomImage.save(bottomScreenshot));
+    }
+
+    void opensNewSettingsOnRequestedSection() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        qputenv("XDG_CONFIG_HOME", directory.path().toUtf8());
+        QVERIFY(QDir().mkpath(directory.filePath(QStringLiteral("zhyprbola"))));
+        QFile request(directory.filePath(QStringLiteral("zhyprbola/settings-section-request")));
+        QVERIFY(request.open(QIODevice::WriteOnly));
+        QVERIFY(request.write("2:date-time\n") > 0);
+        request.close();
+
+        Backend backend;
+        QCOMPARE(backend.settingsSectionRequest(), QStringLiteral("2:date-time"));
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(
+            QFINDTESTDATA("../components/SettingsPanel.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> settings(component.create());
+        QVERIFY2(settings, qPrintable(component.errorString()));
+        QCOMPARE(settings->property("section").toString(), QStringLiteral("date-time"));
     }
 };
 

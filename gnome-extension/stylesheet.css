@@ -71,13 +71,7 @@
     icon-size: 16px;
 }
 
-.zhyprbola-dock-language-label {
-    color: #ffffff;
-    font-size: 12px;
-    font-weight: 600;
-    text-align: center;
-}
-
+.zhyprbola-dock-language-label,
 .zhyprbola-dock-datetime-label {
     color: #ffffff;
     font-size: 12px;

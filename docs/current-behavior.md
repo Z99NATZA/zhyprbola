@@ -45,6 +45,8 @@ Dock popups open only through explicit activation. Hovering over another dock
 button or moving keyboard focus does not switch the currently open popup.
 The Input Source dock component shows the current language code such as `en`
 or `th` and opens a language-only switcher menu.
+The Date and Time dock labels open Settings directly to Date & Time, including
+when Settings is already open or the labels are in the dock overflow menu.
 The Key Visualizer opens a floating bubble from Quick by default.
 Settings > Keys controls font size, min/max width, fit or fixed width, and text
 alignment. It shows the latest keys only and clears after five seconds. It can
@@ -95,6 +97,12 @@ Gap within one group: 8 px (theme choices, dock group switches, spectrum edge ch
 Gap between groups: 16 px (dock position / group order / switches / BG opacity, spectrum toggle / edge choices, component Show / Hidden)
 These gaps are between controls; padding inside a control is separate.
 ```
+
+## Settings Navigation
+
+Keep the sidebar sections in `components/SettingsPanel.qml` ordered alphabetically
+by their displayed English labels (case-insensitive). Insert new entries in that
+order and keep their page content and heading mappings in sync.
 
 ## Wallpapers
 

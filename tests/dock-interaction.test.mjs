@@ -474,7 +474,7 @@ test('dock reserves enough region width for inline date and time', () => {
     assert.ok(componentsWidth <= 828 * 0.68);
 });
 
-test('dock renders date and time as labels in both orientations', () => {
+test('dock centers clickable date and time like the input source in both layouts', () => {
     const {dock} = fixture();
     dock._dateTimeSettings = {dateFormat: 'yyyy-MM-dd', dateLocale: 'global',
         timeFormat: '24-colon', timeLocale: 'global', showSeconds: false};
@@ -483,15 +483,58 @@ test('dock renders date and time as labels in both orientations', () => {
         {kind: 'date-time', name: 'date-display'},
         {kind: 'date-time', name: 'time-display'},
     ]);
+    let opened = 0;
+    dock._openDateTimeSettings = () => { opened++; };
     const group = dock._dockGroupsByName.get('running');
     dock._renderDockRegion('running', 200, false, 0);
     assert.equal(group.get_children().length, 2);
     assert.equal(group.get_children()[0].width, 106);
     assert.equal(group.get_children()[1].width, 52);
+    for (const button of group.get_children()) {
+        assert.match(button.style_class, /zhyprbola-dock-button/);
+        assert.equal(button.height, 27);
+        assert.equal(button.reactive, true);
+        assert.equal(button.can_focus, true);
+        assert.equal(button.children[0].height, undefined);
+        assert.equal(button.children[0].x_align, 0);
+        assert.equal(button.children[0].y_align, 0);
+        button.emit('clicked');
+    }
+    assert.equal(opened, 2);
     assert.match(dock._dateTimeLabels.get('date-display').text, /^\d{4}-\d{2}-\d{2}$/);
     dock._renderDockRegion('running', 200, true, 0);
     assert.equal(group.get_children()[0].height, 106);
-    assert.equal(group.get_children()[0].children[0].angle, -90);
+    assert.equal(group.get_children()[0].children[0].children[0].angle, -90);
+    group.get_children()[0].emit('clicked');
+    assert.equal(opened, 3);
+});
+
+test('date and time focus Settings without minimizing an already focused window', () => {
+    const {dock, context} = fixture();
+    dock._settingsSectionRequestPath = '/config/settings-section-request';
+    let saved;
+    let opened = 0;
+    let focused = true;
+    context.GLib.mkdir_with_parents = () => {};
+    context.GLib.path_get_dirname = () => '/config';
+    context.GLib.get_monotonic_time = () => 123;
+    context.GLib.file_set_contents = (path, value) => { saved = {path, value}; };
+    context.global = {display: {list_all_windows: () => [{
+        get_title: () => 'Zhyprbola Settings',
+        has_focus: () => focused,
+    }]}};
+    dock._openPanel = () => { opened++; };
+
+    dock._openDateTimeSettings();
+    assert.deepEqual(saved, {path: '/config/settings-section-request',
+        value: '123:date-time\n'});
+    assert.equal(opened, 0);
+    focused = false;
+    dock._openDateTimeSettings();
+    assert.equal(opened, 1);
+    context.global.display.list_all_windows = () => [];
+    dock._openDateTimeSettings();
+    assert.equal(opened, 2);
 });
 
 test('opening an existing Key Visualizer follows the shared panel toggle', () => {

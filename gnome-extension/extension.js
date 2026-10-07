@@ -150,6 +150,8 @@ export default class ZhyprbolaExtension extends Extension {
             GLib.get_user_config_dir(), 'zhyprbola', 'pinned-apps']);
         this._panelRequestPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'panel-request']);
+        this._settingsSectionRequestPath = GLib.build_filenamev([
+            GLib.get_user_config_dir(), 'zhyprbola', 'settings-section-request']);
         this._themeName = this._readTheme();
         this._dockPosition = this._readDockPosition();
         this._dockBgOpacity = this._readDockBgOpacity();
@@ -1730,27 +1732,54 @@ export default class ZhyprbolaExtension extends Extension {
         const label = new St.Label({
             text: name === 'date-display' ? this._formatDockDate() : this._formatDockTime(),
             style_class: 'zhyprbola-dock-datetime-label',
+            x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
         });
         label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-        label.set_size(length - 8, DOCK_CONFIG.buttonSize);
-        const widget = new St.Widget({
-            style_class: 'zhyprbola-dock-datetime',
-            layout_manager: new Clutter.FixedLayout(),
-            width: vertical ? DOCK_CONFIG.buttonSize : length,
-            height: vertical ? length : DOCK_CONFIG.buttonSize,
-        });
+        this._dateTimeLabels.set(name, label);
+        let child = label;
         if (vertical) {
+            label.set_size(length - 8, DOCK_CONFIG.buttonSize);
+            const widget = new St.Widget({
+                style_class: 'zhyprbola-dock-datetime',
+                layout_manager: new Clutter.FixedLayout(),
+                width: DOCK_CONFIG.buttonSize,
+                height: length,
+            });
             label.set_pivot_point(0.5, 0.5);
             label.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, -90);
             label.set_position((DOCK_CONFIG.buttonSize - length + 8) / 2,
                 (length - DOCK_CONFIG.buttonSize) / 2);
-        } else {
-            label.set_position(4, 0);
+            widget.add_child(label);
+            child = widget;
         }
-        widget.add_child(label);
-        this._dateTimeLabels.set(name, label);
-        return widget;
+        const button = new St.Button({
+            style_class: 'zhyprbola-dock-button zhyprbola-dock-datetime-button',
+            child,
+            can_focus: true,
+            reactive: true,
+            track_hover: true,
+            accessible_name: name === 'date-display' ? 'Date settings' : 'Time settings',
+        });
+        button.set_size(vertical ? DOCK_CONFIG.buttonSize : length,
+            vertical ? length : DOCK_CONFIG.buttonSize);
+        button.connect('clicked', () => this._openDateTimeSettings());
+        return button;
+    }
+
+    _openDateTimeSettings() {
+        try {
+            GLib.mkdir_with_parents(GLib.path_get_dirname(this._settingsSectionRequestPath),
+                0o700);
+            GLib.file_set_contents(this._settingsSectionRequestPath,
+                `${GLib.get_monotonic_time()}:date-time\n`);
+        } catch (error) {
+            logError(error, 'Failed to select Date & Time settings');
+        }
+        const window = global.display.list_all_windows()
+            .find(item => item?.get_title() === PANEL_TITLES.settings);
+        if (!window?.has_focus())
+            this._openPanel('settings');
     }
 
     _panelGicon(name, color = '#ffffff') {
@@ -1900,8 +1929,8 @@ export default class ZhyprbolaExtension extends Extension {
             if (item.kind === 'date-time') {
                 const value = item.name === 'date-display'
                     ? this._formatDockDate() : this._formatDockTime();
-                menu.addMenuItem(new PopupMenu.PopupMenuItem(
-                    `${item.label}: ${value}`, {reactive: false, can_focus: false}));
+                menu.addAction(`${item.label}: ${value}`,
+                    () => this._openDateTimeSettings());
                 continue;
             }
             const icon = item.kind === 'panel'

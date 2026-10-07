@@ -321,6 +321,11 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     connect(&m_dateTimeWatcher, &QFileSystemWatcher::fileChanged,
         this, &Backend::refreshDateTimeSettings);
     refreshDateTimeSettings();
+    connect(&m_settingsSectionRequestWatcher, &QFileSystemWatcher::directoryChanged,
+        this, &Backend::refreshSettingsSectionRequest);
+    connect(&m_settingsSectionRequestWatcher, &QFileSystemWatcher::fileChanged,
+        this, &Backend::refreshSettingsSectionRequest);
+    refreshSettingsSectionRequest();
     connect(&m_keyCapture, &QProcess::readyReadStandardOutput,
         this, &Backend::readKeyCapture);
     connect(&m_keyCapture, &QProcess::finished, this,
@@ -656,6 +661,28 @@ void Backend::setDateTimeSetting(const QString &key, const QVariant &value) {
         return;
     m_dateTimeSettings = settings;
     emit dateTimeSettingsChanged();
+}
+
+void Backend::refreshSettingsSectionRequest() {
+    const QString path = dockConfigPath(QStringLiteral("settings-section-request"));
+    const QString directory = QFileInfo(path).absolutePath();
+    if (QDir().mkpath(directory)
+        && !m_settingsSectionRequestWatcher.directories().contains(directory))
+        m_settingsSectionRequestWatcher.addPath(directory);
+    const QFileInfo info(path);
+    if (info.exists() && !m_settingsSectionRequestWatcher.files().contains(path))
+        m_settingsSectionRequestWatcher.addPath(path);
+
+    QString request;
+    const qint64 age = info.lastModified().msecsTo(QDateTime::currentDateTime());
+    if (info.exists() && age >= 0 && age < 10000) {
+        QFile file(path);
+        if (file.open(QIODevice::ReadOnly))
+            request = QString::fromUtf8(file.readAll()).trimmed();
+    }
+    if (request == m_settingsSectionRequest) return;
+    m_settingsSectionRequest = request;
+    emit settingsSectionRequestChanged();
 }
 
 QString Backend::formatDate(const QDateTime &dateTime) const {

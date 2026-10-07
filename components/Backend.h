@@ -60,6 +60,7 @@ class Backend : public QObject {
     Q_PROPERTY(QVariantList tasks READ tasks NOTIFY tasksChanged)
     Q_PROPERTY(QVariantMap keyVisualizerSettings READ keyVisualizerSettings NOTIFY keyVisualizerSettingsChanged)
     Q_PROPERTY(QVariantMap dateTimeSettings READ dateTimeSettings NOTIFY dateTimeSettingsChanged)
+    Q_PROPERTY(QString settingsSectionRequest READ settingsSectionRequest NOTIFY settingsSectionRequestChanged)
     Q_PROPERTY(bool keyCaptureAvailable READ keyCaptureAvailable NOTIFY keyCaptureAvailableChanged)
 
 public:
@@ -115,6 +116,7 @@ public:
     QVariantList tasks() const { return m_tasks; }
     QVariantMap keyVisualizerSettings() const { return m_keyVisualizerSettings; }
     QVariantMap dateTimeSettings() const { return m_dateTimeSettings; }
+    QString settingsSectionRequest() const { return m_settingsSectionRequest; }
     bool keyCaptureAvailable() const { return m_keyCaptureAvailable; }
 
     Q_INVOKABLE void togglePlayback();
@@ -179,6 +181,7 @@ signals:
     void tasksChanged();
     void keyVisualizerSettingsChanged();
     void dateTimeSettingsChanged();
+    void settingsSectionRequestChanged();
     void keyCaptureAvailableChanged();
     void globalKeyPressed(const QString &name, const QString &text,
         bool shift, bool ctrl, bool alt, bool super);
@@ -194,6 +197,7 @@ private:
     void refreshTheme();
     void refreshKeyVisualizerSettings();
     void refreshDateTimeSettings();
+    void refreshSettingsSectionRequest();
     void readKeyCapture();
     void startEvdevKeyCapture();
     bool playerctlAvailable() const;
@@ -268,6 +272,8 @@ private:
     QVariantMap m_keyVisualizerSettings;
     QFileSystemWatcher m_dateTimeWatcher;
     QVariantMap m_dateTimeSettings;
+    QFileSystemWatcher m_settingsSectionRequestWatcher;
+    QString m_settingsSectionRequest;
     QProcess m_keyCapture;
     QByteArray m_keyCaptureBuffer;
     bool m_keyCaptureAvailable = false;

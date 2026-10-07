@@ -25,14 +25,33 @@ Item {
         Math.floor((contentWidth - contentItemGap) / 2)
 
     readonly property var sections: [
-        {key: "themes", label: "Themes"},
-        {key: "dock", label: "Dock"},
         {key: "components", label: "Components"},
-        {key: "spectrum", label: "Spectrum"},
-        {key: "keys", label: "Keys"},
         {key: "date-time", label: "Date & Time"},
+        {key: "dock", label: "Dock"},
+        {key: "keys", label: "Keys"},
+        {key: "spectrum", label: "Spectrum"},
+        {key: "themes", label: "Themes"},
         {key: "wallpaper", label: "Wallpaper"}
     ]
+
+    function applySettingsSectionRequest() {
+        const request = backend.settingsSectionRequest || ""
+        const divider = request.indexOf(":")
+        if (divider < 0) return
+        const requested = request.slice(divider + 1)
+        if (sections.some(item => item.key === requested))
+            section = requested
+    }
+
+    Component.onCompleted: applySettingsSectionRequest()
+
+    Connections {
+        target: backend
+        ignoreUnknownSignals: true
+        function onSettingsSectionRequestChanged() {
+            panel.applySettingsSectionRequest()
+        }
+    }
     readonly property var dateFormats: [
         "yyyy-MM-dd", "dd-MM-yyyy", "yyyy/MM/dd", "dd/MM/yyyy",
         "yyyyMMdd", "ddMMyyyy", "d MMM yyyy", "ddd, d MMM yyyy"
