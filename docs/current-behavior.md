@@ -30,6 +30,8 @@ Regions are ordered by dock-group-order and may contain Apps launchers, running 
 ```
 
 When ungroup windows is enabled, running apps render one icon per window.
+Dragged window order survives focus/title changes and temporary app-tracker omissions;
+positions are removed only when the windows close. New windows append to the order.
 Running apps include open windows even when the app also appears in Apps.
 Right-click an Apps or Running icon to open GNOME's app menu, including open
 windows, New Window, desktop actions, and Quit when supported by the app.

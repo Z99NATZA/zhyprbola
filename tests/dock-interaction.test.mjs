@@ -107,6 +107,7 @@ function fixture(length = 400) {
         _dockGroupsByName: new Map([['running', group]]), _dockGroupOrder: ['running'],
         _dockRegions: new Map([['running', new Actor()]]),
         _dockItems: new Map([['running', []]]), _dockRenderState: new Map(),
+        _runningOrder: new Map(), _nextRunningOrder: 0,
         _showDesktopButton: new Actor(), _panelIcons: new Map(),
         _menuManager: {menus: [], addMenu(menu) { this.menus.push(menu); }},
         _layoutEdgeSpectrum() {},
@@ -652,4 +653,82 @@ test('Sound requests open a Shell popup anchored to Components without launching
     assert.equal(menu.isOpen, false);
     dock._destroyDock();
     assert.equal(menu.destroyed, true);
+});
+
+
+function orderedRunningFixture() {
+    const setup = fixture();
+    const windows = [item(1, 'TikTok'), item(2, 'Monkeytype'), item(3, 'Translate')];
+    const live = windows.map(candidate => candidate.window);
+    setup.context.global = {display: {list_all_windows: () => live}};
+    setup.dock._appSystem = {get_running: () => windows.map(candidate => candidate.app)};
+    setup.dock._windowTracker = {get_window_app: window =>
+        windows.find(candidate => candidate.window === window)?.app};
+    const refresh = items => {
+        setup.render(setup.dock._orderRunningItems([...items]));
+        return setup.group.children.filter(button => button._delegate?.item)
+            .map(button => button._delegate.item.window.get_stable_sequence());
+    };
+    refresh(windows);
+    setup.dock._commitDockItemOrder('running', [windows[2], windows[0], windows[1]]
+        .map(candidate => setup.dock._itemOrderKey(candidate)));
+    setup.flush();
+    return {...setup, windows, live, refresh};
+}
+
+test('dragged running windows keep their slots across transient omission and title/focus changes', () => {
+    const {windows: [a, b, c], refresh} = orderedRunningFixture();
+    assert.deepEqual(refresh([b, c, a]), [3, 1, 2]);
+    assert.deepEqual(refresh([a, b]), [1, 2]);
+    c.window.focused = true;
+    c.label = 'A different Chrome tab';
+    assert.deepEqual(refresh([b, c, a]), [3, 1, 2]);
+    assert.deepEqual(refresh([]), []);
+    assert.deepEqual(refresh([a, b, c]), [3, 1, 2]);
+});
+
+test('running window identity survives app reassociation', () => {
+    const {windows: [a, b, c], refresh} = orderedRunningFixture();
+    const reassociated = {...c, app: {...c.app, get_id: () => 'chrome-new.desktop'}};
+    assert.deepEqual(refresh([a, reassociated, b]), [3, 1, 2]);
+});
+
+test('dragging while a window is temporarily absent keeps unique order slots', () => {
+    const {dock, windows: [a, b, c], refresh, flush} = orderedRunningFixture();
+    refresh([a, b]);
+    dock._commitDockItemOrder('running', [b, a].map(candidate => dock._itemOrderKey(candidate)));
+    flush();
+    refresh([c, b, a]);
+    const ranks = [...dock._runningOrder.values()];
+    assert.equal(new Set(ranks).size, ranks.length);
+    assert.deepEqual(refresh([a, c, b]), [2, 1, 3]);
+});
+
+test('closed windows release their order slots and newly opened windows append', () => {
+    const {dock, windows: [a, b, c], live, refresh} = orderedRunningFixture();
+    live.splice(live.indexOf(c.window), 1);
+    assert.deepEqual(refresh([a, b]), [1, 2]);
+    assert.equal(dock._runningOrder.has(dock._itemOrderKey(c)), false);
+    const reopened = item(4, 'Translate');
+    live.push(reopened.window);
+    assert.deepEqual(refresh([reopened, b, a]), [1, 2, 4]);
+});
+
+
+test('switching grouped mode and back preserves the dragged order of live windows', () => {
+    const {dock, windows: [a, b, c], refresh} = orderedRunningFixture();
+    const grouped = {kind: 'app', app: a.app, label: 'Chrome', running: true};
+    dock._dockItems.set('running', dock._orderRunningItems([grouped]));
+    assert.deepEqual(refresh([b, a, c]), [3, 1, 2]);
+});
+
+test('windows without native IDs keep distinct identities when titles change', () => {
+    const {dock} = fixture();
+    const a = item(1, 'Same title'), b = item(2, 'Same title');
+    delete a.window.get_stable_sequence;
+    delete b.window.get_stable_sequence;
+    const originalKey = dock._itemOrderKey(a);
+    assert.notEqual(originalKey, dock._itemOrderKey(b));
+    a.window.get_title = () => 'Changed title';
+    assert.equal(dock._itemOrderKey(a), originalKey);
 });

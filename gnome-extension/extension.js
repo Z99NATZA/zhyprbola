@@ -288,6 +288,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._inputSourceManager = null;
         this._panelIconSources = null;
         this._runningOrder = null;
+        this._windowOrderFallbackIds = null;
+        this._nextWindowOrderFallbackId = 0;
         this._lastFocusedWindow = null;
         this._windowBeforeSettings = null;
     }
@@ -723,9 +725,15 @@ export default class ZhyprbolaExtension extends Extension {
                 return;
             }
         } else {
-            reordered.forEach((candidate, index) =>
-                this._runningOrder.set(this._itemOrderKey(candidate), index));
-            this._nextRunningOrder = reordered.length;
+            const orderedKeys = reordered.map(candidate => this._itemOrderKey(candidate));
+            const rememberedKeys = [...this._runningOrder.keys()]
+                .sort((left, right) => this._runningOrder.get(left) - this._runningOrder.get(right))
+                .filter(key => !orderedKeys.includes(key));
+            // Keep absent-but-live windows and the other grouping mode's keys,
+            // giving every remembered item a distinct rank after a drag.
+            this._runningOrder = new Map([...orderedKeys, ...rememberedKeys]
+                .map((key, index) => [key, index]));
+            this._nextRunningOrder = this._runningOrder.size;
         }
         this._dockItems.set(groupName, reordered);
         this._dockRenderState.delete(groupName);
@@ -766,10 +774,16 @@ export default class ZhyprbolaExtension extends Extension {
 
     _itemOrderKey(item) {
         if (item.window) {
-            const stableWindowId = item.window.get_stable_sequence?.();
-            const windowId = stableWindowId ?? item.window.get_id?.() ??
-                item.window.get_description?.() ?? item.window.get_title();
-            return `${item.app.get_id()}:window:${windowId}`;
+            const windowId = item.window.get_stable_sequence?.() ?? item.window.get_id?.();
+            if (windowId !== undefined && windowId !== null)
+                return `window:${windowId}`;
+            // Titles and app associations can change during a window's life.
+            // Use object identity when Mutter's stable ID is unavailable.
+            this._windowOrderFallbackIds ??= new WeakMap();
+            this._nextWindowOrderFallbackId ??= 0;
+            if (!this._windowOrderFallbackIds.has(item.window))
+                this._windowOrderFallbackIds.set(item.window, this._nextWindowOrderFallbackId++);
+            return `window:fallback:${this._windowOrderFallbackIds.get(item.window)}`;
         }
         return `${item.app.get_id()}:app`;
     }
@@ -782,16 +796,25 @@ export default class ZhyprbolaExtension extends Extension {
             if (!this._runningOrder.has(key))
                 this._runningOrder.set(key, this._nextRunningOrder++);
         }
-        for (const key of [...this._runningOrder.keys()]) {
-            if (!activeKeys.has(key))
+        // Shell.App/WindowTracker can temporarily omit or reassociate a live
+        // window. Remove its saved position only after it leaves Mutter's list.
+        const liveWindows = global.display.list_all_windows();
+        const liveKeys = new Set(liveWindows.map(window => this._itemOrderKey({window})));
+        for (const app of this._appSystem.get_running())
+            liveKeys.add(this._itemOrderKey({app}));
+        for (const window of liveWindows) {
+            const app = this._windowTracker.get_window_app(window);
+            if (app) liveKeys.add(this._itemOrderKey({app}));
+        }
+        for (const key of this._runningOrder.keys()) {
+            if (!activeKeys.has(key) && !liveKeys.has(key))
                 this._runningOrder.delete(key);
         }
         if (this._runningOrder.size === 0)
             this._nextRunningOrder = 0;
         return items.sort((left, right) =>
             (this._runningOrder.get(this._itemOrderKey(left)) -
-                this._runningOrder.get(this._itemOrderKey(right))) ||
-            left.label.localeCompare(right.label));
+                this._runningOrder.get(this._itemOrderKey(right))));
     }
 
     _refreshAppGroups() {
