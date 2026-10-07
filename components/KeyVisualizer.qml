@@ -8,8 +8,6 @@ Item {
         : settings.fontSize === "lg" ? 38 : 30
     readonly property int padding: settings.fontSize === "lg" ? 24 : 20
     property var history: []
-    property bool pendingShift: false
-    property bool shiftUsed: false
     readonly property string displayText: history.join(" ")
     implicitWidth: settings.widthMode === "fixed" ? settings.maxWidth
         : Math.max(settings.minWidth,
@@ -69,29 +67,23 @@ Item {
     }
 
     function appendFormattedKey(key, hasCtrl, hasShift, hasAlt, hasSuper) {
-        if ((hasCtrl || hasShift) && /^[a-z]$/i.test(key)) key = key.toUpperCase()
+        if (hasCtrl && /^[a-z]$/i.test(key))
+            key = hasShift ? key.toUpperCase() : key.toLowerCase()
         const prefix = []
         if (hasCtrl) prefix.push("Ctrl")
         if (hasAlt) prefix.push("Alt")
         if (hasSuper) prefix.push("Super")
-        if (hasShift) prefix.push("⇧")
-        appendKey(prefix.length === 1 && hasShift ? "⇧ " + key
-            : prefix.length ? prefix.join("+") + "+" + key : key)
+        appendKey(prefix.length ? prefix.join("+") + "+" + key : key)
     }
 
     function globalPress(name, text, hasShift, hasCtrl, hasAlt, hasSuper) {
-        if (name === "Shift_L" || name === "Shift_R") {
-            pendingShift = true
-            shiftUsed = false
-            return
-        }
-        if (name === "Control_L" || name === "Control_R"
+        if (name === "Shift_L" || name === "Shift_R"
+            || name === "Control_L" || name === "Control_R"
             || name === "Alt_L" || name === "Alt_R"
             || name === "Super_L" || name === "Super_R"
             || name === "Meta_L" || name === "Meta_R"
             || name === "ISO_Level3_Shift") return
 
-        if (pendingShift) shiftUsed = true
         let key = symbolForGlobal(name) || text
         if ((!key || /[\x00-\x1f]/.test(key)) && /^[a-z]$/i.test(name))
             key = name
@@ -99,25 +91,13 @@ Item {
         appendFormattedKey(key, hasCtrl, hasShift, hasAlt, hasSuper)
     }
 
-    function globalRelease(name) {
-        if (name !== "Shift_L" && name !== "Shift_R") return
-        if (pendingShift && !shiftUsed) appendKey("⇧")
-        pendingShift = false
-    }
-
     Keys.onPressed: function(event) {
         if (backend.keyCaptureAvailable) return
         if (event.isAutoRepeat) return
-        if (event.key === Qt.Key_Shift) {
-            pendingShift = true
-            shiftUsed = false
-            return
-        }
-        if (event.key === Qt.Key_Control
+        if (event.key === Qt.Key_Shift || event.key === Qt.Key_Control
             || event.key === Qt.Key_Alt || event.key === Qt.Key_Meta
             || event.key === Qt.Key_AltGr) return
 
-        if (pendingShift) shiftUsed = true
         let key = symbolFor(event.key)
         if (!key) key = event.text
         if ((!key || /[\x00-\x1f]/.test(key))
@@ -134,22 +114,11 @@ Item {
         event.accepted = true
     }
 
-    Keys.onReleased: function(event) {
-        if (backend.keyCaptureAvailable) return
-        if (event.key === Qt.Key_Shift) {
-            if (pendingShift && !shiftUsed) appendKey("⇧")
-            pendingShift = false
-        }
-    }
-
     Connections {
         target: backend
         function onGlobalKeyPressed(name, text, shift, ctrl, alt, superKey) {
             if (visualizer.visible)
                 visualizer.globalPress(name, text, shift, ctrl, alt, superKey)
-        }
-        function onGlobalKeyReleased(name) {
-            if (visualizer.visible) visualizer.globalRelease(name)
         }
     }
 

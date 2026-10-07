@@ -153,19 +153,30 @@ private slots:
         QTest::keyClick(&window, Qt::Key_H);
         QTRY_COMPARE(visualizer->property("displayText").toString(), QStringLiteral("h"));
         QTest::keyClick(&window, Qt::Key_A, Qt::ControlModifier);
-        QTRY_COMPARE(visualizer->property("displayText").toString(), QStringLiteral("h Ctrl+A"));
-        QTest::keyClick(&window, Qt::Key_A, Qt::ShiftModifier);
-        QCOMPARE(visualizer->property("displayText").toString(), QString::fromUtf8("h Ctrl+A ⇧ A"));
+        QTRY_COMPARE(visualizer->property("displayText").toString(), QStringLiteral("h Ctrl+a"));
+        QKeyEvent ctrlShift(QEvent::KeyPress, Qt::Key_A,
+            Qt::ControlModifier | Qt::ShiftModifier, QString());
+        QCoreApplication::sendEvent(&window, &ctrlShift);
+        QCOMPARE(visualizer->property("displayText").toString(),
+            QStringLiteral("h Ctrl+a Ctrl+A"));
+        QKeyEvent shifted(QEvent::KeyPress, Qt::Key_A, Qt::ShiftModifier,
+            QStringLiteral("A"));
+        QCoreApplication::sendEvent(&window, &shifted);
+        QCOMPARE(visualizer->property("displayText").toString(),
+            QStringLiteral("h Ctrl+a Ctrl+A A"));
+        QTest::keyClick(&window, Qt::Key_Shift);
+        QCOMPARE(visualizer->property("displayText").toString(),
+            QStringLiteral("h Ctrl+a Ctrl+A A"));
 
         QKeyEvent thai(QEvent::KeyPress, Qt::Key_unknown, Qt::NoModifier,
             QString::fromUtf8("ก"));
         QCoreApplication::sendEvent(&window, &thai);
         QTRY_COMPARE(visualizer->property("displayText").toString(),
-            QString::fromUtf8("h Ctrl+A ⇧ A ก"));
+            QString::fromUtf8("h Ctrl+a Ctrl+A A ก"));
         QTest::keyClick(&window, Qt::Key_Space);
         QTest::keyClick(&window, Qt::Key_Backspace);
         QTRY_COMPARE(visualizer->property("displayText").toString(),
-            QString::fromUtf8("h Ctrl+A ⇧ A ก ␣ ⌫"));
+            QString::fromUtf8("h Ctrl+a Ctrl+A A ก ␣ ⌫"));
 
         const QImage image = window.grabWindow();
         QVERIFY(!image.isNull());
@@ -198,6 +209,8 @@ private slots:
             false, false, false, false);
         emit backend.globalKeyPressed(QStringLiteral("a"), QStringLiteral("a"),
             false, true, false, false);
+        emit backend.globalKeyPressed(QStringLiteral("A"), QString(),
+            true, true, false, false);
         emit backend.globalKeyPressed(QStringLiteral("Shift_L"), QString(),
             true, false, false, false);
         emit backend.globalKeyPressed(QStringLiteral("A"), QStringLiteral("A"),
@@ -210,7 +223,19 @@ private slots:
         emit backend.globalKeyPressed(QStringLiteral("BackSpace"), QString(),
             false, false, false, false);
         QCOMPARE(visualizer->property("displayText").toString(),
-            QString::fromUtf8("h Ctrl+A ⇧ A ก ␣ ⌫"));
+            QString::fromUtf8("h Ctrl+a Ctrl+A A ก ␣ ⌫"));
+
+        visualizer->setProperty("history", QVariantList{});
+        emit backend.globalKeyPressed(QStringLiteral("Shift_L"), QString(),
+            true, false, false, false);
+        for (const QChar letter : QStringLiteral("HEAD"))
+            emit backend.globalKeyPressed(QString(letter), QString(letter),
+                true, false, false, false);
+        emit backend.globalKeyReleased(QStringLiteral("Shift_L"));
+        QCOMPARE(visualizer->property("displayText").toString(), QStringLiteral("H E A D"));
+        emit backend.globalKeyPressed(QStringLiteral("a"), QStringLiteral("a"),
+            true, false, false, false);
+        QCOMPARE(visualizer->property("displayText").toString(), QStringLiteral("H E A D a"));
 
         QQuickWindow window;
         window.resize(480, 78);
@@ -221,7 +246,7 @@ private slots:
         QTRY_VERIFY(visualizer->hasActiveFocus());
         QTest::keyClick(&window, Qt::Key_X);
         QCOMPARE(visualizer->property("displayText").toString(),
-            QString::fromUtf8("h Ctrl+A ⇧ A ก ␣ ⌫"));
+            QStringLiteral("H E A D a"));
     }
 };
 
