@@ -123,29 +123,39 @@ private slots:
         window.resize(660, 510);
         settings->setParentItem(window.contentItem());
         window.show();
+        QTRY_VERIFY(window.isExposed());
         auto *scroll = object->findChild<QQuickItem *>(
             QStringLiteral("dock-components-scroll"));
         QVERIFY(scroll);
         scroll->setProperty("contentY", scroll->property("contentHeight").toReal()
             - scroll->height());
+        const QString screenshot = qEnvironmentVariable("ZHYPRBOLA_COMPONENTS_SCREENSHOT");
+        if (!screenshot.isEmpty())
+            QVERIFY(window.grabWindow().save(screenshot));
         auto *box = object->findChild<QQuickItem *>(
             QStringLiteral("dock-component-launcher-box"));
         QVERIFY(box);
         QTRY_COMPARE(box->property("rowCount").toInt(), 2);
-        QCOMPARE(box->property("columnCount").toInt(), 5);
+        QCOMPARE(box->height(), 136.0);
         auto *repeater = object->findChild<QQuickItem *>(
             QStringLiteral("dock-component-launcher-repeater"));
         QVERIFY(repeater);
         QCOMPARE(repeater->property("count").toInt(), 10);
         const QString keyName = QStringLiteral("dock-component-launcher-key-visualizer");
         QQuickItem *keys = nullptr;
+        QQuickItem *first = nullptr;
+        QQuickItem *last = nullptr;
         for (int i = 0; i < repeater->property("count").toInt(); ++i) {
             QQuickItem *tile = nullptr;
             QVERIFY(QMetaObject::invokeMethod(repeater, "itemAt",
                 Q_RETURN_ARG(QQuickItem *, tile), Q_ARG(int, i)));
             if (tile && tile->objectName() == keyName) keys = tile;
+            if (i == 0) first = tile;
+            if (i == 9) last = tile;
         }
-        QVERIFY(keys);
+        QVERIFY(keys && first && last);
+        QCOMPARE(first->mapToItem(box, QPointF(0, 0)), QPointF(12, 45));
+        QCOMPARE(last->mapToItem(box, QPointF(0, 0)), QPointF(12, 82));
         const QPointF position = keys->mapToItem(box, QPointF(0, 0));
         QVERIFY(position.x() >= 0 && position.x() + keys->width() <= box->width());
         QVERIFY(position.y() >= 0 && position.y() + keys->height() < box->height());

@@ -944,11 +944,10 @@ Item {
         id: launcherBox
         required property var items
         readonly property int rowCount: Math.max(1, Math.ceil(items.length / 9))
-        readonly property int columnCount: Math.max(1, Math.ceil(items.length / rowCount))
         objectName: "dock-component-launcher-box"
 
         width: panel.contentWidth
-        height: 55 + rowCount * 37
+        height: Math.max(136, 55 + rowCount * 37)
         radius: 12
         color: Theme.control
 
@@ -973,10 +972,10 @@ Item {
         }
 
         Item {
-            x: Math.round((parent.width - width) / 2)
+            x: 12
             y: 45
-            width: launcherBox.columnCount * 37 - 3
-            height: launcherBox.rowCount * 37 - 3
+            width: parent.width - 24
+            height: parent.height - y
 
             Repeater {
                 objectName: "dock-component-launcher-repeater"
@@ -988,8 +987,8 @@ Item {
                     required property int index
                     readonly property string componentKey: modelData
                     objectName: "dock-component-launcher-" + componentKey
-                    x: (index % launcherBox.columnCount) * 37
-                    y: Math.floor(index / launcherBox.columnCount) * 37
+                    x: (index % 9) * 37
+                    y: Math.floor(index / 9) * 37
                     width: 34
                     height: 34
                     radius: 9
