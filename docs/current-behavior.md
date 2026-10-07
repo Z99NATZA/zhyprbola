@@ -13,7 +13,9 @@ Ungroup windows: ~/.config/zhyprbola/dock-ungroup-windows (true/false, default f
 Pinned apps: ~/.config/zhyprbola/pinned-apps (desktop IDs, one per line; shown only when Apps is enabled)
 Wallpaper toggle: ~/.config/zhyprbola/use-wallpaper
 Tasks: ~/.config/zhyprbola/tasks.json (local checklist; items remain until manually deleted)
-Key visualizer: ~/.config/zhyprbola/key-visualizer (font size, width, alignment)
+Key visualizer: ~/.config/zhyprbola/key-visualizer (font size, padding, width, alignment)
+Padding: sm uses 4 px around the text; md keeps the original spacing; lg adds 12 px.
+Width −/+ buttons change by 20 px, repeat after a 400 ms hold, and accelerate to 25 steps/s.
 ```
 
 Dock regions:

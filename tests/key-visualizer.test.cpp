@@ -9,6 +9,7 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QSignalSpy>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QtTest>
 #include <functional>
@@ -50,6 +51,162 @@ private:
 class KeyVisualizerTest : public QObject {
     Q_OBJECT
 private slots:
+    void appliesAndPersistsPadding() {
+        QTemporaryDir config;
+        QVERIFY(config.isValid());
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+        const auto restoreConfig = qScopeGuard([previous] {
+            if (previous.isNull()) qunsetenv("XDG_CONFIG_HOME");
+            else qputenv("XDG_CONFIG_HOME", previous);
+        });
+        Backend backend;
+        QCOMPARE(backend.keyVisualizerSettings().value(QStringLiteral("padding")).toString(),
+            QStringLiteral("md"));
+        backend.setKeyVisualizerSetting(QStringLiteral("minWidth"), 120);
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        QQmlComponent component(&engine,
+            QUrl::fromLocalFile(QFINDTESTDATA("../components/KeyVisualizer.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto *display = object->findChild<QQuickItem *>(QStringLiteral("key-visualizer-display"));
+        QVERIFY(display);
+        object->setProperty("history", QVariantList{QStringLiteral("Padding test")});
+        for (const QString &font : {QStringLiteral("sm"), QStringLiteral("md"),
+                 QStringLiteral("lg")}) {
+            backend.setKeyVisualizerSetting(QStringLiteral("fontSize"), font);
+            backend.setKeyVisualizerSetting(QStringLiteral("padding"), QStringLiteral("md"));
+            const qreal defaultWidth = object->property("implicitWidth").toReal();
+            const qreal defaultHeight = object->property("implicitHeight").toReal();
+            QCOMPARE(defaultHeight, font == QStringLiteral("sm") ? 64.0
+                : font == QStringLiteral("lg") ? 96.0 : 78.0);
+            backend.setKeyVisualizerSetting(QStringLiteral("padding"), QStringLiteral("sm"));
+            QCOMPARE(object->property("padding").toInt(), 4);
+            QVERIFY(object->property("implicitWidth").toReal() < defaultWidth);
+            QVERIFY(object->property("implicitHeight").toReal() < defaultHeight);
+            QCOMPARE(object->property("implicitHeight").toReal(),
+                qCeil(display->property("implicitHeight").toReal()) + 8.0);
+            backend.setKeyVisualizerSetting(QStringLiteral("padding"), QStringLiteral("lg"));
+            QCOMPARE(object->property("implicitWidth").toReal(), defaultWidth + 24);
+            QCOMPARE(object->property("implicitHeight").toReal(), defaultHeight + 24);
+        }
+        backend.setKeyVisualizerSetting(QStringLiteral("padding"), QStringLiteral("sm"));
+        Backend reloaded;
+        QCOMPARE(reloaded.keyVisualizerSettings().value(QStringLiteral("padding")).toString(),
+            QStringLiteral("sm"));
+        backend.setKeyVisualizerSetting(QStringLiteral("padding"), QStringLiteral("invalid"));
+        QCOMPARE(backend.keyVisualizerSettings().value(QStringLiteral("padding")).toString(),
+            QStringLiteral("md"));
+    }
+
+    void repeatsWidthButtonsAndAccelerates() {
+        QTemporaryDir config;
+        QVERIFY(config.isValid());
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+        const auto restoreConfig = qScopeGuard([previous] {
+            if (previous.isNull()) qunsetenv("XDG_CONFIG_HOME");
+            else qputenv("XDG_CONFIG_HOME", previous);
+        });
+        Backend backend;
+        backend.setKeyVisualizerSetting(QStringLiteral("minWidth"), 120);
+        backend.setKeyVisualizerSetting(QStringLiteral("maxWidth"), 180);
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        QQmlComponent component(&engine,
+            QUrl::fromLocalFile(QFINDTESTDATA("../components/SettingsPanel.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto *settings = qobject_cast<QQuickItem *>(object.data());
+        QVERIFY(settings);
+        settings->setProperty("section", QStringLiteral("keys"));
+        QQuickWindow window;
+        window.resize(660, 510);
+        settings->setParentItem(window.contentItem());
+        window.show();
+        QTRY_VERIFY(window.isExposed());
+
+        std::function<QQuickItem *(QQuickItem *, const QString &)> findButton;
+        findButton = [&findButton](QQuickItem *item, const QString &name) {
+            if (item->objectName() == name) return item;
+            for (auto *child : item->childItems())
+                if (auto *found = findButton(child, name)) return found;
+            return static_cast<QQuickItem *>(nullptr);
+        };
+        const auto position = [&findButton, settings](const QString &name) {
+            auto *button = findButton(settings, name);
+            return button ? button->mapToScene(QPointF(button->width() / 2,
+                button->height() / 2)).toPoint() : QPoint(-1, -1);
+        };
+        const auto width = [&backend](const QString &key) {
+            return backend.keyVisualizerSettings().value(key).toInt();
+        };
+        const QString maxKey = QStringLiteral("maxWidth");
+        const QString minKey = QStringLiteral("minWidth");
+        const QPoint plus = position(QStringLiteral("key-width-maxWidth-increase"));
+        QVERIFY(plus.x() >= 0);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, plus);
+        QCOMPARE(width(maxKey), 200);
+        QTest::qWait(500);
+        QCOMPARE(width(maxKey), 200);
+
+        QSignalSpy changes(&backend, &Backend::keyVisualizerSettingsChanged);
+        QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, plus);
+        QCOMPARE(width(maxKey), 220);
+        QTest::qWait(500);
+        const int earlyRepeats = changes.count() - 1;
+        QVERIFY(earlyRepeats > 0);
+        QTest::qWait(700);
+        const int beforeLate = changes.count();
+        QTest::qWait(500);
+        QVERIFY(changes.count() - beforeLate > earlyRepeats);
+        QTRY_COMPARE(width(maxKey), 1000);
+        QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, plus);
+        QTest::qWait(200);
+        QCOMPARE(width(maxKey), 1000);
+
+        const QPoint minus = position(QStringLiteral("key-width-maxWidth-decrease"));
+        QVERIFY(minus.x() >= 0);
+        QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, minus);
+        QTest::qWait(550);
+        QVERIFY(width(maxKey) < 980);
+        QTest::mouseMove(&window, QPoint(650, 500));
+        const int afterExit = width(maxKey);
+        QTest::qWait(500);
+        QCOMPARE(width(maxKey), afterExit);
+        QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, QPoint(650, 500));
+
+        QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, minus);
+        settings->setProperty("section", QStringLiteral("themes"));
+        const int afterHide = width(maxKey);
+        QTest::qWait(500);
+        QCOMPARE(width(maxKey), afterHide);
+        QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, minus);
+        settings->setProperty("section", QStringLiteral("keys"));
+        backend.setKeyVisualizerSetting(maxKey, 180);
+        const QPoint minPlus = position(QStringLiteral("key-width-minWidth-increase"));
+        QVERIFY(minPlus.x() >= 0);
+        QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, minPlus);
+        QTRY_COMPARE(width(minKey), 180);
+        QTest::qWait(300);
+        QCOMPARE(width(minKey), 180);
+        QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, minPlus);
+        QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, minus);
+        QTest::qWait(550);
+        QCOMPARE(width(maxKey), 180);
+        QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, minus);
+        const QPoint minMinus = position(QStringLiteral("key-width-minWidth-decrease"));
+        QVERIFY(minMinus.x() >= 0);
+        QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, minMinus);
+        QTRY_COMPARE(width(minKey), 120);
+        QTest::qWait(300);
+        QCOMPARE(width(minKey), 120);
+        QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, minMinus);
+    }
+
     void colorsSpecialKeysWithTheme() {
         VisualizerBackend backend;
         QQmlEngine engine;
@@ -203,6 +360,7 @@ private slots:
             };
             for (const auto &selection : {
                      std::pair{QStringLiteral("fontSize"), QStringLiteral("md")},
+                     std::pair{QStringLiteral("padding"), QStringLiteral("md")},
                      std::pair{QStringLiteral("widthMode"), QStringLiteral("fit")},
                      std::pair{QStringLiteral("alignment"), QStringLiteral("center")}}) {
                 auto *mark = check(selection.first, selection.second);
@@ -210,9 +368,11 @@ private slots:
                 QVERIFY(mark->isVisible());
             }
             backend.setKeyVisualizerSetting(QStringLiteral("fontSize"), QStringLiteral("lg"));
+            backend.setKeyVisualizerSetting(QStringLiteral("padding"), QStringLiteral("sm"));
             backend.setKeyVisualizerSetting(QStringLiteral("widthMode"), QStringLiteral("fixed"));
             backend.setKeyVisualizerSetting(QStringLiteral("alignment"), QStringLiteral("right"));
             QTRY_VERIFY(check(QStringLiteral("fontSize"), QStringLiteral("lg"))->isVisible());
+            QTRY_VERIFY(check(QStringLiteral("padding"), QStringLiteral("sm"))->isVisible());
             QTRY_VERIFY(check(QStringLiteral("widthMode"), QStringLiteral("fixed"))->isVisible());
             QTRY_VERIFY(check(QStringLiteral("alignment"), QStringLiteral("right"))->isVisible());
             QVERIFY(!check(QStringLiteral("fontSize"), QStringLiteral("md"))->isVisible());
@@ -224,6 +384,22 @@ private slots:
                 QStringLiteral("open-key-visualizer"));
             QVERIFY(button);
             QVERIFY(button->isVisible());
+            auto *scroll = object->findChild<QQuickItem *>(
+                QStringLiteral("key-visualizer-scroll"));
+            QVERIFY(scroll);
+            settings->setHeight(440);
+            QCOMPARE(scroll->height(), 352.0);
+            QVERIFY(scroll->clip());
+            const qreal bottom = scroll->property("contentHeight").toReal() - scroll->height();
+            QVERIFY(bottom > 0);
+            QVERIFY(QMetaObject::invokeMethod(scroll, "flick",
+                Q_ARG(qreal, 0.0), Q_ARG(qreal, -500.0)));
+            QTRY_VERIFY(scroll->property("contentY").toReal() > 0);
+            QVERIFY(QMetaObject::invokeMethod(scroll, "cancelFlick"));
+            scroll->setProperty("contentY", bottom);
+            QVERIFY(button->mapToItem(scroll, QPointF(0, 0)).y() >= 0);
+            QVERIFY(button->mapToItem(scroll, QPointF(0, button->height())).y()
+                <= scroll->height());
             const QPoint click = button->mapToScene(
                 QPointF(button->width() / 2, button->height() / 2)).toPoint();
             QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, click);

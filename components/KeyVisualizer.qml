@@ -6,7 +6,11 @@ Item {
     readonly property var settings: backend.keyVisualizerSettings
     readonly property int fontSize: settings.fontSize === "sm" ? 23
         : settings.fontSize === "lg" ? 38 : 30
-    readonly property int padding: settings.fontSize === "lg" ? 24 : 20
+    readonly property int defaultPadding: settings.fontSize === "lg" ? 24 : 20
+    readonly property int padding: settings.padding === "sm" ? 4
+        : defaultPadding + (settings.padding === "lg" ? 12 : 0)
+    readonly property int defaultHeight: settings.fontSize === "sm" ? 64
+        : settings.fontSize === "lg" ? 96 : 78
     property var history: []
     readonly property string displayText: history.join(" ")
     readonly property string styledText: history.map(token =>
@@ -14,8 +18,8 @@ Item {
     implicitWidth: settings.widthMode === "fixed" ? settings.maxWidth
         : Math.max(settings.minWidth,
             Math.min(settings.maxWidth, measure.implicitWidth + padding * 2))
-    implicitHeight: settings.fontSize === "sm" ? 64
-        : settings.fontSize === "lg" ? 96 : 78
+    implicitHeight: settings.padding === "sm" ? Math.ceil(measure.implicitHeight) + 8
+        : defaultHeight + (settings.padding === "lg" ? 24 : 0)
     focus: true
 
     function symbolFor(key) {

@@ -1399,16 +1399,49 @@ Item {
 
                     MouseArea {
                         id: stepMouse
+                        objectName: "key-width-" + stepper.settingKey
+                            + (modelData < 0 ? "-decrease" : "-increase")
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
+                        property int heldMs: 0
+
+                        function step() {
                             const settings = backend.keyVisualizerSettings
                             const value = settings[stepper.settingKey] + modelData
                             const limit = stepper.settingKey === "minWidth"
                                 ? Math.min(settings.maxWidth, Math.max(120, value))
                                 : Math.max(settings.minWidth, Math.min(1000, value))
                             backend.setKeyVisualizerSetting(stepper.settingKey, limit)
+                        }
+
+                        onPressed: {
+                            step()
+                            heldMs = 0
+                            repeatTimer.interval = 400
+                            repeatTimer.restart()
+                        }
+                        onReleased: repeatTimer.stop()
+                        onCanceled: repeatTimer.stop()
+                        onExited: repeatTimer.stop()
+                        onVisibleChanged: if (!visible) repeatTimer.stop()
+                        onEnabledChanged: if (!enabled) repeatTimer.stop()
+
+                        Timer {
+                            id: repeatTimer
+                            repeat: true
+                            onTriggered: {
+                                if (!stepMouse.pressed || !stepMouse.containsMouse
+                                        || !stepMouse.visible || !stepMouse.enabled) {
+                                    stop()
+                                    return
+                                }
+                                stepMouse.heldMs += interval
+                                stepMouse.step()
+                                // Accelerate from ~8 to 25 steps/s as the hold continues.
+                                interval = Math.max(40,
+                                    140 - Math.floor(stepMouse.heldMs / 400) * 20)
+                            }
                         }
                     }
                 }
@@ -1426,76 +1459,95 @@ Item {
         }
     }
 
-    Column {
+    Flickable {
+        objectName: "key-visualizer-scroll"
         x: panel.contentX
         y: 76
         width: panel.contentWidth
-        spacing: 17
+        height: panel.height - y - 12
+        contentWidth: width
+        contentHeight: keyVisualizerColumn.height
+        clip: true
+        boundsBehavior: Flickable.DragAndOvershootBounds
+        flickableDirection: Flickable.VerticalFlick
         visible: panel.section === "keys"
 
-        KeyChoice {
-            title: "Font size"
-            settingKey: "fontSize"
-            options: [{key: "sm", label: "sm"}, {key: "md", label: "md"},
-                {key: "lg", label: "lg"}]
-        }
-
-        KeyChoice {
-            title: "Width"
-            settingKey: "widthMode"
-            options: [{key: "fit", label: "Fit content"},
-                {key: "fixed", label: "Fixed max"}]
-        }
-
-        Row {
-            spacing: 8
-            WidthStepper { label: "Min"; settingKey: "minWidth" }
-            WidthStepper { label: "Max"; settingKey: "maxWidth" }
-        }
-
-        KeyChoice {
-            title: "Text alignment"
-            settingKey: "alignment"
-            options: [{key: "left", label: "Left"},
-                {key: "center", label: "Center"},
-                {key: "right", label: "Right"}]
-        }
-
-        Rectangle {
-            objectName: "open-key-visualizer"
+        Column {
+            id: keyVisualizerColumn
             width: parent.width
-            height: 42
-            radius: 8
-            color: openKeysMouse.containsMouse ? Qt.lighter(Theme.accent, 1.1) : Theme.accent
+            spacing: 17
 
-            Row {
-                anchors.centerIn: parent
-                spacing: 8
-
-                Image {
-                    width: 18
-                    height: 18
-                    source: Qt.resolvedUrl("../gnome-extension/icons/key-visualizer.svg")
-                    sourceSize: Qt.size(width, height)
-                    fillMode: Image.PreserveAspectFit
-                }
-
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "Open Key visualizer"
-                    color: Theme.accentText
-                    font.family: Qt.application.font.family
-                    font.pixelSize: 14
-                    font.weight: Font.DemiBold
-                }
+            KeyChoice {
+                title: "Font size"
+                settingKey: "fontSize"
+                options: [{key: "sm", label: "sm"}, {key: "md", label: "md"},
+                    {key: "lg", label: "lg"}]
             }
 
-            MouseArea {
-                id: openKeysMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: backend.openDockComponent("key-visualizer")
+            KeyChoice {
+                title: "Padding"
+                settingKey: "padding"
+                options: [{key: "sm", label: "sm"}, {key: "md", label: "md"},
+                    {key: "lg", label: "lg"}]
+            }
+
+            KeyChoice {
+                title: "Width"
+                settingKey: "widthMode"
+                options: [{key: "fit", label: "Fit content"},
+                    {key: "fixed", label: "Fixed max"}]
+            }
+
+            Row {
+                spacing: 8
+                WidthStepper { label: "Min"; settingKey: "minWidth" }
+                WidthStepper { label: "Max"; settingKey: "maxWidth" }
+            }
+
+            KeyChoice {
+                title: "Text alignment"
+                settingKey: "alignment"
+                options: [{key: "left", label: "Left"},
+                    {key: "center", label: "Center"},
+                    {key: "right", label: "Right"}]
+            }
+
+            Rectangle {
+                objectName: "open-key-visualizer"
+                width: parent.width
+                height: 42
+                radius: 8
+                color: openKeysMouse.containsMouse ? Qt.lighter(Theme.accent, 1.1) : Theme.accent
+
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 8
+
+                    Image {
+                        width: 18
+                        height: 18
+                        source: Qt.resolvedUrl("../gnome-extension/icons/key-visualizer.svg")
+                        sourceSize: Qt.size(width, height)
+                        fillMode: Image.PreserveAspectFit
+                    }
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "Open Key visualizer"
+                        color: Theme.accentText
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                    }
+                }
+
+                MouseArea {
+                    id: openKeysMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: backend.openDockComponent("key-visualizer")
+                }
             }
         }
     }
