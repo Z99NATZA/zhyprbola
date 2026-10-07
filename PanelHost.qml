@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Window
+import QtQuick.Controls as Controls
 import "components"
 
 Window {
@@ -69,7 +70,7 @@ Window {
     minimumHeight: panelHeight
     maximumWidth: resizablePanel ? 640 : panelWidth
     maximumHeight: resizablePanel ? 720 : panelHeight
-    flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
+    flags: Qt.FramelessWindowHint | Qt.Tool
     color: "transparent"
     title: panelTitle
 
@@ -222,6 +223,35 @@ Window {
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.SizeFDiagCursor
             onPressed: host.startSystemResize(Qt.RightEdge | Qt.BottomEdge)
+        }
+    }
+
+    MouseArea {
+        anchors.fill: parent
+        z: 400
+        acceptedButtons: Qt.RightButton
+        onClicked: mouse => {
+            pinMenu.pinned = backend.panelPinned(host.panelName)
+            pinMenu.x = Math.max(0, Math.min(mouse.x, host.width - pinMenu.width))
+            pinMenu.y = Math.max(0, Math.min(mouse.y, host.height - pinMenu.height))
+            pinMenu.open()
+        }
+    }
+
+    Controls.Menu {
+        id: pinMenu
+        property bool pinned: false
+        width: Math.min(154, host.width)
+
+        background: Rectangle {
+            color: Theme.panelSurface
+            radius: 6
+            border.color: Theme.secondary
+        }
+
+        Controls.MenuItem {
+            text: pinMenu.pinned ? "Unpin" : "Pin on top"
+            onTriggered: backend.setPanelPinned(host.panelName, !pinMenu.pinned)
         }
     }
 }

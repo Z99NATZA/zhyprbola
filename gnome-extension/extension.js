@@ -111,6 +111,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._panelRequestId = 0;
         this._panelRequestPollId = 0;
         this._panelRequestMonitor = null;
+        this._panelWindows = new Set();
+        this._pinnedPanelSyncId = 0;
         this._pendingPanels = new Set();
         this._lastFocusedWindow = global.display.focus_window;
         this._windowBeforeSettings = null;
@@ -145,6 +147,8 @@ export default class ZhyprbolaExtension extends Extension {
             GLib.get_user_config_dir(), 'zhyprbola', 'pinned-apps']);
         this._panelRequestPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'panel-request']);
+        this._pinnedPanelsPath = GLib.build_filenamev([
+            GLib.get_user_config_dir(), 'zhyprbola', 'pinned-panels']);
         this._themeName = this._readTheme();
         this._dockPosition = this._readDockPosition();
         this._dockBgOpacity = this._readDockBgOpacity();
@@ -156,6 +160,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockGroupOrder = this._readDockGroupOrder();
         this._dockComponents = this._readDockComponents();
         this._pinnedApps = this._readPinnedApps();
+        this._pinnedPanels = this._readPinnedPanels();
         this._panelRequest = this._readPanelRequest();
         this._appSystem = Shell.AppSystem.get_default();
         this._windowTracker = Shell.WindowTracker.get_default();
@@ -173,6 +178,9 @@ export default class ZhyprbolaExtension extends Extension {
         this._applyWallpaper(true);
         this._watchSettings();
         this._startPanelRequestPolling();
+        for (const window of global.display.list_all_windows())
+            this._watchPanelWindow(window);
+        this._applyPinnedPanels();
         this._startEdgeSpectrum();
 
         this._appSystem.connectObject('app-state-changed',
@@ -182,7 +190,10 @@ export default class ZhyprbolaExtension extends Extension {
 
         global.display.connectObject(
             'workareas-changed', () => this._queueLayout(),
-            'window-created', () => this._queueAppRefresh(),
+            'window-created', (_display, window) => {
+                this._queueAppRefresh();
+                this._watchPanelWindow(window);
+            },
             'notify::focus-window', () => {
                 const focused = global.display.focus_window;
                 // Clicking a launcher in Settings gives Settings focus first.
@@ -258,6 +269,18 @@ export default class ZhyprbolaExtension extends Extension {
         }
         this._panelRequestMonitor?.cancel();
         this._panelRequestMonitor = null;
+        if (this._pinnedPanelSyncId) {
+            GLib.source_remove(this._pinnedPanelSyncId);
+            this._pinnedPanelSyncId = 0;
+        }
+        for (const window of this._panelWindows)
+            window.disconnectObject(this);
+        this._panelWindows.clear();
+        for (const window of global.display.list_all_windows()) {
+            if (this._pinnedPanels.includes(this._panelNameForWindow(window)) &&
+                window.is_above())
+                window.unmake_above();
+        }
         this._restoreDesktopWindows();
         this._destroyDock();
         this._appSystem = null;
@@ -269,6 +292,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._runningOrder = null;
         this._lastFocusedWindow = null;
         this._windowBeforeSettings = null;
+        this._pinnedPanels = null;
     }
 
     _createDock() {
@@ -976,6 +1000,69 @@ export default class ZhyprbolaExtension extends Extension {
         }
     }
 
+    _readPinnedPanels() {
+        try {
+            const [, contents] = GLib.file_get_contents(this._pinnedPanelsPath);
+            const names = JSON.parse(new TextDecoder().decode(contents));
+            return Array.isArray(names)
+                ? [...new Set(names.filter(name => typeof name === 'string' &&
+                    PANEL_TITLES[name]))]
+                : [];
+        } catch (_) {
+            return [];
+        }
+    }
+
+    _panelNameForWindow(window) {
+        return Object.keys(PANEL_TITLES).find(name =>
+            window.get_title() === PANEL_TITLES[name]);
+    }
+
+    _watchPanelWindow(window) {
+        if (this._panelWindows.has(window)) return;
+        this._panelWindows.add(window);
+        window.connectObject(
+            'notify::title', () => {
+                if (this._pinnedPanels.includes(this._panelNameForWindow(window)))
+                    this._queuePinnedPanelSync();
+            },
+            'notify::minimized', () => {
+                if (!window.minimized &&
+                    this._pinnedPanels.includes(this._panelNameForWindow(window)))
+                    this._queuePinnedPanelSync();
+            },
+            'unmanaged', () => {
+                this._panelWindows.delete(window);
+                window.disconnectObject(this);
+            }, this);
+        if (this._pinnedPanels.includes(this._panelNameForWindow(window)))
+            this._queuePinnedPanelSync();
+    }
+
+    _queuePinnedPanelSync() {
+        if (this._pinnedPanelSyncId) return;
+        this._pinnedPanelSyncId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._pinnedPanelSyncId = 0;
+            this._applyPinnedPanels();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _applyPinnedPanels(removed = []) {
+        const windows = global.display.list_all_windows();
+        for (const window of windows) {
+            if (removed.includes(this._panelNameForWindow(window)) && window.is_above())
+                window.unmake_above();
+        }
+        for (const name of this._pinnedPanels) {
+            const window = windows.find(item =>
+                item.get_title() === PANEL_TITLES[name] && !item.minimized);
+            if (!window) continue;
+            if (!window.is_above()) window.make_above();
+            window.raise();
+        }
+    }
+
     _readPanelRequest() {
         try {
             return new TextDecoder().decode(
@@ -1051,6 +1138,10 @@ export default class ZhyprbolaExtension extends Extension {
         const dockGroupOrder = this._readDockGroupOrder();
         const dockComponents = this._readDockComponents();
         const pinnedApps = this._readPinnedApps();
+        const pinnedPanels = this._readPinnedPanels();
+        const removedPinnedPanels = this._pinnedPanels.filter(name =>
+            !pinnedPanels.includes(name));
+        const pinnedPanelsChanged = pinnedPanels.join(',') !== this._pinnedPanels.join(',');
         const themeChanged = theme !== this._themeName;
         const positionChanged = position !== this._dockPosition;
         const bgOpacityChanged = bgOpacity !== this._dockBgOpacity;
@@ -1077,6 +1168,10 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockGroupOrder = dockGroupOrder;
         this._dockComponents = dockComponents;
         this._pinnedApps = pinnedApps;
+        this._pinnedPanels = pinnedPanels;
+
+        if (pinnedPanelsChanged)
+            this._applyPinnedPanels(removedPinnedPanels);
 
         this._handlePanelRequest();
         if (positionChanged || groupsChanged || componentsChanged || dockUngroupWindowsChanged)

@@ -143,6 +143,8 @@ public:
     Q_INVOKABLE void moveDockComponent(const QString &key, const QString &destination,
         const QString &beforeKey);
     Q_INVOKABLE void openDockComponent(const QString &key);
+    Q_INVOKABLE bool panelPinned(const QString &key) const;
+    Q_INVOKABLE bool setPanelPinned(const QString &key, bool pinned);
     Q_INVOKABLE void setDockUngroupWindows(bool enabled);
     Q_INVOKABLE void setUseWallpaper(bool enabled);
     Q_INVOKABLE void setEdgeSpectrumEnabled(bool enabled);
