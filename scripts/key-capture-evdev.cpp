@@ -6,6 +6,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSocketNotifier>
+#include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QTimer>
 
 #include <gio/gio.h>
@@ -60,7 +62,9 @@ public:
     explicit Capture(QCoreApplication &app, bool testMode = false) : QObject(&app),
         m_app(app), m_testMode(testMode),
         m_settings(g_settings_new("org.gnome.desktop.input-sources")),
-        m_context(xkb_context_new(XKB_CONTEXT_NO_FLAGS), xkb_context_unref) {
+        m_context(xkb_context_new(XKB_CONTEXT_NO_FLAGS), xkb_context_unref),
+        m_sourcePath(QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation)
+            + QStringLiteral("/zhyprbola/input-source")) {
         if (!m_context || !loadLayout()) return;
         if (m_testMode) {
             m_ready = true;
@@ -116,12 +120,35 @@ public:
         testKey(KEY_ENTER, 1);
     }
 
+    void selfTestSourceSwitch() {
+        QTemporaryDir directory;
+        if (!directory.isValid()) return;
+        m_sourcePath = directory.filePath(QStringLiteral("input-source"));
+        const auto testSource = [this](const QByteArray &source) {
+            QFile file(m_sourcePath);
+            if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) return;
+            file.write(source);
+            file.close();
+            input_event event = {};
+            event.type = EV_KEY;
+            event.code = KEY_D;
+            event.value = 1;
+            keyEvent(event);
+            event.value = 0;
+            keyEvent(event);
+        };
+        testSource("us\n");
+        testSource("th\n");
+        testSource("us\n");
+    }
+
 private:
     bool loadLayout() {
         QStringList layouts;
         QStringList variants;
         if (m_testMode) {
             layouts = {QStringLiteral("us"), QStringLiteral("th")};
+            m_sourceIds = layouts;
         } else {
             GVariant *sources = g_settings_get_value(m_settings, "sources");
             GVariantIter iter;
@@ -133,10 +160,14 @@ private:
                 const QStringList parts = QString::fromUtf8(id).split(QLatin1Char('+'));
                 layouts.append(parts.value(0));
                 variants.append(parts.value(1));
+                m_sourceIds.append(QString::fromUtf8(id));
             }
             g_variant_unref(sources);
         }
-        if (layouts.isEmpty()) layouts.append(QStringLiteral("us"));
+        if (layouts.isEmpty()) {
+            layouts.append(QStringLiteral("us"));
+            m_sourceIds.append(QStringLiteral("us"));
+        }
         while (variants.size() < layouts.size()) variants.append(QString());
 
         const QByteArray layout = layouts.join(QLatin1Char(',')).toUtf8();
@@ -154,8 +185,15 @@ private:
         while (g_main_context_iteration(nullptr, false)) {}
         const xkb_layout_index_t count = xkb_keymap_num_layouts(m_keymap.get());
         if (!count) return;
-        const xkb_layout_index_t selected = std::min(m_testMode ? m_testLayout
+        xkb_layout_index_t selected = std::min(m_testMode ? m_testLayout
             : g_settings_get_uint(m_settings, "current"), count - 1);
+        QFile sourceFile(m_sourcePath);
+        if (sourceFile.open(QIODevice::ReadOnly)) {
+            const int index = m_sourceIds.indexOf(
+                QString::fromUtf8(sourceFile.readAll().trimmed()));
+            if (index >= 0 && xkb_layout_index_t(index) < count)
+                selected = xkb_layout_index_t(index);
+        }
         if (selected == m_layout) return;
         m_layout = selected;
         xkb_state_update_mask(m_state.get(),
@@ -236,6 +274,8 @@ private:
     XkbContext m_context;
     XkbKeymap m_keymap{nullptr, xkb_keymap_unref};
     XkbState m_state{nullptr, xkb_state_unref};
+    QStringList m_sourceIds;
+    QString m_sourcePath;
     xkb_layout_index_t m_layout = XKB_LAYOUT_INVALID;
     QHash<QString, Device> m_devices;
     QTimer m_scanTimer;
@@ -245,14 +285,18 @@ private:
 
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
-    const bool testMode = app.arguments().contains(QStringLiteral("--self-test"));
+    const bool sourceSwitchTest = app.arguments().contains(
+        QStringLiteral("--self-test-source-switch"));
+    const bool testMode = sourceSwitchTest || app.arguments().contains(
+        QStringLiteral("--self-test"));
     Capture capture(app, testMode);
     if (!capture.ready()) {
         qWarning("No readable keyboard devices or XKB layout for key capture");
         return 1;
     }
     if (testMode) {
-        capture.selfTest();
+        if (sourceSwitchTest) capture.selfTestSourceSwitch();
+        else capture.selfTest();
         return 0;
     }
     return app.exec();

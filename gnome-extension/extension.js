@@ -166,6 +166,9 @@ export default class ZhyprbolaExtension extends Extension {
             schema_id: 'org.gnome.desktop.input-sources',
         });
         this._inputSourceManager = Keyboard.getInputSourceManager?.() ?? null;
+        this._inputSourcePath = GLib.build_filenamev([
+            GLib.get_user_runtime_dir(), 'zhyprbola', 'input-source']);
+        this._publishedInputSource = null;
 
         this._createDock();
         this._applyDockPosition();
@@ -211,6 +214,7 @@ export default class ZhyprbolaExtension extends Extension {
         } catch (error) {
             logError(error, 'Failed to watch GNOME input source manager');
         }
+        this._publishInputSource();
     }
 
     disable() {
@@ -222,6 +226,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._windowTracker.disconnectObject(this);
         this._inputSourceSettings.disconnectObject(this);
         this._inputSourceManager?.disconnectObject?.(this);
+        GLib.unlink(this._inputSourcePath);
 
         if (this._layoutIdleId) {
             GLib.source_remove(this._layoutIdleId);
@@ -828,6 +833,7 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _queueInputSourceRefresh() {
+        this._publishInputSource();
         if (!this._dock)
             return;
         if (this._inputSourceMenu && !this._inputSourceMenuCloseId) {
@@ -839,6 +845,25 @@ export default class ZhyprbolaExtension extends Extension {
             });
         }
         this._refreshInputSourceButton();
+    }
+
+    _publishInputSource() {
+        const source = this._currentManagerInputSource();
+        const id = source?.type === 'xkb' ? source.id : null;
+        if (!source || id === this._publishedInputSource)
+            return;
+        if (!id) {
+            GLib.unlink(this._inputSourcePath);
+            this._publishedInputSource = null;
+            return;
+        }
+        try {
+            GLib.mkdir_with_parents(GLib.path_get_dirname(this._inputSourcePath), 0o700);
+            GLib.file_set_contents(this._inputSourcePath, `${id}\n`);
+            this._publishedInputSource = id;
+        } catch (error) {
+            logError(error, 'Failed to publish GNOME input source');
+        }
     }
 
     _readTheme() {

@@ -19,3 +19,16 @@ test('evdev helper maps English, modifiers, Thai and special keys',
     assert.deepEqual(presses.slice(-3).map(event => event.name),
         ['space', 'BackSpace', 'Return']);
 });
+
+test('evdev helper follows GNOME input-source changes across windows',
+    {skip: !existsSync(helper) && 'run make build first'}, () => {
+    const result = spawnSync(helper.pathname, ['--self-test-source-switch'],
+        {encoding: 'utf8'});
+    assert.equal(result.status, 0, result.stderr);
+    const presses = result.stdout.trim().split('\n').map(JSON.parse)
+        .filter(event => event.type === 'press');
+    assert.equal(presses.length, 3);
+    assert.equal(presses[0].text, 'd');
+    assert.match(presses[1].text, /[ก-๙]/);
+    assert.equal(presses[2].text, 'd');
+});
