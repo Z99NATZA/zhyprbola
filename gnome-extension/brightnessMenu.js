@@ -4,6 +4,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Slider from 'resource:///org/gnome/shell/ui/slider.js';
+import {DdcBrightness} from './ddcBrightness.js';
 
 export class BrightnessMenu extends PopupMenu.PopupMenu {
     constructor(sourceActor, side, accent) {
@@ -13,6 +14,7 @@ export class BrightnessMenu extends PopupMenu.PopupMenu {
         this.box.set_style(`background-color: #fafcfd; color: ${accent};`);
         this._manager = Main.brightnessManager;
         this._scale = null;
+        this._ddc = null;
         this._syncing = false;
         this._dragging = false;
 
@@ -35,8 +37,13 @@ export class BrightnessMenu extends PopupMenu.PopupMenu {
         this.addMenuItem(this._row);
 
         this._slider.connect('notify::value', () => {
-            if (!this._syncing && this._scale)
-                this._scale.value = Math.max(0, Math.min(1, this._slider.value));
+            if (this._syncing)
+                return;
+            const value = Math.max(0, Math.min(1, this._slider.value));
+            if (this._scale)
+                this._scale.value = value;
+            else
+                this._ddc?.setValue(value);
         });
         this._slider.connect('drag-begin', () => { this._dragging = true; });
         this._slider.connect('drag-end', () => {
@@ -44,6 +51,10 @@ export class BrightnessMenu extends PopupMenu.PopupMenu {
             this._syncValue();
         });
         this._manager.connectObject('changed', () => this._syncScale(), this.actor);
+        this.connect('open-state-changed', (_menu, isOpen) => {
+            if (isOpen && !this._scale)
+                this._ddc?.refresh();
+        });
         this._syncScale();
     }
 
@@ -55,24 +66,43 @@ export class BrightnessMenu extends PopupMenu.PopupMenu {
             this._dragging = false;
             scale?.connectObject('notify::value', () => this._syncValue(), this.actor);
         }
-        const available = !!scale;
+        if (scale) {
+            this._ddc?.destroy();
+            this._ddc = null;
+        } else if (!this._ddc) {
+            this._ddc = new DdcBrightness(() => {
+                this._syncAvailability();
+                this._syncValue();
+            });
+            this._ddc.refresh();
+        } else {
+            this._ddc.refresh(true);
+        }
+        this._syncAvailability();
+        this._syncValue();
+    }
+
+    _syncAvailability() {
+        const available = !!this._scale || !!this._ddc?.available;
         this._slider.reactive = available;
         this._slider.can_focus = available;
         this._slider.accessible_name = available
-            ? 'Screen brightness' : 'Screen brightness unavailable';
+            ? 'Screen brightness' : this._ddc?.error
+                ? `Screen brightness unavailable: ${this._ddc.error}`
+                : 'Screen brightness unavailable';
         this._row.opacity = available ? 255 : 100;
-        this._syncValue();
     }
 
     _syncValue() {
         if (this._dragging)
             return;
         this._syncing = true;
-        this._slider.value = this._scale?.value ?? 0;
+        this._slider.value = this._scale?.value ?? this._ddc?.value ?? 0;
         this._syncing = false;
     }
 
     destroy() {
+        this._ddc?.destroy();
         this._scale?.disconnectObject(this.actor);
         super.destroy();
     }

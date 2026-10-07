@@ -46,6 +46,12 @@ function fixture(scale = new Scale(0.5)) {
         Clutter: {ActorAlign: {CENTER: 0}}, St: {Icon: Actor, Bin: Actor},
         PopupMenu: {PopupMenu: Popup, PopupBaseMenuItem: Actor, PopupMenuItem: Actor},
         Slider: {Slider}, Main: {brightnessManager: manager},
+        DdcBrightness: class {
+            constructor(onChanged) { this.onChanged = onChanged; this.available = false; this.value = 0; }
+            refresh() {}
+            setValue(value) { if (this.available) this.value = value; }
+            destroy() { this.destroyed = true; }
+        },
     });
     const source = readFileSync(new URL('../gnome-extension/brightnessMenu.js', import.meta.url), 'utf8');
     vm.runInContext(source.replace(/^import .*;\n/gm, '')
@@ -102,4 +108,22 @@ test('destroy disconnects listeners without destroying the shared brightness man
     menu.destroy();
     assert.equal(manager.signals.length, 0);
     assert.equal(scale.signals.length, 0);
+});
+
+
+test('DDC fallback enables the same slider and native hotplug destroys the fallback', () => {
+    const {menu, manager} = fixture(null);
+    const ddc = menu._ddc;
+    ddc.available = true;
+    ddc.value = 0.01;
+    ddc.onChanged();
+    assert.equal(menu._slider.reactive, true);
+    assert.equal(menu._slider.value, 0.01);
+    menu._slider.value = 0.3;
+    assert.equal(ddc.value, 0.3);
+    manager.globalScale = new Scale(0.7);
+    manager.emit('changed');
+    assert.equal(ddc.destroyed, true);
+    assert.equal(menu._ddc, null);
+    assert.equal(menu._slider.value, 0.7);
 });

@@ -17,6 +17,7 @@ gnome-extensions pack "$ROOT_DIR/gnome-extension" \
   --extra-source="$PACK_DIR/panel-command.sh" \
   --extra-source="$ROOT_DIR/gnome-extension/soundMenu.js" \
   --extra-source="$ROOT_DIR/gnome-extension/brightnessMenu.js" \
+  --extra-source="$ROOT_DIR/gnome-extension/ddcBrightness.js" \
   --extra-source="$ROOT_DIR/gnome-extension/wallpapers" \
   --extra-source="$ROOT_DIR/gnome-extension/icons" \
   --force \

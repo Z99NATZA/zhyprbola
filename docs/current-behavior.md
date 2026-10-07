@@ -50,9 +50,14 @@ Unavailable devices disable their controls. Dock and Settings actions never
 launch a separate Sound window; the standalone development panel remains
 available through `scripts/run-panel sound`.
 Brightness is a Shell popup with a sun icon and a single slider row, using the
-same dimensions, spacing, and colors as Sound. It uses GNOME's shared brightness manager and follows brightness
-key changes. It defaults to Quick Components and can be moved to Show or Hidden
-in Settings. Displays without adjustable backlights show a dimmed, disabled row.
+same dimensions, spacing, and colors as Sound. It uses GNOME's shared brightness
+manager on supported backlights. Otherwise it uses `ddcutil` to control brightness
+on the first detected DDC/CI display. DDC commands run asynchronously, combine
+rapid slider changes, and use the display's reported maximum. Opening the menu
+refreshes the hardware value; monitor changes trigger rediscovery. It defaults to
+Quick Components and can be moved to Show or Hidden in Settings. Unavailable
+displays show a dimmed, disabled row. DDC/CI requires `ddcutil` and user access to
+the display's I2C device (normally granted by the package's udev rules).
 
 Dock popups open only through explicit activation. Hovering over another dock
 button or moving keyboard focus does not switch the currently open popup.

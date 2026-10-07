@@ -23,6 +23,9 @@ sudo apt install qt6-base-dev qt6-declarative-dev qmake6 gnome-shell-extensions 
 # optional runtime helpers
 sudo apt install qml6-module-qtquick-controls playerctl cava network-manager bluez
 
+# Optional brightness control for external monitors with DDC/CI enabled
+sudo apt install ddcutil
+
 # Optional AT-SPI support for Key visualizer (GNOME may deny global monitoring)
 sudo apt install gjs gir1.2-atspi-2.0 gir1.2-gtk-4.0
 ```
