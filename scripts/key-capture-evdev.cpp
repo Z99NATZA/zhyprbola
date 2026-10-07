@@ -1,5 +1,6 @@
 #include <QCoreApplication>
 #include <QDir>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -7,6 +8,7 @@
 #include <QJsonObject>
 #include <QSocketNotifier>
 #include <QSet>
+#include <QVector>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -17,6 +19,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <fcntl.h>
 #include <memory>
@@ -53,6 +56,16 @@ void send(const QJsonObject &event) {
     }
 }
 
+qint64 monotonicMilliseconds() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+struct PendingEvent {
+    QString path;
+    input_event event;
+};
+
 struct Device {
     int fd;
     QSocketNotifier *notifier;
@@ -65,10 +78,14 @@ public:
     explicit Capture(QCoreApplication &app, bool testMode = false) : QObject(&app),
         m_app(app), m_testMode(testMode),
         m_settings(g_settings_new("org.gnome.desktop.input-sources")),
+        m_keyboardSettings(g_settings_new("org.gnome.desktop.peripherals.keyboard")),
         m_context(xkb_context_new(XKB_CONTEXT_NO_FLAGS), xkb_context_unref),
         m_sourcePath(QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation)
             + QStringLiteral("/zhyprbola/input-source")) {
         if (!m_context || !loadLayout()) return;
+        m_repeatTimer.setSingleShot(true);
+        m_repeatTimer.setTimerType(Qt::PreciseTimer);
+        connect(&m_repeatTimer, &QTimer::timeout, this, [this] { repeatHeldKey(); });
         if (m_testMode) {
             m_ready = true;
             return;
@@ -93,6 +110,7 @@ public:
             ::close(device.fd);
         }
         g_object_unref(m_settings);
+        g_object_unref(m_keyboardSettings);
     }
 
     bool ready() const { return m_ready; }
@@ -155,7 +173,8 @@ public:
             event.type = EV_KEY;
             event.code = code;
             event.value = value;
-            deviceEvent(device, event);
+            if (value == 2) keyEvent(event, &device.pressed); // Synthetic repeat.
+            else deviceEvent(device, event);
         };
         const auto scenario = [](const char *name) {
             send({{QStringLiteral("type"), QStringLiteral("scenario")},
@@ -209,6 +228,22 @@ public:
         led.value = 0;
         deviceEvent(first, led);
         letter();
+        scenario("held-key-repeat");
+        key(first, KEY_A, 1);
+        key(first, KEY_A, 2);
+        key(first, KEY_A, 2);
+        key(first, KEY_A, 0);
+        key(first, KEY_A, 2); // Ignore stray repeats after release.
+        key(first, KEY_LEFTSHIFT, 1);
+        key(first, KEY_A, 1);
+        key(first, KEY_A, 2);
+        key(first, KEY_A, 0);
+        key(first, KEY_LEFTSHIFT, 2); // Modifiers must not repeat in XKB.
+        key(first, KEY_LEFTSHIFT, 0);
+        letter();
+        key(first, KEY_BACKSPACE, 1);
+        key(first, KEY_BACKSPACE, 2);
+        key(first, KEY_BACKSPACE, 0);
         scenario("dropped-events");
         input_event sync = {};
         sync.type = EV_SYN;
@@ -220,6 +255,100 @@ public:
         sync.code = SYN_REPORT;
         deviceEvent(first, sync);
         letter();
+    }
+
+    void selfTestEventOrder() {
+        m_sourcePath.clear();
+        int first[2], second[2];
+        if (pipe2(first, O_NONBLOCK | O_CLOEXEC) < 0) return;
+        if (pipe2(second, O_NONBLOCK | O_CLOEXEC) < 0) {
+            ::close(first[0]);
+            ::close(first[1]);
+            return;
+        }
+        m_devices.insert(QStringLiteral("first"), {first[0], nullptr, {}, false});
+        m_devices.insert(QStringLiteral("second"), {second[0], nullptr, {}, false});
+        qint64 timestamp = 0;
+        const auto enqueue = [&timestamp](int fd, quint16 code, int value) {
+            input_event event = {};
+            event.type = EV_KEY;
+            event.code = code;
+            event.value = value;
+            event.input_event_sec = 1;
+            event.input_event_usec = timestamp++;
+            if (::write(fd, &event, sizeof(event)) != sizeof(event))
+                qFatal("Could not queue a keyboard event for the ordering test");
+        };
+        const QString alphabet = QStringLiteral("abcdefghijklmnopqrstuvwxyz");
+        const quint16 codes[] = {KEY_A, KEY_B, KEY_C, KEY_D, KEY_E, KEY_F,
+            KEY_G, KEY_H, KEY_I, KEY_J, KEY_K, KEY_L, KEY_M, KEY_N, KEY_O,
+            KEY_P, KEY_Q, KEY_R, KEY_S, KEY_T, KEY_U, KEY_V, KEY_W, KEY_X,
+            KEY_Y, KEY_Z};
+        const QString text = QStringLiteral("develop become at the word");
+        for (int i = 0; i < text.size(); ++i) {
+            const quint16 code = text[i] == QLatin1Char(' ') ? KEY_SPACE
+                : codes[alphabet.indexOf(text[i])];
+            const int fd = i % 2 ? second[1] : first[1];
+            enqueue(fd, code, 1);
+            enqueue(fd, code, 2); // Kernel repeats are not compositor repeats.
+            enqueue(fd, code, 0);
+        }
+        readDevices();
+        enqueue(first[1], KEY_LEFTSHIFT, 1);
+        enqueue(second[1], KEY_A, 1);
+        enqueue(second[1], KEY_A, 0);
+        enqueue(first[1], KEY_LEFTSHIFT, 0);
+        readDevices();
+        // A mirrored key-down must produce one character, but two genuine
+        // consecutive taps of the same letter must both appear.
+        enqueue(first[1], KEY_A, 1);
+        enqueue(second[1], KEY_A, 1);
+        enqueue(first[1], KEY_A, 0);
+        enqueue(second[1], KEY_A, 0);
+        enqueue(first[1], KEY_A, 1);
+        enqueue(first[1], KEY_A, 0);
+        readDevices();
+        reconcileSnapshot(m_devices[QStringLiteral("first")], {KEY_B}, false);
+        enqueue(first[1], KEY_B, 1);
+        enqueue(first[1], KEY_B, 0);
+        readDevices();
+        ::close(first[1]);
+        ::close(second[1]);
+        readDevices();
+    }
+
+    void selfTestRepeatTiming() {
+        m_sourcePath.clear();
+        g_settings_set_uint(m_keyboardSettings, "delay", 20);
+        g_settings_set_uint(m_keyboardSettings, "repeat-interval", 5);
+        g_settings_set_boolean(m_keyboardSettings, "repeat", true);
+        m_testMode = false;
+        input_event event = {};
+        event.type = EV_KEY;
+        event.code = KEY_A;
+        event.value = 1;
+        keyEvent(event);
+        QEventLoop loop;
+        const auto wait = [&loop](int milliseconds) {
+            QTimer::singleShot(milliseconds, &loop, &QEventLoop::quit);
+            loop.exec();
+        };
+        wait(50);
+        event.code = KEY_B;
+        keyEvent(event); // Only the latest repeatable key may repeat.
+        wait(50);
+        event.value = 0;
+        keyEvent(event);
+        wait(25); // Releasing B must not resume A, which is still held.
+        event.code = KEY_A;
+        keyEvent(event);
+        g_settings_set_boolean(m_keyboardSettings, "repeat", false);
+        event.code = KEY_C;
+        event.value = 1;
+        keyEvent(event);
+        wait(30);
+        event.value = 0;
+        keyEvent(event);
     }
 
 private:
@@ -308,6 +437,10 @@ private:
             if (--m_keyCounts[key] == 0) {
                 m_keyCounts.remove(key);
                 xkb_state_update_key(m_state.get(), key + 8, XKB_KEY_UP);
+                if (m_repeatKey == key) {
+                    m_repeatKey = -1;
+                    m_repeatTimer.stop();
+                }
             }
         }
         return true;
@@ -315,9 +448,27 @@ private:
 
     void keyEvent(const input_event &event, QSet<quint16> *devicePressed = nullptr) {
         if (event.type != EV_KEY || event.code > KEY_MAX
-            || (event.value != 0 && event.value != 1)) return;
+            || event.value < 0 || event.value > 2) return;
         auto &pressed = devicePressed ? *devicePressed : m_testPressed;
-        if (!updatePressed(pressed, event.code, event.value == 1)) return;
+        if (event.value == 2) {
+            // Repeats produce display events without another XKB key-down:
+            // the physical key is already held and must only be released once.
+            if (!m_keyCounts.contains(event.code)
+                || !xkb_keymap_key_repeats(m_keymap.get(), event.code + 8)) return;
+        } else {
+            const bool wasDown = m_keyCounts.contains(event.code);
+            if (!updatePressed(pressed, event.code, event.value == 1)) return;
+            // Mirrored interfaces represent a single logical key-down.
+            if (event.value == 1 && wasDown) return;
+            if (event.value == 1 && xkb_keymap_key_repeats(m_keymap.get(), event.code + 8)) {
+                m_repeatKey = event.code;
+                m_repeatDeadline = monotonicMilliseconds()
+                    + std::max(1u, g_settings_get_uint(m_keyboardSettings, "delay"));
+                if (!m_testMode && g_settings_get_boolean(m_keyboardSettings, "repeat"))
+                    m_repeatTimer.start(int(std::max(1u,
+                        g_settings_get_uint(m_keyboardSettings, "delay"))));
+            }
+        }
         syncLayout();
         const xkb_keycode_t code = event.code + 8;
         const xkb_keysym_t sym = xkb_state_key_get_one_sym(m_textState.get(), code);
@@ -364,14 +515,22 @@ private:
             if (!previous.contains(key)) updatePressed(device.pressed, key, true);
     }
 
-    void syncDevice(Device &device) {
+    void reconcileSnapshot(Device &device, QSet<quint16> current, bool includePresses) {
+        // A live snapshot can include a new press whose event is still queued.
+        // During routine repair, only remove released keys; inserting new ones
+        // here would make the queued press look like a duplicate and lose text.
+        if (!includePresses) current.intersect(device.pressed);
+        reconcilePressed(device, current);
+    }
+
+    void syncDevice(Device &device, bool includePresses = true) {
         unsigned long keys[(KEY_MAX + sizeof(unsigned long) * 8)
             / (sizeof(unsigned long) * 8)] = {};
         if (ioctl(device.fd, EVIOCGKEY(sizeof(keys)), keys) < 0) return;
         QSet<quint16> current;
         for (quint16 key = 0; key <= KEY_MAX; ++key)
             if (hasKey(keys, key)) current.insert(key);
-        reconcilePressed(device, current);
+        reconcileSnapshot(device, current, includePresses);
         syncLeds(device.fd);
     }
 
@@ -391,36 +550,74 @@ private:
             if (event.code == LED_CAPSL) m_capsLock = event.value != 0;
             if (event.code == LED_NUML) m_numLock = event.value != 0;
         }
+        // Wayland clients repeat using the compositor settings, not the
+        // independent EV_KEY value=2 repeat stream supplied by the kernel.
+        if (event.type == EV_KEY && event.value == 2) return;
         keyEvent(event, &device.pressed);
     }
 
-    void readDevice(const QString &path) {
-        auto it = m_devices.find(path);
-        if (it == m_devices.end()) return;
-        auto &device = it.value();
-        input_event event;
-        ssize_t bytes;
-        do {
-            bytes = ::read(device.fd, &event, sizeof(event));
-            if (bytes == sizeof(event)) deviceEvent(device, event);
-        } while (bytes == sizeof(event) || (bytes < 0 && errno == EINTR));
-        if (bytes == 0 || (bytes < 0 && errno != EAGAIN)) {
-            reconcilePressed(device, {});
-            device.notifier->deleteLater();
-            ::close(device.fd);
-            m_devices.erase(it);
-        } else if (!device.dropped) {
-            // Repair missed releases, and pick up lock state changed while
-            // monitoring was inactive, without emitting synthetic key presses.
-            syncDevice(device);
+    void processPending(QVector<PendingEvent> &pending) {
+        std::stable_sort(pending.begin(), pending.end(), [](const auto &a, const auto &b) {
+            if (a.event.input_event_sec != b.event.input_event_sec)
+                return a.event.input_event_sec < b.event.input_event_sec;
+            return a.event.input_event_usec < b.event.input_event_usec;
+        });
+        for (const auto &item : pending) {
+            auto device = m_devices.find(item.path);
+            if (device != m_devices.end()) deviceEvent(device.value(), item.event);
         }
     }
 
+    void readDevices(bool repair = false) {
+        QVector<PendingEvent> pending;
+        QStringList disconnected;
+        // All streams must be drained before any event is translated or any
+        // snapshot is taken. Notifier activation order is not keypress order.
+        for (auto it = m_devices.begin(); it != m_devices.end(); ++it) {
+            input_event event;
+            ssize_t bytes;
+            do {
+                bytes = ::read(it->fd, &event, sizeof(event));
+                if (bytes == sizeof(event)) pending.append({it.key(), event});
+            } while (bytes == sizeof(event) || (bytes < 0 && errno == EINTR));
+            if (bytes == 0 || (bytes < 0 && errno != EAGAIN))
+                disconnected.append(it.key());
+        }
+        processPending(pending);
+        for (const QString &path : disconnected) {
+            auto device = m_devices.take(path);
+            reconcilePressed(device, {});
+            if (device.notifier) device.notifier->deleteLater();
+            ::close(device.fd);
+        }
+        if (repair) {
+            for (auto &device : m_devices)
+                if (!device.dropped) syncDevice(device, false);
+        }
+    }
+
+    void repeatHeldKey() {
+        // A release or another press may already be queued when the timer fires.
+        readDevices();
+        if (m_repeatKey < 0 || !g_settings_get_boolean(m_keyboardSettings, "repeat")) return;
+        const qint64 remaining = m_repeatDeadline - monotonicMilliseconds();
+        if (remaining > 0) {
+            m_repeatTimer.start(int(remaining));
+            return;
+        }
+        input_event event = {};
+        event.type = EV_KEY;
+        event.code = quint16(m_repeatKey);
+        event.value = 2;
+        keyEvent(event);
+        const int interval = int(std::max(1u,
+            g_settings_get_uint(m_keyboardSettings, "repeat-interval")));
+        m_repeatDeadline = monotonicMilliseconds() + interval;
+        m_repeatTimer.start(interval);
+    }
+
     void scanDevices() {
-        // Drain queued events before querying live state so a snapshot cannot
-        // overtake a queued press/release and toggle a lock twice.
-        const auto paths = m_devices.keys();
-        for (const QString &path : paths) readDevice(path);
+        readDevices(true);
         const QStringList entries = QDir(QStringLiteral("/dev/input")).entryList(
             {QStringLiteral("event*")}, QDir::System | QDir::Files);
         for (const QString &entry : entries) {
@@ -434,8 +631,8 @@ private:
                 continue;
             }
             auto *notifier = new QSocketNotifier(fd, QSocketNotifier::Read, this);
-            connect(notifier, &QSocketNotifier::activated, this, [this, path] {
-                readDevice(path);
+            connect(notifier, &QSocketNotifier::activated, this, [this] {
+                readDevices();
             });
             m_devices.insert(path, {fd, notifier, {}, false});
             syncDevice(m_devices[path]);
@@ -446,6 +643,7 @@ private:
     bool m_testMode;
     unsigned int m_testLayout = 0;
     GSettings *m_settings;
+    GSettings *m_keyboardSettings;
     XkbContext m_context;
     XkbKeymap m_keymap{nullptr, xkb_keymap_unref};
     XkbState m_state{nullptr, xkb_state_unref};
@@ -458,6 +656,9 @@ private:
     QString m_sourcePath;
     QHash<QString, Device> m_devices;
     QTimer m_scanTimer;
+    QTimer m_repeatTimer;
+    int m_repeatKey = -1;
+    qint64 m_repeatDeadline = 0;
     bool m_ready = false;
 };
 }
@@ -468,15 +669,21 @@ int main(int argc, char **argv) {
         QStringLiteral("--self-test-source-switch"));
     const bool stateRecoveryTest = app.arguments().contains(
         QStringLiteral("--self-test-state-recovery"));
-    const bool testMode = sourceSwitchTest || stateRecoveryTest || app.arguments().contains(
+    const bool eventOrderTest = app.arguments().contains(QStringLiteral("--self-test-event-order"));
+    const bool repeatTimingTest = app.arguments().contains(QStringLiteral("--self-test-repeat-timing"));
+    const bool testMode = sourceSwitchTest || stateRecoveryTest || eventOrderTest
+        || repeatTimingTest || app.arguments().contains(
         QStringLiteral("--self-test"));
+    if (testMode) qputenv("GSETTINGS_BACKEND", "memory");
     Capture capture(app, testMode);
     if (!capture.ready()) {
         qWarning("No readable keyboard devices or XKB layout for key capture");
         return 1;
     }
     if (testMode) {
-        if (stateRecoveryTest) capture.selfTestStateRecovery();
+        if (eventOrderTest) capture.selfTestEventOrder();
+        else if (repeatTimingTest) capture.selfTestRepeatTiming();
+        else if (stateRecoveryTest) capture.selfTestStateRecovery();
         else if (sourceSwitchTest) capture.selfTestSourceSwitch();
         else capture.selfTest();
         return 0;

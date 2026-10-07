@@ -21,15 +21,9 @@ try {
     throw new Error(`Global keyboard monitoring was denied: ${error.message}`);
 }
 
-const pressedKeys = new Set();
-
-function send(type, _device, keycode, keysym, state, keystring) {
-    if (type === 'press') {
-        if (keycode > 0 && pressedKeys.has(keycode)) return;
-        if (keycode > 0) pressedKeys.add(keycode);
-    } else {
-        if (keycode > 0) pressedKeys.delete(keycode);
-    }
+// The compositor emits repeated presses for held keys. Forward them with
+// the current symbol and modifiers, just like the initial press.
+function send(type, _device, _keycode, keysym, state, keystring) {
     const name = Gdk.keyval_name(keysym) ?? '';
     const codepoint = Gdk.keyval_to_unicode(keysym);
     const fallback = codepoint > 31 && codepoint !== 127

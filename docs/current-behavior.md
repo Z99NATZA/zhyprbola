@@ -17,6 +17,8 @@ Key visualizer: ~/.config/zhyprbola/key-visualizer (font size, padding, width, a
 Padding: sm uses 4 px around the text; md keeps the original spacing; lg adds 12 px.
 Width −/+ buttons change by 20 px, repeat after a 400 ms hold, and accelerate to 25 steps/s.
 Evdev capture tracks held keys per device, resyncs after dropped events/disconnects, and reads Caps/Num Lock LEDs.
+Evdev merges keyboard streams by event timestamp and suppresses mirrored key-downs.
+Held keys repeat using GNOME delay/interval settings until released, including Backspace and shortcuts; modifier keys themselves are hidden.
 Typed characters appear together; special keys and shortcuts have spaces around them (hello ␣ world Ctrl+a ⌫).
 ```
 

@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 import vm from 'node:vm';
 
-test('AT-SPI key events are streamed without repeat or parent-process leaks', () => {
+test('AT-SPI forwards held-key repeats and stops when the parent closes', () => {
     const listeners = new Map();
     const output = [];
     let parentClosed;
@@ -47,7 +47,10 @@ test('AT-SPI key events are streamed without repeat or parent-process leaks', ()
     assert.equal(output[1].text, 'a');
     assert.equal(output[1].ctrl, true);
     listeners.get('key-pressed')(device, 38, 0x61, 1 << 2, '\x01');
-    assert.equal(output.length, 2);
+    assert.equal(output.length, 3);
+    assert.equal(output[2].type, 'press');
+    assert.equal(output[2].text, 'a');
+    assert.equal(output[2].ctrl, true);
     listeners.get('key-released')(device, 38, 0x61, 0, '');
     listeners.get('key-pressed')(device, 38, 0x1000e01, 0, 'ก');
     assert.equal(output.at(-1).text, 'ก');

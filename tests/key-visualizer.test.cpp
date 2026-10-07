@@ -519,6 +519,70 @@ private slots:
         QVERIFY(inkPixels > 30);
     }
 
+    void rendersHeldKeysWithoutRepeatingModifiers() {
+        VisualizerBackend backend;
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        QQmlComponent component(&engine,
+            QUrl::fromLocalFile(QFINDTESTDATA("../components/KeyVisualizer.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto *visualizer = qobject_cast<QQuickItem *>(object.data());
+        QVERIFY(visualizer);
+        QQuickWindow window;
+        window.resize(480, 78);
+        visualizer->setParentItem(window.contentItem());
+        window.show();
+        window.requestActivate();
+        visualizer->forceActiveFocus();
+        QTRY_VERIFY(visualizer->hasActiveFocus());
+        const auto press = [&window](int key, Qt::KeyboardModifiers modifiers,
+            const QString &text, bool repeat) {
+            QKeyEvent event(QEvent::KeyPress, key, modifiers, text, repeat);
+            QCoreApplication::sendEvent(&window, &event);
+        };
+        press(Qt::Key_A, Qt::NoModifier, QStringLiteral("a"), false);
+        press(Qt::Key_A, Qt::NoModifier, QStringLiteral("a"), true);
+        press(Qt::Key_A, Qt::NoModifier, QStringLiteral("a"), true);
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("aaa"));
+        for (int key : {Qt::Key_Control, Qt::Key_Shift, Qt::Key_Alt, Qt::Key_Meta}) {
+            press(key, Qt::NoModifier, QString(), false);
+            press(key, Qt::NoModifier, QString(), true);
+        }
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("aaa"));
+        press(Qt::Key_A, Qt::ShiftModifier, QStringLiteral("A"), true);
+        press(Qt::Key_A, Qt::ControlModifier, QString(), true);
+        press(Qt::Key_Backspace, Qt::NoModifier, QString(), true);
+        QCOMPARE(object->property("displayText").toString(),
+            QString::fromUtf8("aaaA Ctrl+a ⌫"));
+
+        object->setProperty("history", QVariantList{});
+        backend.setKeyCaptureAvailable(true);
+        for (const QString &name : {QStringLiteral("Control_L"),
+                 QStringLiteral("Shift_L"), QStringLiteral("Alt_L"),
+                 QStringLiteral("Super_L")}) {
+            for (int i = 0; i < 3; ++i)
+                emit backend.globalKeyPressed(name, QString(), true, true, true, true);
+        }
+        QCOMPARE(object->property("displayText").toString(), QString());
+        for (int i = 0; i < 3; ++i)
+            emit backend.globalKeyPressed(QStringLiteral("A"), QStringLiteral("A"),
+                true, false, false, false);
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("AAA"));
+        for (int i = 0; i < 2; ++i)
+            emit backend.globalKeyPressed(QStringLiteral("a"), QString(),
+                false, true, false, false);
+        QCOMPARE(object->property("displayText").toString(),
+            QStringLiteral("AAA Ctrl+a Ctrl+a"));
+        emit backend.globalKeyReleased(QStringLiteral("a"));
+        emit backend.globalKeyReleased(QStringLiteral("Control_L"));
+        emit backend.globalKeyPressed(QStringLiteral("a"), QStringLiteral("a"),
+            false, false, false, false);
+        QCOMPARE(object->property("displayText").toString(),
+            QStringLiteral("AAA Ctrl+a Ctrl+a a"));
+    }
+
     void rendersGlobalKeysWithoutWindowFocus() {
         VisualizerBackend backend;
         QQmlEngine engine;

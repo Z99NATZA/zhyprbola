@@ -74,7 +74,42 @@ test('evdev recovers modifiers across duplicate events, devices, layouts and los
     assert.equal(letters('caps-led')[0].text, 'A');
     assert.equal(letters('caps-led')[0].shift, false);
     plain(letters('caps-led')[1]);
+    const repeated = scenarios.get('held-key-repeat');
+    assert.deepEqual(repeated.filter(event => event.text).map(event => event.text),
+        ['a', 'a', 'a', 'A', 'A', 'a', '\b', '\b']);
+    assert.equal(repeated.filter(event => event.name === 'Shift_L').length, 1);
+    plain(repeated.findLast(event => event.text === 'a'));
     assert.equal(scenarios.get('dropped-events').length, 1,
         'events inside a dropped packet must be ignored');
     plain(letters('dropped-events')[0]);
+});
+
+
+test('evdev merges buffered keyboard streams in timestamp order without dropped or mirrored letters',
+    {skip: !existsSync(helper) && 'run make build first'}, () => {
+    const result = spawnSync(helper.pathname, ['--self-test-event-order'], {encoding: 'utf8'});
+    assert.equal(result.status, 0, result.stderr);
+    const presses = result.stdout.trim().split('\n').map(JSON.parse)
+        .filter(event => event.type === 'press');
+    assert.equal(presses.map(event => event.text).join(''),
+        'develop become at the wordAaab');
+    assert.equal(presses.find(event => event.text === 'A').shift, true);
+    assert.equal(presses.at(-1).shift, false);
+});
+
+test('evdev repeats using GNOME timing, stops on release and respects disabled repeat',
+    {skip: !existsSync(helper) && 'run make build first'}, () => {
+    const result = spawnSync(helper.pathname, ['--self-test-repeat-timing'], {encoding: 'utf8'});
+    assert.equal(result.status, 0, result.stderr);
+    const events = result.stdout.trim().split('\n').map(JSON.parse);
+    const startsB = events.findIndex(event => event.type === 'press' && event.name === 'b');
+    const releasedB = events.findIndex(event => event.type === 'release' && event.name === 'b');
+    const repeatsA = events.slice(0, startsB).filter(event => event.type === 'press');
+    const repeatsB = events.slice(startsB, releasedB).filter(event => event.type === 'press');
+    assert.ok(repeatsA.length >= 2, 'a held key should repeat after the configured delay');
+    assert.ok(repeatsA.every(event => event.text === 'a'));
+    assert.ok(repeatsB.length >= 2, 'a newer held key should take over repeat');
+    assert.ok(repeatsB.every(event => event.text === 'b'));
+    assert.deepEqual(events.slice(releasedB + 1).map(event => [event.type, event.name]),
+        [['release', 'a'], ['press', 'c'], ['release', 'c']]);
 });
