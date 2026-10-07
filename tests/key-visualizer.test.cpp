@@ -11,6 +11,8 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
+#include <functional>
+#include <utility>
 
 class VisualizerBackend : public QObject {
     Q_OBJECT
@@ -173,6 +175,40 @@ private slots:
             window.resize(660, 510);
             settings->setParentItem(window.contentItem());
             window.show();
+
+            QStringList checkNames;
+            std::function<QQuickItem *(QQuickItem *, const QString &)> findVisual;
+            findVisual = [&findVisual, &checkNames](QQuickItem *item, const QString &name) {
+                if (!item->objectName().isEmpty()) checkNames.append(item->objectName());
+                if (item->objectName() == name) return item;
+                for (auto *child : item->childItems()) {
+                    if (auto *found = findVisual(child, name)) return found;
+                }
+                return static_cast<QQuickItem *>(nullptr);
+            };
+            const auto check = [&findVisual, settings](const QString &key,
+                const QString &value) {
+                return findVisual(settings, QStringLiteral("key-choice-check-")
+                    + key + QLatin1Char('-') + value);
+            };
+            for (const auto &selection : {
+                     std::pair{QStringLiteral("fontSize"), QStringLiteral("md")},
+                     std::pair{QStringLiteral("widthMode"), QStringLiteral("fit")},
+                     std::pair{QStringLiteral("alignment"), QStringLiteral("center")}}) {
+                auto *mark = check(selection.first, selection.second);
+                QVERIFY2(mark, qPrintable(checkNames.join(QLatin1Char(','))));
+                QVERIFY(mark->isVisible());
+            }
+            backend.setKeyVisualizerSetting(QStringLiteral("fontSize"), QStringLiteral("lg"));
+            backend.setKeyVisualizerSetting(QStringLiteral("widthMode"), QStringLiteral("fixed"));
+            backend.setKeyVisualizerSetting(QStringLiteral("alignment"), QStringLiteral("right"));
+            QTRY_VERIFY(check(QStringLiteral("fontSize"), QStringLiteral("lg"))->isVisible());
+            QTRY_VERIFY(check(QStringLiteral("widthMode"), QStringLiteral("fixed"))->isVisible());
+            QTRY_VERIFY(check(QStringLiteral("alignment"), QStringLiteral("right"))->isVisible());
+            QVERIFY(!check(QStringLiteral("fontSize"), QStringLiteral("md"))->isVisible());
+            const QString screenshot = qEnvironmentVariable("ZHYPRBOLA_KEY_CHOICE_SCREENSHOT");
+            if (!screenshot.isEmpty())
+                QVERIFY(window.grabWindow().save(screenshot));
 
             auto *button = object->findChild<QQuickItem *>(
                 QStringLiteral("open-key-visualizer"));

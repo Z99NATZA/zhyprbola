@@ -1267,6 +1267,19 @@ Item {
                             === modelData.key ? Font.DemiBold : Font.Normal
                     }
 
+                    Text {
+                        objectName: "key-choice-check-" + settingKey + "-" + modelData.key
+                        anchors.right: parent.right
+                        anchors.rightMargin: 11
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: backend.keyVisualizerSettings[settingKey] === modelData.key
+                        text: "✓"
+                        color: Theme.accent
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
+                    }
+
                     MouseArea {
                         id: optionMouse
                         anchors.fill: parent
