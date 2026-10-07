@@ -49,6 +49,11 @@ GNOME's shared mixer and follows device and volume changes immediately.
 Unavailable devices disable their controls. Dock and Settings actions never
 launch a separate Sound window; the standalone development panel remains
 available through `scripts/run-panel sound`.
+Brightness is a Shell popup with a sun icon and a single slider row, using the
+same dimensions, spacing, and colors as Sound. It uses GNOME's shared brightness manager and follows brightness
+key changes. It defaults to Quick Components and can be moved to Show or Hidden
+in Settings. Displays without adjustable backlights show a dimmed, disabled row.
+
 Dock popups open only through explicit activation. Hovering over another dock
 button or moving keyboard focus does not switch the currently open popup.
 The Input Source dock component shows the current language code such as `en`

@@ -263,7 +263,8 @@ QStringList dockComponentKeys() {
         QStringLiteral("settings"), QStringLiteral("bluetooth"),
         QStringLiteral("wifi"), QStringLiteral("clock-weather"),
         QStringLiteral("system-status"), QStringLiteral("audio-spectrum"),
-        QStringLiteral("music"), QStringLiteral("sound"), QStringLiteral("todo"),
+        QStringLiteral("music"), QStringLiteral("sound"), QStringLiteral("brightness"),
+        QStringLiteral("todo"),
         QStringLiteral("calendar"), QStringLiteral("input-source"),
         QStringLiteral("power"), QStringLiteral("components"),
         QStringLiteral("key-visualizer")};
@@ -392,8 +393,9 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     const QStringList componentNames = dockComponentKeys();
     m_dockVisibleComponents = componentNames;
     m_dockVisibleComponents.removeAll(QStringLiteral("sound"));
+    m_dockVisibleComponents.removeAll(QStringLiteral("brightness"));
     m_dockVisibleComponents.removeAll(QStringLiteral("key-visualizer"));
-    m_dockQuickComponents = {QStringLiteral("sound"),
+    m_dockQuickComponents = {QStringLiteral("sound"), QStringLiteral("brightness"),
         QStringLiteral("key-visualizer")};
     QFile dockComponentsFile(dockConfigPath(QStringLiteral("dock-components")));
     if (dockComponentsFile.open(QIODevice::ReadOnly)) {
@@ -431,7 +433,8 @@ Backend::Backend(QObject *parent) : QObject(parent) {
                     && !m_dockVisibleComponents.contains(name)
                     && !m_dockHiddenComponents.contains(name)
                     && !m_dockQuickComponents.contains(name))
-                    (name == QLatin1String("sound") || name == QLatin1String("key-visualizer")
+                    (name == QLatin1String("sound") || name == QLatin1String("brightness")
+                        || name == QLatin1String("key-visualizer")
                         ? m_dockQuickComponents : m_dockVisibleComponents).append(name);
             for (const QString &name : {QStringLiteral("time-display"),
                      QStringLiteral("date-display")}) {
@@ -775,6 +778,7 @@ void Backend::openDockComponent(const QString &key) {
         QStringLiteral("audio-spectrum"),
         QStringLiteral("music"),
         QStringLiteral("sound"),
+        QStringLiteral("brightness"),
         QStringLiteral("todo"),
         QStringLiteral("calendar"),
         QStringLiteral("key-visualizer"),
@@ -784,8 +788,8 @@ void Backend::openDockComponent(const QString &key) {
     const QString request = QUuid::createUuid().toString(QUuid::WithoutBraces)
         + QLatin1Char(':') + key;
     const bool requested = writeDockConfig(QStringLiteral("panel-request"), request);
-    // Sound is a Shell popup, so it must not spawn a fallback panel window.
-    if (key == QLatin1String("sound")) return;
+    // Shell popups must not spawn a fallback panel window.
+    if (key == QLatin1String("sound") || key == QLatin1String("brightness")) return;
     QTimer::singleShot(requested ? 700 : 0, this, [key]() {
         if (!panelProcessRunning(key))
             QProcess::startDetached(QCoreApplication::applicationFilePath(),

@@ -91,6 +91,7 @@ function fixture(length = 400) {
             removeChrome() {}}, uiGroup: new Actor()},
         AppMenu: NativeAppMenu,
         SoundMenu: NativeAppMenu,
+        BrightnessMenu: NativeAppMenu,
         PopupMenu: {PopupMenuManager: class {}},
         Extension: class {},
     });
@@ -731,4 +732,42 @@ test('windows without native IDs keep distinct identities when titles change', (
     assert.notEqual(originalKey, dock._itemOrderKey(b));
     a.window.get_title = () => 'Changed title';
     assert.equal(dock._itemOrderKey(a), originalKey);
+});
+
+
+test('Brightness migrates to Quick and respects explicit saved placement', () => {
+    const {dock, context} = fixture();
+    assert.equal(dock._readDockComponents().quick.includes('brightness'), true);
+    context.TextDecoder = TextDecoder;
+    for (const zone of ['visible', 'hidden', 'quick']) {
+        const saved = {visible: [], hidden: [], quick: []};
+        saved[zone] = ['brightness'];
+        context.GLib.file_get_contents = () => [true,
+            new TextEncoder().encode(JSON.stringify(saved))];
+        const layout = dock._readDockComponents();
+        assert.equal(layout[zone].filter(name => name === 'brightness').length, 1);
+        assert.equal(['visible', 'hidden', 'quick'].filter(key =>
+            layout[key].includes('brightness')).length, 1);
+    }
+    context.GLib.file_get_contents = () => [true,
+        new TextEncoder().encode(JSON.stringify({visible: ['settings'], hidden: [], quick: ['wifi']}))];
+    const layout = dock._readDockComponents();
+    assert.equal(layout.visible.includes('brightness'), false);
+    assert.equal(layout.quick.includes('brightness'), true);
+});
+
+test('Brightness opens from Settings on Components, toggles, and is destroyed with the dock', () => {
+    const {dock, group} = fixture();
+    dock._themeName = 'mauve';
+    dock._dockGroupsByName.set('zhyprbola', group);
+    const button = new Actor({_panelName: 'components'});
+    group.add_child(button);
+    dock._openPanel('brightness', true);
+    const menu = dock._brightnessMenu;
+    assert.equal(menu.sourceActor, button);
+    assert.equal(menu.isOpen, true);
+    dock._openPanel('brightness', true);
+    assert.equal(menu.isOpen, false);
+    dock._destroyDock();
+    assert.equal(menu.destroyed, true);
 });

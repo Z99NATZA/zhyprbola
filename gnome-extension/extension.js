@@ -12,6 +12,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Keyboard from 'resource:///org/gnome/shell/ui/status/keyboard.js';
 import {SoundMenu} from './soundMenu.js';
+import {BrightnessMenu} from './brightnessMenu.js';
 
 const DockPosition = Object.freeze({
     LEFT: 'left',
@@ -48,6 +49,7 @@ const DOCK_COMPONENTS = [
     ['audio-spectrum', 'Audio Spectrum'],
     ['music', 'Music Player'],
     ['sound', 'Sound'],
+    ['brightness', 'Brightness'],
     ['todo', 'Tasks'],
     ['calendar', 'Calendar'],
     ['input-source', 'Input Source'],
@@ -102,6 +104,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._appMenu = null;
         this._appMenuApp = null;
         this._soundMenu = null;
+        this._brightnessMenu = null;
         this._desktopWindows = new Map();
         this._layoutIdleId = 0;
         this._appRefreshId = 0;
@@ -1023,7 +1026,7 @@ export default class ZhyprbolaExtension extends Extension {
                 if (!visible.includes(name) && !hidden.includes(name) &&
                     !quick.includes(name) && name !== 'date-display'
                     && name !== 'time-display')
-                    (name === 'sound' || name === 'key-visualizer'
+                    (name === 'sound' || name === 'brightness' || name === 'key-visualizer'
                         ? quick : visible).push(name);
             }
             for (const name of ['time-display', 'date-display']) {
@@ -1033,8 +1036,8 @@ export default class ZhyprbolaExtension extends Extension {
             return {visible, hidden, quick};
         } catch (_) {
             return {visible: defaults.filter(name =>
-                name !== 'sound' && name !== 'key-visualizer'),
-                hidden: [], quick: ['sound', 'key-visualizer']};
+                name !== 'sound' && name !== 'brightness' && name !== 'key-visualizer'),
+                hidden: [], quick: ['sound', 'brightness', 'key-visualizer']};
         }
     }
 
@@ -1376,6 +1379,8 @@ export default class ZhyprbolaExtension extends Extension {
     _applyTheme() {
         this._soundMenu?.destroy();
         this._soundMenu = null;
+        this._brightnessMenu?.destroy();
+        this._brightnessMenu = null;
         this._appMenu?.destroy();
         this._appMenu = null;
         this._appMenuApp = null;
@@ -1452,6 +1457,8 @@ export default class ZhyprbolaExtension extends Extension {
 
         this._soundMenu?.destroy();
         this._soundMenu = null;
+        this._brightnessMenu?.destroy();
+        this._brightnessMenu = null;
 
         this._appMenu?.destroy();
         this._appMenu = null;
@@ -1744,6 +1751,8 @@ export default class ZhyprbolaExtension extends Extension {
                 this._openQuickMenu(button);
             else if (panelName === 'sound')
                 this._openSoundMenu(button);
+            else if (panelName === 'brightness')
+                this._openBrightnessMenu(button);
             else
                 this._openPanel(panelName);
         });
@@ -1848,6 +1857,8 @@ export default class ZhyprbolaExtension extends Extension {
         if (name === 'zhyprbola') {
             this._soundMenu?.destroy();
             this._soundMenu = null;
+            this._brightnessMenu?.destroy();
+            this._brightnessMenu = null;
             this._quickMenu?.destroy();
             this._quickMenu = null;
         }
@@ -1976,7 +1987,9 @@ export default class ZhyprbolaExtension extends Extension {
                         return GLib.SOURCE_REMOVE;
                     });
                 } else if (item.kind === 'panel')
-                    item.name === 'sound' ? this._openSoundMenu(button) : this._openPanel(item.name);
+                    item.name === 'sound' ? this._openSoundMenu(button)
+                        : item.name === 'brightness' ? this._openBrightnessMenu(button)
+                            : this._openPanel(item.name);
                 else
                     item.window ? this._activateWindow(item.window) : this._activateApp(item.app);
             }, icon);
@@ -2045,6 +2058,8 @@ export default class ZhyprbolaExtension extends Extension {
                                 this._openInputSourceMenu(button);
                             else if (name === 'sound')
                                 this._openSoundMenu(button);
+                            else if (name === 'brightness')
+                                this._openBrightnessMenu(button);
                             else
                                 this._openPanel(name);
                         });
@@ -2086,6 +2101,27 @@ export default class ZhyprbolaExtension extends Extension {
         menu.actor.hide();
         this._menuManager.addMenu(menu);
         this._soundMenu = menu;
+        menu.open();
+    }
+
+    _openBrightnessMenu(button) {
+        if (this._brightnessMenu?.sourceActor === button) {
+            this._brightnessMenu.toggle();
+            return;
+        }
+        this._brightnessMenu?.destroy();
+        const side = {
+            [DockPosition.LEFT]: St.Side.RIGHT,
+            [DockPosition.RIGHT]: St.Side.LEFT,
+            [DockPosition.TOP]: St.Side.BOTTOM,
+            [DockPosition.BOTTOM]: St.Side.TOP,
+        }[this._dockPosition];
+        const theme = THEMES.find(item => item.name === this._themeName) ?? THEMES[0];
+        const menu = new BrightnessMenu(button, side, theme.iconColor);
+        Main.uiGroup.add_child(menu.actor);
+        menu.actor.hide();
+        this._menuManager.addMenu(menu);
+        this._brightnessMenu = menu;
         menu.open();
     }
 
@@ -2140,12 +2176,16 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _openPanel(panelName, fromSettings = false) {
-        if (panelName === 'sound') {
+        if (panelName === 'sound' || panelName === 'brightness') {
             const buttons = this._dockGroupsByName.get('zhyprbola')?.get_children() ?? [];
-            const source = buttons.find(button => button._panelName === 'sound')
+            const source = buttons.find(button => button._panelName === panelName)
                 ?? buttons.find(button => button._panelName === 'components') ?? this._dock;
-            if (source)
-                this._openSoundMenu(source);
+            if (source) {
+                if (panelName === 'brightness')
+                    this._openBrightnessMenu(source);
+                else
+                    this._openSoundMenu(source);
+            }
             return;
         }
         const title = PANEL_TITLES[panelName];
