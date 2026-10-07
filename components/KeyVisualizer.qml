@@ -12,9 +12,8 @@ Item {
     readonly property int defaultHeight: settings.fontSize === "sm" ? 64
         : settings.fontSize === "lg" ? 96 : 78
     property var history: []
-    readonly property string displayText: history.join(" ")
-    readonly property string styledText: history.map(token =>
-        styledToken(token, Theme.accent.toString())).join(" ")
+    readonly property string displayText: formatHistory(false)
+    readonly property string styledText: formatHistory(true)
     implicitWidth: settings.widthMode === "fixed" ? settings.maxWidth
         : Math.max(settings.minWidth,
             Math.min(settings.maxWidth, measure.implicitWidth + padding * 2))
@@ -55,6 +54,23 @@ Item {
             .replace(/>/g, "&gt;")
     }
 
+    function isSpecialKey(value) {
+        return ["␣", "⌫", "↵", "⇥", "Esc", "⌦", "←", "→",
+            "↑", "↓", "Home", "End", "PgUp", "PgDn"].includes(value)
+    }
+
+    function formatHistory(styled) {
+        let result = ""
+        let previousSpecial = false
+        for (const token of history) {
+            const special = isSpecialKey(token) || /^(Ctrl|Alt|Super|Shift)\+/.test(token)
+            if (result && (previousSpecial || special)) result += " "
+            result += styled ? styledToken(token, Theme.accent.toString()) : token
+            previousSpecial = special
+        }
+        return result
+    }
+
     function styledToken(value, accent) {
         let remaining = value
         let result = ""
@@ -66,8 +82,7 @@ Item {
             modifier = /^(Ctrl|Alt|Super|Shift)\+/.exec(remaining)
         }
         const key = escapeText(remaining)
-        const special = ["␣", "⌫", "↵", "⇥", "Esc", "⌦", "←", "→",
-            "↑", "↓", "Home", "End", "PgUp", "PgDn"].includes(remaining)
+        const special = isSpecialKey(remaining)
         return result + (special ? '<font color="' + accent + '">' + key + '</font>' : key)
     }
 

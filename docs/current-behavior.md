@@ -16,6 +16,8 @@ Tasks: ~/.config/zhyprbola/tasks.json (local checklist; items remain until manua
 Key visualizer: ~/.config/zhyprbola/key-visualizer (font size, padding, width, alignment)
 Padding: sm uses 4 px around the text; md keeps the original spacing; lg adds 12 px.
 Width −/+ buttons change by 20 px, repeat after a 400 ms hold, and accelerate to 25 steps/s.
+Evdev capture tracks held keys per device, resyncs after dropped events/disconnects, and reads Caps/Num Lock LEDs.
+Typed characters appear together; special keys and shortcuts have spaces around them (hello ␣ world Ctrl+a ⌫).
 ```
 
 Dock regions:

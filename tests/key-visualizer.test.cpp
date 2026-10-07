@@ -8,6 +8,7 @@
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QScopeGuard>
 #include <QTemporaryDir>
@@ -51,6 +52,49 @@ private:
 class KeyVisualizerTest : public QObject {
     Q_OBJECT
 private slots:
+    void spacesOnlySpecialKeysAndShortcuts() {
+        VisualizerBackend backend;
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        QQmlComponent component(&engine,
+            QUrl::fromLocalFile(QFINDTESTDATA("../components/KeyVisualizer.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        const auto check = [&object](const QVariantList &history, const QString &expected) {
+            object->setProperty("history", history);
+            QCOMPARE(object->property("displayText").toString(), expected);
+            QString styled = object->property("styledText").toString();
+            styled.remove(QRegularExpression(QStringLiteral("</?font[^>]*>")));
+            QCOMPARE(styled, expected);
+        };
+        check({}, QString());
+        check({"h", "e", "l", "l", "o", "1", "!", QString::fromUtf8("ก")},
+            QString::fromUtf8("hello1!ก"));
+        for (const QString &key : QStringList{QString::fromUtf8("␣"), QString::fromUtf8("⌫"),
+                 QString::fromUtf8("↵"), QString::fromUtf8("⇥"), QStringLiteral("Esc"),
+                 QString::fromUtf8("⌦"), QString::fromUtf8("←"), QString::fromUtf8("→"),
+                 QString::fromUtf8("↑"), QString::fromUtf8("↓"), QStringLiteral("Home"),
+                 QStringLiteral("End"), QStringLiteral("PgUp"), QStringLiteral("PgDn"),
+                 QStringLiteral("Ctrl+a"), QStringLiteral("Alt+x"),
+                 QStringLiteral("Super+a"), QStringLiteral("Ctrl+Alt+a")}) {
+            check({"a", "b", key, "c", "d"}, QStringLiteral("ab ") + key + " cd");
+            check({key}, key);
+            check({key, key}, key + " " + key);
+        }
+        check({"h", "e", "l", "l", "o", QString::fromUtf8("␣"),
+                  "w", "o", "r", "l", "d", "Ctrl+a", QString::fromUtf8("⌫")},
+            QString::fromUtf8("hello ␣ world Ctrl+a ⌫"));
+        object->setProperty("history", QVariantList{QStringLiteral("helloworld123")});
+        const qreal wordWidth = object->property("implicitWidth").toReal();
+        QVERIFY(wordWidth > 180);
+        QVariantList characters;
+        for (const QChar letter : QStringLiteral("helloworld123"))
+            characters.append(QString(letter));
+        object->setProperty("history", characters);
+        QCOMPARE(object->property("implicitWidth").toReal(), wordWidth);
+    }
+
     void appliesAndPersistsPadding() {
         QTemporaryDir config;
         QVERIFY(config.isValid());
@@ -230,12 +274,12 @@ private slots:
         emit backend.globalKeyPressed(QStringLiteral("ampersand"), QStringLiteral("&"),
             false, false, false, false);
         QCOMPARE(object->property("displayText").toString(),
-            QString::fromUtf8("Ctrl+a Super+␣ < &"));
+            QString::fromUtf8("Ctrl+a Super+␣ <&"));
         const QString styled = object->property("styledText").toString();
         QVERIFY(styled.contains(QStringLiteral("<font color=\"#875a82\">Ctrl+</font>a")));
         QVERIFY(styled.contains(QString::fromUtf8(
             "<font color=\"#875a82\">Super+</font><font color=\"#875a82\">␣</font>")));
-        QVERIFY(styled.endsWith(QStringLiteral("&lt; &amp;")));
+        QVERIFY(styled.endsWith(QStringLiteral("&lt;&amp;")));
         QCOMPARE(display->property("text").toString(), styled);
 
         backend.setThemeName(QStringLiteral("white"));
@@ -456,11 +500,11 @@ private slots:
             QString::fromUtf8("ก"));
         QCoreApplication::sendEvent(&window, &thai);
         QTRY_COMPARE(visualizer->property("displayText").toString(),
-            QString::fromUtf8("h Ctrl+a Ctrl+A A ก"));
+            QString::fromUtf8("h Ctrl+a Ctrl+A Aก"));
         QTest::keyClick(&window, Qt::Key_Space);
         QTest::keyClick(&window, Qt::Key_Backspace);
         QTRY_COMPARE(visualizer->property("displayText").toString(),
-            QString::fromUtf8("h Ctrl+a Ctrl+A A ก ␣ ⌫"));
+            QString::fromUtf8("h Ctrl+a Ctrl+A Aก ␣ ⌫"));
 
         const QImage image = window.grabWindow();
         QVERIFY(!image.isNull());
@@ -507,7 +551,7 @@ private slots:
         emit backend.globalKeyPressed(QStringLiteral("BackSpace"), QString(),
             false, false, false, false);
         QCOMPARE(visualizer->property("displayText").toString(),
-            QString::fromUtf8("h Ctrl+a Ctrl+A A ก ␣ ⌫"));
+            QString::fromUtf8("h Ctrl+a Ctrl+A Aก ␣ ⌫"));
 
         visualizer->setProperty("history", QVariantList{});
         emit backend.globalKeyPressed(QStringLiteral("Shift_L"), QString(),
@@ -516,10 +560,10 @@ private slots:
             emit backend.globalKeyPressed(QString(letter), QString(letter),
                 true, false, false, false);
         emit backend.globalKeyReleased(QStringLiteral("Shift_L"));
-        QCOMPARE(visualizer->property("displayText").toString(), QStringLiteral("H E A D"));
+        QCOMPARE(visualizer->property("displayText").toString(), QStringLiteral("HEAD"));
         emit backend.globalKeyPressed(QStringLiteral("a"), QStringLiteral("a"),
             true, false, false, false);
-        QCOMPARE(visualizer->property("displayText").toString(), QStringLiteral("H E A D a"));
+        QCOMPARE(visualizer->property("displayText").toString(), QStringLiteral("HEADa"));
 
         QQuickWindow window;
         window.resize(480, 78);
@@ -530,7 +574,7 @@ private slots:
         QTRY_VERIFY(visualizer->hasActiveFocus());
         QTest::keyClick(&window, Qt::Key_X);
         QCOMPARE(visualizer->property("displayText").toString(),
-            QStringLiteral("H E A D a"));
+            QStringLiteral("HEADa"));
     }
 };
 
