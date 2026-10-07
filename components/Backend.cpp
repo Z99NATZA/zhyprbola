@@ -35,6 +35,35 @@ QString dockConfigPath(const QString &name) {
         .filePath(QStringLiteral("zhyprbola/") + name);
 }
 
+QVariantMap defaultKeyVisualizerSettings() {
+    return {{QStringLiteral("fontSize"), QStringLiteral("md")},
+        {QStringLiteral("minWidth"), 180}, {QStringLiteral("maxWidth"), 480},
+        {QStringLiteral("widthMode"), QStringLiteral("fit")},
+        {QStringLiteral("alignment"), QStringLiteral("center")}};
+}
+
+QVariantMap validatedKeyVisualizerSettings(const QJsonObject &saved) {
+    QVariantMap settings = defaultKeyVisualizerSettings();
+    for (const QString &key : {QStringLiteral("fontSize"),
+             QStringLiteral("widthMode"), QStringLiteral("alignment")}) {
+        const QString value = saved.value(key).toString();
+        const QStringList allowed = key == QLatin1String("fontSize")
+            ? QStringList{QStringLiteral("sm"), QStringLiteral("md"), QStringLiteral("lg")}
+            : key == QLatin1String("widthMode")
+                ? QStringList{QStringLiteral("fit"), QStringLiteral("fixed")}
+                : QStringList{QStringLiteral("left"), QStringLiteral("center"), QStringLiteral("right")};
+        if (allowed.contains(value)) settings.insert(key, value);
+    }
+    for (const QString &key : {QStringLiteral("minWidth"), QStringLiteral("maxWidth")}) {
+        const int width = saved.value(key).toInt(-1);
+        if (width >= 120 && width <= 1000) settings.insert(key, width);
+    }
+    if (settings.value(QStringLiteral("minWidth")).toInt()
+        > settings.value(QStringLiteral("maxWidth")).toInt())
+        settings.insert(QStringLiteral("maxWidth"), settings.value(QStringLiteral("minWidth")));
+    return settings;
+}
+
 bool writeDockConfig(const QString &name, const QString &value) {
     const QString path = dockConfigPath(name);
     if (!QDir().mkpath(QFileInfo(path).absolutePath())) return false;
@@ -162,7 +191,8 @@ QStringList dockComponentKeys() {
         QStringLiteral("system-status"), QStringLiteral("audio-spectrum"),
         QStringLiteral("music"), QStringLiteral("sound"), QStringLiteral("todo"),
         QStringLiteral("calendar"), QStringLiteral("input-source"),
-        QStringLiteral("power"), QStringLiteral("components")};
+        QStringLiteral("power"), QStringLiteral("components"),
+        QStringLiteral("key-visualizer")};
 }
 
 QList<QByteArray> splitNetworkRow(const QByteArray &row) {
@@ -209,6 +239,28 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     connect(&m_themeWatcher, &QFileSystemWatcher::fileChanged,
         this, &Backend::refreshTheme);
     refreshTheme();
+    connect(&m_keyVisualizerWatcher, &QFileSystemWatcher::directoryChanged,
+        this, &Backend::refreshKeyVisualizerSettings);
+    connect(&m_keyVisualizerWatcher, &QFileSystemWatcher::fileChanged,
+        this, &Backend::refreshKeyVisualizerSettings);
+    refreshKeyVisualizerSettings();
+    connect(&m_keyCapture, &QProcess::readyReadStandardOutput,
+        this, &Backend::readKeyCapture);
+    connect(&m_keyCapture, &QProcess::finished, this,
+        [this](int, QProcess::ExitStatus) {
+            if (m_keyCaptureAvailable) {
+                m_keyCaptureAvailable = false;
+                emit keyCaptureAvailableChanged();
+            }
+            if (m_keyCaptureRequested && !m_keyCaptureTriedEvdev)
+                startEvdevKeyCapture();
+        });
+    connect(&m_keyCapture, &QProcess::errorOccurred, this,
+        [this](QProcess::ProcessError error) {
+            if (error == QProcess::FailedToStart
+                && m_keyCaptureRequested && !m_keyCaptureTriedEvdev)
+                startEvdevKeyCapture();
+        });
     QFile dockPositionFile(dockConfigPath(QStringLiteral("dock-position")));
     if (dockPositionFile.open(QIODevice::ReadOnly)) {
         const QString position = QString::fromUtf8(dockPositionFile.readAll()).trimmed();
@@ -256,7 +308,9 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     const QStringList componentNames = dockComponentKeys();
     m_dockVisibleComponents = componentNames;
     m_dockVisibleComponents.removeAll(QStringLiteral("sound"));
-    m_dockQuickComponents = {QStringLiteral("sound")};
+    m_dockVisibleComponents.removeAll(QStringLiteral("key-visualizer"));
+    m_dockQuickComponents = {QStringLiteral("sound"),
+        QStringLiteral("key-visualizer")};
     QFile dockComponentsFile(dockConfigPath(QStringLiteral("dock-components")));
     if (dockComponentsFile.open(QIODevice::ReadOnly)) {
         const QJsonDocument document = QJsonDocument::fromJson(dockComponentsFile.readAll());
@@ -288,7 +342,8 @@ Backend::Backend(QObject *parent) : QObject(parent) {
                 if (!m_dockVisibleComponents.contains(name)
                     && !m_dockHiddenComponents.contains(name)
                     && !m_dockQuickComponents.contains(name))
-                    (name == QLatin1String("sound") ? m_dockQuickComponents
+                    (name == QLatin1String("sound") || name == QLatin1String("key-visualizer")
+                        ? m_dockQuickComponents
                         : m_dockVisibleComponents).append(name);
         }
     }
@@ -456,6 +511,99 @@ void Backend::moveDockComponent(const QString &key, const QString &destination,
     emit dockSettingsChanged();
 }
 
+void Backend::refreshKeyVisualizerSettings() {
+    const QString path = dockConfigPath(QStringLiteral("key-visualizer"));
+    const QString directory = QFileInfo(path).absolutePath();
+    if (QDir().mkpath(directory) && !m_keyVisualizerWatcher.directories().contains(directory))
+        m_keyVisualizerWatcher.addPath(directory);
+    if (QFileInfo::exists(path) && !m_keyVisualizerWatcher.files().contains(path))
+        m_keyVisualizerWatcher.addPath(path);
+    QFile file(path);
+    QJsonObject saved;
+    if (file.open(QIODevice::ReadOnly))
+        saved = QJsonDocument::fromJson(file.readAll()).object();
+    const QVariantMap settings = validatedKeyVisualizerSettings(saved);
+    if (settings == m_keyVisualizerSettings) return;
+    m_keyVisualizerSettings = settings;
+    emit keyVisualizerSettingsChanged();
+}
+
+void Backend::setKeyVisualizerSetting(const QString &key, const QVariant &value) {
+    QJsonObject saved = QJsonObject::fromVariantMap(m_keyVisualizerSettings);
+    saved.insert(key, QJsonValue::fromVariant(value));
+    const QVariantMap settings = validatedKeyVisualizerSettings(saved);
+    if (settings == m_keyVisualizerSettings) return;
+    if (!writeDockConfig(QStringLiteral("key-visualizer"),
+            QString::fromUtf8(QJsonDocument::fromVariant(settings).toJson(QJsonDocument::Compact))))
+        return;
+    m_keyVisualizerSettings = settings;
+    emit keyVisualizerSettingsChanged();
+}
+
+void Backend::startKeyCapture() {
+    if (m_keyCapture.state() != QProcess::NotRunning || m_keyCaptureRequested) return;
+    m_keyCaptureRequested = true;
+    m_keyCaptureTriedEvdev = false;
+    const QString script = QDir(QCoreApplication::applicationDirPath())
+        .absoluteFilePath(QStringLiteral("../scripts/key-capture.js"));
+    if (!QFileInfo::exists(script)) {
+        startEvdevKeyCapture();
+        return;
+    }
+    m_keyCaptureBuffer.clear();
+    m_keyCapture.start(QStringLiteral("gjs"), {QStringLiteral("-m"), script});
+}
+
+void Backend::startEvdevKeyCapture() {
+    m_keyCaptureTriedEvdev = true;
+    const QString helper = QDir(QCoreApplication::applicationDirPath())
+        .absoluteFilePath(QStringLiteral("key-capture-evdev"));
+    if (!QFileInfo(helper).isExecutable()) return;
+    m_keyCaptureBuffer.clear();
+    m_keyCapture.start(helper);
+}
+
+void Backend::stopKeyCapture() {
+    m_keyCaptureRequested = false;
+    if (m_keyCaptureAvailable) {
+        m_keyCaptureAvailable = false;
+        emit keyCaptureAvailableChanged();
+    }
+    if (m_keyCapture.state() == QProcess::NotRunning) return;
+    m_keyCapture.terminate();
+    if (!m_keyCapture.waitForFinished(500)) {
+        m_keyCapture.kill();
+        m_keyCapture.waitForFinished(500);
+    }
+    m_keyCaptureBuffer.clear();
+}
+
+void Backend::readKeyCapture() {
+    m_keyCaptureBuffer.append(m_keyCapture.readAllStandardOutput());
+    if (m_keyCaptureBuffer.size() > 65536) m_keyCaptureBuffer.clear();
+    int end = m_keyCaptureBuffer.indexOf('\n');
+    while (end >= 0) {
+        const QJsonObject event = QJsonDocument::fromJson(
+            m_keyCaptureBuffer.left(end)).object();
+        m_keyCaptureBuffer.remove(0, end + 1);
+        const QString type = event.value(QStringLiteral("type")).toString();
+        if (type == QLatin1String("ready") && !m_keyCaptureAvailable) {
+            m_keyCaptureAvailable = true;
+            emit keyCaptureAvailableChanged();
+        } else if (type == QLatin1String("press")) {
+            emit globalKeyPressed(event.value(QStringLiteral("name")).toString(),
+                event.value(QStringLiteral("text")).toString(),
+                event.value(QStringLiteral("shift")).toBool(),
+                event.value(QStringLiteral("ctrl")).toBool(),
+                event.value(QStringLiteral("alt")).toBool(),
+                event.value(QStringLiteral("super")).toBool());
+        } else if (type == QLatin1String("release")) {
+            emit globalKeyReleased(event.value(QStringLiteral("name")).toString());
+        }
+        end = m_keyCaptureBuffer.indexOf('\n');
+    }
+}
+
 void Backend::openDockComponent(const QString &key) {
     static const QStringList panelNames = {
         QStringLiteral("bluetooth"),
@@ -467,10 +615,11 @@ void Backend::openDockComponent(const QString &key) {
         QStringLiteral("sound"),
         QStringLiteral("todo"),
         QStringLiteral("calendar"),
+        QStringLiteral("key-visualizer"),
     };
     if (!panelNames.contains(key)) return;
 
-    const QString request = QString::number(QDateTime::currentMSecsSinceEpoch())
+    const QString request = QUuid::createUuid().toString(QUuid::WithoutBraces)
         + QLatin1Char(':') + key;
     const bool requested = writeDockConfig(QStringLiteral("panel-request"), request);
     // Sound is a Shell popup, so it must not spawn a fallback panel window.
@@ -657,6 +806,7 @@ void Backend::deleteTask(const QString &id) {
 }
 
 Backend::~Backend() {
+    stopKeyCapture();
     if (m_cava.state() != QProcess::NotRunning) {
         m_cava.terminate();
         if (!m_cava.waitForFinished(500)) {

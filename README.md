@@ -17,10 +17,14 @@ Build:   qmake6 + make
 
 ```bash
 # Debian/Ubuntu base tools
-sudo apt install qt6-base-dev qt6-declarative-dev qmake6 gnome-shell-extensions
+sudo apt install qt6-base-dev qt6-declarative-dev qmake6 gnome-shell-extensions \
+    libxkbcommon-dev libglib2.0-dev acl
 
 # optional runtime helpers
 sudo apt install qml6-module-qtquick-controls playerctl cava network-manager bluez
+
+# Optional AT-SPI support for Key visualizer (GNOME may deny global monitoring)
+sudo apt install gjs gir1.2-atspi-2.0 gir1.2-gtk-4.0
 ```
 
 ## Run
@@ -46,7 +50,17 @@ make run-panel
 ./scripts/run-panel bluetooth
 ./scripts/run-panel wifi
 ./scripts/run-panel clock-weather
+./scripts/run-panel key-visualizer
 ./scripts/run-panel system-status
+
+# Key visualizer settings are under Settings > Keys. While its bubble is visible,
+# the panel shows keys typed in other applications only when GNOME grants
+# keyboard monitoring or keyboard-device read access is granted. On GNOME
+# Wayland, grant temporary read access to keyboard devices, then reopen it:
+./scripts/grant-key-capture
+# This prompts for sudo, lasts until reboot/device reconnect, and allows other
+# programs running as your user to read those devices too. Do not use it on a
+# shared account. Minimize Key visualizer before entering passwords.
 
 # Edge spectrum is managed by the GNOME dock extension. Enable it and choose
 # an edge in Settings → Spectrum; the original spectrum bubble remains available.

@@ -5,9 +5,17 @@ UUID="zhyprbola@znnn.local"
 
 if gnome-extensions info "$UUID" >/dev/null 2>&1; then
   gnome-extensions disable "$UUID" >/dev/null 2>&1 || true
+  sleep 0.5
   gnome-extensions enable "$UUID"
-  echo "Reloaded and enabled $UUID"
-  exit 0
+  for _ in {1..20}; do
+    if [[ "$(gnome-extensions info "$UUID")" == *"State: ACTIVE"* ]]; then
+      echo "Enabled $UUID. Log out and back in to load updated extension code."
+      exit 0
+    fi
+    sleep 0.25
+  done
+  echo "Enabled $UUID, but GNOME has not activated it yet. Log out and back in." >&2
+  exit 1
 fi
 
 enabled="$(gsettings get org.gnome.shell enabled-extensions)"

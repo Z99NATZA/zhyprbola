@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v setfacl >/dev/null; then
+    printf 'setfacl is required (install the acl package).\n' >&2
+    exit 1
+fi
+
+devices=()
+for device in /dev/input/event*; do
+    [[ -e "$device" ]] || continue
+    if udevadm info --query=property --name="$device" | grep -qx 'ID_INPUT_KEYBOARD=1'; then
+        devices+=("$device")
+    fi
+done
+
+if ((${#devices[@]} == 0)); then
+    printf 'No keyboard input devices found.\n' >&2
+    exit 1
+fi
+
+sudo setfacl -m "u:$(id -u):r" "${devices[@]}"
+printf 'Temporary read access granted to %s keyboard device(s). Reopen Key visualizer.\n' "${#devices[@]}"

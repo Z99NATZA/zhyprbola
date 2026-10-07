@@ -40,6 +40,7 @@ const DOCK_COMPONENTS = [
     ['bluetooth', 'Bluetooth'],
     ['wifi', 'Wi-Fi'],
     ['clock-weather', 'Clock and Weather'],
+    ['key-visualizer', 'Key Visualizer'],
     ['system-status', 'System Status'],
     ['audio-spectrum', 'Audio Spectrum'],
     ['music', 'Music Player'],
@@ -71,6 +72,7 @@ const PANEL_TITLES = Object.freeze({
     bluetooth: 'Zhyprbola Bluetooth',
     wifi: 'Zhyprbola Wi-Fi',
     'clock-weather': 'Zhyprbola Clock & Weather',
+    'key-visualizer': 'Zhyprbola Key Visualizer',
     'system-status': 'Zhyprbola System Status',
     'audio-spectrum': 'Zhyprbola Audio Spectrum',
     music: 'Zhyprbola Music Player',
@@ -953,12 +955,14 @@ export default class ZhyprbolaExtension extends Extension {
             for (const name of defaults) {
                 if (!visible.includes(name) && !hidden.includes(name) &&
                     !quick.includes(name))
-                    (name === 'sound' ? quick : visible).push(name);
+                    (name === 'sound' || name === 'key-visualizer'
+                        ? quick : visible).push(name);
             }
             return {visible, hidden, quick};
         } catch (_) {
-            return {visible: defaults.filter(name => name !== 'sound'),
-                hidden: [], quick: ['sound']};
+            return {visible: defaults.filter(name =>
+                name !== 'sound' && name !== 'key-visualizer'),
+                hidden: [], quick: ['sound', 'key-visualizer']};
         }
     }
 

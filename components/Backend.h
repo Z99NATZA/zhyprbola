@@ -6,6 +6,7 @@
 #include <QProcess>
 #include <QTimer>
 #include <QVariantList>
+#include <QVariantMap>
 
 class Backend : public QObject {
     Q_OBJECT
@@ -56,6 +57,8 @@ class Backend : public QObject {
     Q_PROPERTY(bool edgeSpectrumEnabled READ edgeSpectrumEnabled NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QString edgeSpectrumPosition READ edgeSpectrumPosition NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QVariantList tasks READ tasks NOTIFY tasksChanged)
+    Q_PROPERTY(QVariantMap keyVisualizerSettings READ keyVisualizerSettings NOTIFY keyVisualizerSettingsChanged)
+    Q_PROPERTY(bool keyCaptureAvailable READ keyCaptureAvailable NOTIFY keyCaptureAvailableChanged)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -108,6 +111,8 @@ public:
     bool edgeSpectrumEnabled() const { return m_edgeSpectrumEnabled; }
     QString edgeSpectrumPosition() const { return m_edgeSpectrumPosition; }
     QVariantList tasks() const { return m_tasks; }
+    QVariantMap keyVisualizerSettings() const { return m_keyVisualizerSettings; }
+    bool keyCaptureAvailable() const { return m_keyCaptureAvailable; }
 
     Q_INVOKABLE void togglePlayback();
     Q_INVOKABLE void nextTrack();
@@ -147,6 +152,9 @@ public:
     Q_INVOKABLE void renameTask(const QString &id, const QString &text);
     Q_INVOKABLE void moveTask(const QString &id, int targetIndex);
     Q_INVOKABLE void deleteTask(const QString &id);
+    Q_INVOKABLE void setKeyVisualizerSetting(const QString &key, const QVariant &value);
+    Q_INVOKABLE void startKeyCapture();
+    Q_INVOKABLE void stopKeyCapture();
 
 signals:
     void systemChanged();
@@ -162,6 +170,11 @@ signals:
     void dockSettingsChanged();
     void edgeSpectrumSettingsChanged();
     void tasksChanged();
+    void keyVisualizerSettingsChanged();
+    void keyCaptureAvailableChanged();
+    void globalKeyPressed(const QString &name, const QString &text,
+        bool shift, bool ctrl, bool alt, bool super);
+    void globalKeyReleased(const QString &name);
 
 private:
     void refreshSystem();
@@ -171,6 +184,9 @@ private:
     void refreshBluetoothDevices();
     void readSpectrum();
     void refreshTheme();
+    void refreshKeyVisualizerSettings();
+    void readKeyCapture();
+    void startEvdevKeyCapture();
     bool playerctlAvailable() const;
     QString playerctl(const QStringList &args) const;
     QStringList mprisPlayers() const;
@@ -239,4 +255,11 @@ private:
     bool m_edgeSpectrumEnabled = false;
     QString m_edgeSpectrumPosition = QStringLiteral("bottom");
     QVariantList m_tasks;
+    QFileSystemWatcher m_keyVisualizerWatcher;
+    QVariantMap m_keyVisualizerSettings;
+    QProcess m_keyCapture;
+    QByteArray m_keyCaptureBuffer;
+    bool m_keyCaptureAvailable = false;
+    bool m_keyCaptureRequested = false;
+    bool m_keyCaptureTriedEvdev = false;
 };

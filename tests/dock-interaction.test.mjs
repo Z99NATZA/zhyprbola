@@ -393,6 +393,44 @@ test('Sound appears in Quick on a fresh configuration', () => {
     assert.equal(layout.quick.includes('sound'), true);
 });
 
+test('Key Visualizer defaults to Quick and respects saved placement', () => {
+    const {dock, context} = fixture();
+    const fresh = dock._readDockComponents();
+    assert.equal(fresh.quick.includes('key-visualizer'), true);
+    context.TextDecoder = TextDecoder;
+    context.GLib.file_get_contents = () => [true,
+        new TextEncoder().encode(JSON.stringify({visible: ['key-visualizer'],
+            hidden: [], quick: []}))];
+    const saved = dock._readDockComponents();
+    assert.equal(saved.visible.includes('key-visualizer'), true);
+    assert.equal(saved.quick.includes('key-visualizer'), false);
+});
+
+test('opening an existing Key Visualizer follows the shared panel toggle', () => {
+    const {dock, context} = fixture();
+    let activations = 0;
+    let focused = false;
+    let minimized = true;
+    const window = {
+        get_title: () => 'Zhyprbola Key Visualizer',
+        has_focus: () => focused,
+        get minimized() { return minimized; },
+        unminimize: () => { minimized = false; },
+        activate: () => { activations++; focused = true; },
+        minimize: () => { minimized = true; focused = false; },
+    };
+    context.global = {
+        display: {list_all_windows: () => [window]},
+        get_current_time: () => 1,
+    };
+    dock._openPanel('key-visualizer', true);
+    assert.equal(activations, 1);
+    assert.equal(minimized, false);
+    dock._openPanel('key-visualizer');
+    assert.equal(activations, 1);
+    assert.equal(minimized, true);
+});
+
 test('right-click opens GNOME menus for Apps and Running without activating a window', () => {
     for (const name of ['apps', 'running']) {
         const {dock, group} = fixture();

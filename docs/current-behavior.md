@@ -2,7 +2,7 @@
 
 ```text
 Flow: GNOME dock extension -> focused QML panels
-Panels: bluetooth, wifi, clock-weather, system-status, audio-spectrum, sound
+Panels: bluetooth, wifi, clock-weather, key-visualizer, system-status, audio-spectrum, sound
 Theme: ~/.config/zhyprbola/theme
 Dock position: ~/.config/zhyprbola/dock-position
 Dock default: bottom
@@ -13,6 +13,7 @@ Ungroup windows: ~/.config/zhyprbola/dock-ungroup-windows (true/false, default f
 Pinned apps: ~/.config/zhyprbola/pinned-apps (desktop IDs, one per line; shown only when Apps is enabled)
 Wallpaper toggle: ~/.config/zhyprbola/use-wallpaper
 Tasks: ~/.config/zhyprbola/tasks.json (local checklist; items remain until manually deleted)
+Key visualizer: ~/.config/zhyprbola/key-visualizer (font size, width, alignment)
 ```
 
 Dock regions:
@@ -44,6 +45,18 @@ Dock popups open only through explicit activation. Hovering over another dock
 button or moving keyboard focus does not switch the currently open popup.
 The Input Source dock component shows the current language code such as `en`
 or `th` and opens a language-only switcher menu.
+The Key Visualizer opens a floating bubble from Quick by default.
+Settings > Keys controls font size, min/max width, fit or fixed width, and text
+alignment. It shows the latest keys only and clears after five seconds. It can
+read English and Thai keys typed in other applications through GNOME AT-SPI
+when authorized, or directly from readable Linux keyboard input devices.
+GNOME 50 on Wayland can deny AT-SPI monitoring; run
+`./scripts/grant-key-capture` to grant temporary read access to keyboard
+devices, then reopen the bubble. Without either permission it shows keys only
+while focused. The capture helper stops when the bubble is minimized. Device
+access lasts until reboot or device reconnect, and any process under the same
+user can read those devices while the permission is active. Typed secrets can
+appear in the bubble; minimize it before entering passwords.
 The Tasks panel stores local checklist items, supports add/edit/toggle/delete
 and drag reorder, and never deletes tasks automatically when the date changes.
 
@@ -57,6 +70,7 @@ make dock
 ./scripts/run-panel bluetooth
 ./scripts/run-panel wifi
 ./scripts/run-panel clock-weather
+./scripts/run-panel key-visualizer
 ./scripts/run-panel system-status
 ./scripts/run-panel audio-spectrum
 ./scripts/run-panel sound

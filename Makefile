@@ -2,9 +2,13 @@
 
 QMLLINT := $(shell command -v qmllint || command -v /usr/lib/qt6/bin/qmllint)
 
-build:
+build: build/key-capture-evdev
 	@mkdir -p build
 	@cd build && qmake6 ../zhyprbola.pro && $(MAKE)
+
+build/key-capture-evdev: scripts/key-capture-evdev.cpp
+	@mkdir -p build
+	$(CXX) -std=c++17 -O2 -Wall -Wextra -DQT_NO_KEYWORDS $(shell pkg-config --cflags Qt6Core gio-2.0 xkbcommon) $< -o $@ $(shell pkg-config --libs Qt6Core gio-2.0 xkbcommon)
 
 run: build
 	./build/zhyprbola

@@ -29,6 +29,7 @@ Item {
         {key: "dock", label: "Dock"},
         {key: "components", label: "Components"},
         {key: "spectrum", label: "Spectrum"},
+        {key: "keys", label: "Keys"},
         {key: "wallpaper", label: "Wallpaper"}
     ]
     readonly property var themes: [
@@ -364,7 +365,8 @@ Item {
         text: panel.section === "themes" ? "Themes"
             : (panel.section === "dock" ? "Dock"
             : (panel.section === "components" ? "Components"
-            : (panel.section === "spectrum" ? "Edge spectrum" : "Wallpaper")))
+            : (panel.section === "spectrum" ? "Edge spectrum"
+            : (panel.section === "keys" ? "Key visualizer" : "Wallpaper"))))
         color: Theme.text
         font.family: Qt.application.font.family
         font.pixelSize: 20
@@ -912,9 +914,12 @@ Item {
     component DockComponentLauncherBox: Rectangle {
         id: launcherBox
         required property var items
+        readonly property int rowCount: Math.max(1, Math.ceil(items.length / 9))
+        readonly property int columnCount: Math.max(1, Math.ceil(items.length / rowCount))
+        objectName: "dock-component-launcher-box"
 
         width: panel.contentWidth
-        height: 116
+        height: 55 + rowCount * 37
         radius: 12
         color: Theme.control
 
@@ -939,12 +944,13 @@ Item {
         }
 
         Item {
-            x: 12
+            x: Math.round((parent.width - width) / 2)
             y: 45
-            width: parent.width - 24
-            height: 72
+            width: launcherBox.columnCount * 37 - 3
+            height: launcherBox.rowCount * 37 - 3
 
             Repeater {
+                objectName: "dock-component-launcher-repeater"
                 model: launcherBox.items
 
                 delegate: Rectangle {
@@ -953,8 +959,8 @@ Item {
                     required property int index
                     readonly property string componentKey: modelData
                     objectName: "dock-component-launcher-" + componentKey
-                    x: (index % 9) * 37
-                    y: Math.floor(index / 9) * 37
+                    x: (index % launcherBox.columnCount) * 37
+                    y: Math.floor(index / launcherBox.columnCount) * 37
                     width: 34
                     height: 34
                     radius: 9
@@ -984,6 +990,7 @@ Item {
     }
 
     Flickable {
+        objectName: "dock-components-scroll"
         x: panel.contentX
         y: 76
         width: panel.contentWidth
@@ -1206,6 +1213,202 @@ Item {
                         onClicked: backend.setEdgeSpectrumPosition(modelData.key)
                     }
                 }
+            }
+        }
+    }
+
+    component KeyChoice: Column {
+        required property string title
+        required property string settingKey
+        required property var options
+        width: panel.contentWidth
+        spacing: 6
+
+        Text {
+            text: title
+            color: Theme.mutedText
+            font.family: Qt.application.font.family
+            font.pixelSize: 12
+        }
+
+        Row {
+            width: parent.width
+            spacing: 8
+
+            Repeater {
+                model: options
+
+                delegate: Rectangle {
+                    required property var modelData
+                    width: (panel.contentWidth - 8 * (options.length - 1)) / options.length
+                    height: 42
+                    radius: 8
+                    color: backend.keyVisualizerSettings[settingKey] === modelData.key
+                        ? Theme.selected : (optionMouse.containsMouse
+                            ? Theme.controlHover : Theme.control)
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: modelData.label
+                        color: Theme.text
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 14
+                        font.weight: backend.keyVisualizerSettings[settingKey]
+                            === modelData.key ? Font.DemiBold : Font.Normal
+                    }
+
+                    MouseArea {
+                        id: optionMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: backend.setKeyVisualizerSetting(settingKey, modelData.key)
+                    }
+                }
+            }
+        }
+    }
+
+    component WidthStepper: Rectangle {
+        id: stepper
+        required property string label
+        required property string settingKey
+        width: (panel.contentWidth - 8) / 2
+        height: 52
+        radius: 8
+        color: Theme.control
+
+        Text {
+            x: 12
+            anchors.verticalCenter: parent.verticalCenter
+            text: stepper.label
+            color: Theme.text
+            font.family: Qt.application.font.family
+            font.pixelSize: 13
+        }
+
+        Row {
+            anchors.right: parent.right
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 4
+
+            Repeater {
+                model: [-20, 20]
+
+                delegate: Rectangle {
+                    required property int modelData
+                    width: 26
+                    height: 26
+                    radius: 6
+                    color: stepMouse.containsMouse ? Theme.controlHover : Theme.selected
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: modelData < 0 ? "−" : "+"
+                        color: Theme.text
+                        font.pixelSize: 17
+                    }
+
+                    MouseArea {
+                        id: stepMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            const settings = backend.keyVisualizerSettings
+                            const value = settings[stepper.settingKey] + modelData
+                            const limit = stepper.settingKey === "minWidth"
+                                ? Math.min(settings.maxWidth, Math.max(120, value))
+                                : Math.max(settings.minWidth, Math.min(1000, value))
+                            backend.setKeyVisualizerSetting(stepper.settingKey, limit)
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            anchors.right: parent.right
+            anchors.rightMargin: 73
+            anchors.verticalCenter: parent.verticalCenter
+            text: backend.keyVisualizerSettings[stepper.settingKey]
+            color: Theme.text
+            font.family: Qt.application.font.family
+            font.pixelSize: 13
+        }
+    }
+
+    Column {
+        x: panel.contentX
+        y: 76
+        width: panel.contentWidth
+        spacing: 17
+        visible: panel.section === "keys"
+
+        KeyChoice {
+            title: "Font size"
+            settingKey: "fontSize"
+            options: [{key: "sm", label: "sm"}, {key: "md", label: "md"},
+                {key: "lg", label: "lg"}]
+        }
+
+        KeyChoice {
+            title: "Width"
+            settingKey: "widthMode"
+            options: [{key: "fit", label: "Fit content"},
+                {key: "fixed", label: "Fixed max"}]
+        }
+
+        Row {
+            spacing: 8
+            WidthStepper { label: "Min"; settingKey: "minWidth" }
+            WidthStepper { label: "Max"; settingKey: "maxWidth" }
+        }
+
+        KeyChoice {
+            title: "Text alignment"
+            settingKey: "alignment"
+            options: [{key: "left", label: "Left"},
+                {key: "center", label: "Center"},
+                {key: "right", label: "Right"}]
+        }
+
+        Rectangle {
+            objectName: "open-key-visualizer"
+            width: parent.width
+            height: 42
+            radius: 8
+            color: openKeysMouse.containsMouse ? Qt.lighter(Theme.accent, 1.1) : Theme.accent
+
+            Row {
+                anchors.centerIn: parent
+                spacing: 8
+
+                Image {
+                    width: 18
+                    height: 18
+                    source: Qt.resolvedUrl("../gnome-extension/icons/key-visualizer.svg")
+                    sourceSize: Qt.size(width, height)
+                    fillMode: Image.PreserveAspectFit
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Open Key visualizer"
+                    color: Theme.accentText
+                    font.family: Qt.application.font.family
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                }
+            }
+
+            MouseArea {
+                id: openKeysMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: backend.openDockComponent("key-visualizer")
             }
         }
     }

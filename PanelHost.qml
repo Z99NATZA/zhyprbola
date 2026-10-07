@@ -12,6 +12,7 @@ Window {
     readonly property int panelWidth: {
         switch (panelName) {
         case "clock-weather": return 480
+        case "key-visualizer": return keyVisualizer.implicitWidth
         case "audio-spectrum": return 440
         case "system-status": return 528
         case "music": return 414
@@ -27,6 +28,7 @@ Window {
         case "wifi": return 576
         case "clock-weather":
         case "audio-spectrum": return 172
+        case "key-visualizer": return keyVisualizer.implicitHeight
         case "system-status": return 195
         case "music": return 254
         case "sound": return sound.error.length > 0 ? 214 : 184
@@ -41,6 +43,8 @@ Window {
             return "Zhyprbola Wi-Fi"
         if (panelName === "clock-weather")
             return "Zhyprbola Clock & Weather"
+        if (panelName === "key-visualizer")
+            return "Zhyprbola Key Visualizer"
         if (panelName === "system-status")
             return "Zhyprbola System Status"
         if (panelName === "audio-spectrum")
@@ -74,7 +78,23 @@ Window {
             wifiPanel.opened = true
         } else if (panelName === "bluetooth") {
             bluetoothPanel.opened = true
+        } else if (panelName === "key-visualizer") {
+            keyVisualizer.forceActiveFocus()
+            backend.startKeyCapture()
         }
+    }
+
+    onVisibilityChanged: {
+        if (panelName !== "key-visualizer") return
+        if (host.visibility === Window.Minimized || host.visibility === Window.Hidden)
+            backend.stopKeyCapture()
+        else
+            backend.startKeyCapture()
+    }
+
+    onActiveChanged: {
+        if (active && panelName === "key-visualizer")
+            keyVisualizer.forceActiveFocus()
     }
 
     BluetoothPanel {
@@ -96,6 +116,22 @@ Window {
     ClockWeather {
         anchors.centerIn: parent
         visible: host.panelName === "clock-weather"
+    }
+
+    KeyVisualizer {
+        id: keyVisualizer
+        anchors.fill: parent
+        visible: host.panelName === "key-visualizer"
+        enabled: visible
+    }
+
+    MouseArea {
+        anchors.fill: keyVisualizer
+        visible: host.panelName === "key-visualizer"
+        onClicked: {
+            host.requestActivate()
+            keyVisualizer.forceActiveFocus()
+        }
     }
 
     SystemStatus {
