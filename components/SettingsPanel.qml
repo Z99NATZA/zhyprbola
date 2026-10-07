@@ -27,6 +27,7 @@ Item {
     readonly property var sections: [
         {key: "components", label: "Components"},
         {key: "date-time", label: "Date & Time"},
+        {key: "screenshots", label: "Screenshots"},
         {key: "dock", label: "Dock"},
         {key: "keys", label: "Keys"},
         {key: "spectrum", label: "Spectrum"},
@@ -390,7 +391,8 @@ Item {
     Text {
         x: panel.contentX
         y: 29
-        text: panel.section === "themes" ? "Themes"
+        text: panel.section === "screenshots" ? "Screenshots"
+            : panel.section === "themes" ? "Themes"
             : (panel.section === "dock" ? "Dock"
             : (panel.section === "components" ? "Components"
             : (panel.section === "spectrum" ? "Edge spectrum"
@@ -486,6 +488,63 @@ Item {
                     onClicked: backend.setThemeName(modelData.key)
                 }
             }
+        }
+    }
+
+    Column {
+        x: panel.contentX
+        y: 76
+        width: panel.contentWidth
+        spacing: 16
+        visible: panel.section === "screenshots"
+
+        Text { text: "Screen edge"; color: Theme.text; font.pixelSize: 14 }
+        Row {
+            spacing: 8
+            Repeater {
+                model: ["left", "right"]
+                delegate: ScreenshotPositionChoice {
+                    required property string modelData
+                    label: modelData === "left" ? "Left" : "Right"
+                    chosen: screenshots.edgeSide === modelData
+                    onClicked: screenshots.setPosition(modelData, screenshots.edgeAlignment)
+                }
+            }
+        }
+        Text { text: "Vertical position"; color: Theme.text; font.pixelSize: 14 }
+        Row {
+            spacing: 8
+            Repeater {
+                model: ["top", "center", "bottom"]
+                delegate: ScreenshotPositionChoice {
+                    required property string modelData
+                    label: modelData.charAt(0).toUpperCase() + modelData.slice(1)
+                    chosen: screenshots.edgeAlignment === modelData
+                    onClicked: screenshots.setPosition(screenshots.edgeSide, modelData)
+                }
+            }
+        }
+    }
+
+    component ScreenshotPositionChoice: Rectangle {
+        property string label
+        property bool chosen: false
+        signal clicked()
+        width: 110
+        height: 46
+        radius: 11
+        color: chosen ? Theme.selected : (choiceMouse.containsMouse ? Theme.controlHover : Theme.control)
+        Text {
+            anchors.centerIn: parent
+            text: parent.label
+            color: Theme.text
+            font.pixelSize: 13
+        }
+        MouseArea {
+            id: choiceMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            onClicked: parent.clicked()
         }
     }
 

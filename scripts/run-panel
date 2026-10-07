@@ -5,7 +5,7 @@ ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 PANEL_NAME="${1:-bluetooth}"
 
 case "$PANEL_NAME" in
-  bluetooth|wifi|clock-weather|key-visualizer|system-status|audio-spectrum|edge-spectrum|music|sound|todo|task|tasks|calendar|settings)
+  bluetooth|wifi|clock-weather|key-visualizer|system-status|audio-spectrum|edge-spectrum|music|sound|screenshots|todo|task|tasks|calendar|settings)
     ;;
   *)
     echo "Unsupported panel: $PANEL_NAME" >&2
@@ -17,4 +17,4 @@ if [[ ! -x "$ROOT_DIR/build/zhyprbola" ]]; then
   make -C "$ROOT_DIR" build
 fi
 
-exec "$ROOT_DIR/build/zhyprbola" --panel "$PANEL_NAME"
+exec "$ROOT_DIR/build/zhyprbola" --panel "$PANEL_NAME" "${@:2}"

@@ -24,4 +24,4 @@ dock-enable:
 	./scripts/enable-dock
 
 check:
-	@for file in Main.qml PanelHost.qml EdgeSpectrum.qml components/*.qml; do $(QMLLINT) "$$file" || exit 1; done
+	@for file in Main.qml PanelHost.qml EdgeSpectrum.qml ScreenshotHost.qml components/*.qml; do $(QMLLINT) "$$file" || exit 1; done

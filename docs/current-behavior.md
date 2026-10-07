@@ -82,6 +82,29 @@ and drag reorder, and never deletes tasks automatically when the date changes.
 
 ## Commands
 
+The Screenshots browser opens from a 5 × 100 px handle on the primary monitor's
+edge. Settings → Screenshots selects Left/Right and Top/Center/Bottom; changes
+apply immediately. The three positions use space-around spacing, with centers
+at 1/6, 1/2, and 5/6 of the screen height. The browser opens beside the handle,
+clamped vertically to the work area, expands from the small handle without
+blocking other windows or staying above them, uses the same theme surface, text,
+and controls as other components, and reads
+`Pictures/Screenshots`, shows thumbnails newest first, and updates when files
+change. Click selects one image, Ctrl-click toggles it, and Shift-click selects a
+range. Ctrl+A selects all and Ctrl+C copies selected absolute paths as newline
+separated text. The bottom-right Delete button or Delete key moves selected files
+into `.zhyprbola-trash` inside the
+screenshots directory. Ctrl+Z restores the last deletion, including after reopening
+the browser. Restore never overwrites an existing file. Clicking outside, Escape,
+or another click on the edge hides the browser; there is no close button. The
+GNOME handle stays visible even in fullscreen. Screenshots uses a single resident
+QML process controlled through D-Bus, without loading other component backends.
+Hiding preserves its model, selection, clipboard owner, and thumbnail cache.
+Rapid reopen cancels an older collapse; disabling the extension stops only its
+browser and handle. The scrollbar has reserved space and appears only when the
+list overflows. Deletion does not ask for confirmation. Undo storage is retained until restored; it is not
+automatically purged.
+
 ```bash
 # install/update the dock
 make dock
@@ -95,6 +118,7 @@ make dock
 ./scripts/run-panel audio-spectrum
 ./scripts/run-panel sound
 ./scripts/run-panel tasks
+./scripts/run-panel screenshots
 ```
 
 ## Integrations

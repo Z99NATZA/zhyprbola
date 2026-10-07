@@ -6,31 +6,31 @@ QtObject {
         const colors = {
             current: {
                 accent: "#875A82", text: "#3F2B41", control: "#F2EAF2",
-                controlHover: "#E9DDE9", selected: "#E9DDE9", track: "#E2D2E2"
+                controlHover: "#E9DDE9", selected: "#D3BDD1", track: "#E2D2E2"
             },
             white: {
                 accent: "#467B9D", text: "#263B4C", control: "#EAF1F5",
-                controlHover: "#DDEAF0", selected: "#DCEAF1", track: "#D3E2EA"
+                controlHover: "#DDEAF0", selected: "#BFD6E3", track: "#D3E2EA"
             },
             "white-sky": {
                 accent: "#1E73E7", text: "#174269", control: "#EAF4FF",
-                controlHover: "#DCEEFF", selected: "#DCEEFF", track: "#D1E7FA"
+                controlHover: "#DCEEFF", selected: "#B7D6FA", track: "#D1E7FA"
             },
             forest: {
                 accent: "#477F6D", text: "#194C3C", control: "#E8F3EE",
-                controlHover: "#D9EAE1", selected: "#D9EAE1", track: "#CFE3D8"
+                controlHover: "#D9EAE1", selected: "#B8D6C8", track: "#CFE3D8"
             },
             "one-half-gray": {
                 accent: "#68717D", text: "#2D3640", control: "#ECEFF1",
-                controlHover: "#E0E5E8", selected: "#E0E5E8", track: "#CFD7DC"
+                controlHover: "#E0E5E8", selected: "#C5CDD5", track: "#CFD7DC"
             },
             red: {
                 accent: "#B83252", text: "#542437", control: "#FAE9EE",
-                controlHover: "#F5DCE4", selected: "#F5DCE4", track: "#EECBD5"
+                controlHover: "#F5DCE4", selected: "#EDBDCB", track: "#EECBD5"
             },
             mauve: {
                 accent: "#C45478", text: "#623746", control: "#FBECEF",
-                controlHover: "#F7DCE5", selected: "#F7DCE5", track: "#EBC2D0"
+                controlHover: "#F7DCE5", selected: "#EDBDCE", track: "#EBC2D0"
             }
         }
         return colors[backend.themeName] || colors.current

@@ -13,6 +13,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Keyboard from 'resource:///org/gnome/shell/ui/status/keyboard.js';
 import {SoundMenu} from './soundMenu.js';
 import {BrightnessMenu} from './brightnessMenu.js';
+import {ScreenshotEdge} from './screenshotEdge.js';
 
 const DockPosition = Object.freeze({
     LEFT: 'left',
@@ -74,6 +75,7 @@ const THEMES = [
 ];
 
 const PANEL_TITLES = Object.freeze({
+    screenshots: 'Zhyprbola Screenshots',
     bluetooth: 'Zhyprbola Bluetooth',
     wifi: 'Zhyprbola Wi-Fi',
     'clock-weather': 'Zhyprbola Clock & Weather',
@@ -182,6 +184,10 @@ export default class ZhyprbolaExtension extends Extension {
         this._publishedInputSource = null;
 
         this._createDock();
+        this._screenshotEdge = new ScreenshotEdge(() => Gio.Subprocess.new(
+            ['bash', GLib.build_filenamev([this.path, 'panel-command.sh']), 'screenshots', '--resident'],
+            Gio.SubprocessFlags.NONE),
+            () => (THEMES.find(theme => theme.name === this._themeName) ?? THEMES[0]).iconColor);
         this._dateTimeTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
             this._refreshDateTimeLabels();
             return GLib.SOURCE_CONTINUE;
@@ -216,6 +222,7 @@ export default class ZhyprbolaExtension extends Extension {
         global.workspace_manager.connectObject('active-workspace-changed',
             () => this._updateShowDesktopState(), this);
         Main.layoutManager.connectObject('monitors-changed', () => {
+            this._screenshotEdge?.layout();
             this._queueLayout();
             this._restartEdgeSpectrum();
         }, this);
@@ -234,6 +241,8 @@ export default class ZhyprbolaExtension extends Extension {
 
     disable() {
         this._disabling = true;
+        this._screenshotEdge?.destroy();
+        this._screenshotEdge = null;
         global.display.disconnectObject(this);
         global.workspace_manager.disconnectObject(this);
         Main.layoutManager.disconnectObject(this);
@@ -1377,6 +1386,7 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _applyTheme() {
+        this._screenshotEdge?.layout();
         this._soundMenu?.destroy();
         this._soundMenu = null;
         this._brightnessMenu?.destroy();
@@ -2176,6 +2186,10 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _openPanel(panelName, fromSettings = false) {
+        if (panelName === 'screenshots') {
+            this._screenshotEdge?.toggle();
+            return;
+        }
         if (panelName === 'sound' || panelName === 'brightness') {
             const buttons = this._dockGroupsByName.get('zhyprbola')?.get_children() ?? [];
             const source = buttons.find(button => button._panelName === panelName)
