@@ -6,7 +6,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QLockFile>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QCoreApplication>
@@ -630,37 +629,6 @@ void Backend::openDockComponent(const QString &key) {
             QProcess::startDetached(QCoreApplication::applicationFilePath(),
                 {QStringLiteral("--panel"), key});
     });
-}
-
-bool Backend::panelPinned(const QString &key) const {
-    QFile input(dockConfigPath(QStringLiteral("pinned-panels")));
-    if (!input.open(QIODevice::ReadOnly)) return false;
-    const QJsonDocument document = QJsonDocument::fromJson(input.readAll());
-    return document.array().contains(key);
-}
-
-bool Backend::setPanelPinned(const QString &key, bool pinned) {
-    const QString path = dockConfigPath(QStringLiteral("pinned-panels"));
-    if (!QDir().mkpath(QFileInfo(path).absolutePath())) return false;
-    QLockFile lock(path + QStringLiteral(".lock"));
-    if (!lock.tryLock(1000)) return false;
-
-    QFile input(path);
-    QJsonArray panels;
-    if (input.open(QIODevice::ReadOnly))
-        panels = QJsonDocument::fromJson(input.readAll()).array();
-    QJsonArray updated;
-    for (const QJsonValue &value : panels) {
-        if (value.isString() && value.toString() != key && !updated.contains(value))
-            updated.append(value);
-    }
-    if (pinned) updated.append(key);
-
-    QSaveFile output(path);
-    if (!output.open(QIODevice::WriteOnly)) return false;
-    if (output.write(QJsonDocument(updated).toJson(QJsonDocument::Compact)) < 0)
-        return false;
-    return output.commit();
 }
 
 void Backend::setDockUngroupWindows(bool enabled) {

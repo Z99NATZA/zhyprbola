@@ -1,5 +1,4 @@
 #include "../components/Backend.h"
-#include "../components/SoundBackend.h"
 
 #include <QFile>
 #include <QGuiApplication>
@@ -16,7 +15,7 @@
 class VisualizerBackend : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantMap keyVisualizerSettings READ keyVisualizerSettings CONSTANT)
-    Q_PROPERTY(QString themeName READ themeName CONSTANT)
+    Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
     Q_PROPERTY(bool keyCaptureAvailable READ keyCaptureAvailable NOTIFY keyCaptureAvailableChanged)
 public:
     QVariantMap keyVisualizerSettings() const {
@@ -25,7 +24,11 @@ public:
             {QStringLiteral("widthMode"), QStringLiteral("fit")},
             {QStringLiteral("alignment"), QStringLiteral("center")}};
     }
-    QString themeName() const { return QStringLiteral("current"); }
+    QString themeName() const { return m_themeName; }
+    void setThemeName(const QString &name) {
+        m_themeName = name;
+        emit themeChanged();
+    }
     bool keyCaptureAvailable() const { return m_keyCaptureAvailable; }
     void setKeyCaptureAvailable(bool available) {
         m_keyCaptureAvailable = available;
@@ -33,82 +36,72 @@ public:
     }
 signals:
     void keyCaptureAvailableChanged();
+    void themeChanged();
     void globalKeyPressed(const QString &name, const QString &text,
         bool shift, bool ctrl, bool alt, bool super);
     void globalKeyReleased(const QString &name);
 private:
     bool m_keyCaptureAvailable = false;
+    QString m_themeName = QStringLiteral("current");
 };
 
 class KeyVisualizerTest : public QObject {
     Q_OBJECT
 private slots:
-    void opensCustomContextMenuWithRightClick() {
-        QTemporaryDir config;
-        QVERIFY(config.isValid());
-        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
-        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
-        {
-            Backend backend;
-            SoundBackend sound;
-            QQmlEngine engine;
-            engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
-            engine.rootContext()->setContextProperty(QStringLiteral("sound"), &sound);
-            const QString file = QFINDTESTDATA("../PanelHost.qml");
-            QVERIFY(!file.isEmpty());
-            QQmlComponent component(&engine, QUrl::fromLocalFile(file));
-            QVERIFY2(component.isReady(), qPrintable(component.errorString()));
-            QScopedPointer<QObject> object(component.createWithInitialProperties(
-                {{QStringLiteral("requestedPanel"), QStringLiteral("clock-weather")}}));
-            QVERIFY2(object, qPrintable(component.errorString()));
-            auto *window = qobject_cast<QQuickWindow *>(object.data());
-            QVERIFY(window);
-            auto *menu = object->findChild<QObject *>(QStringLiteral("panel-context-menu"));
-            auto *pin = object->findChild<QQuickItem *>(QStringLiteral("panel-context-pin"));
-            auto *trigger = object->findChild<QQuickItem *>(QStringLiteral("panel-context-trigger"));
-            QVERIFY(menu);
-            QVERIFY(pin);
-            QVERIFY(trigger);
-            QVERIFY(!menu->property("visible").toBool());
+    void colorsSpecialKeysWithTheme() {
+        VisualizerBackend backend;
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        const QString file = QFINDTESTDATA("../components/KeyVisualizer.qml");
+        QVERIFY(!file.isEmpty());
+        QQmlComponent component(&engine, QUrl::fromLocalFile(file));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto *display = object->findChild<QQuickItem *>(
+            QStringLiteral("key-visualizer-display"));
+        QVERIFY(display);
 
-            window->show();
-            QTRY_VERIFY(window->isExposed());
-            QSignalSpy rightClicks(trigger, SIGNAL(clicked(QQuickMouseEvent*)));
-            QVERIFY(rightClicks.isValid());
-            QTest::mouseClick(window, Qt::RightButton, Qt::NoModifier, QPoint(30, 30));
-            QTRY_COMPARE(rightClicks.count(), 1);
-            QTRY_VERIFY(menu->property("visible").toBool());
-            QCOMPARE(pin->property("text").toString(), QStringLiteral("Pin on top"));
-            const QPoint click = pin->mapToScene(
-                QPointF(pin->width() / 2, pin->height() / 2)).toPoint();
-            QVERIFY(pin->window());
-            QTest::mouseClick(pin->window(), Qt::LeftButton, Qt::NoModifier, click);
-            QTRY_VERIFY(backend.panelPinned(QStringLiteral("clock-weather")));
+        emit backend.globalKeyPressed(QStringLiteral("a"), QStringLiteral("a"),
+            false, true, false, false);
+        emit backend.globalKeyPressed(QStringLiteral("space"), QStringLiteral(" "),
+            false, false, false, true);
+        emit backend.globalKeyPressed(QStringLiteral("less"), QStringLiteral("<"),
+            false, false, false, false);
+        emit backend.globalKeyPressed(QStringLiteral("ampersand"), QStringLiteral("&"),
+            false, false, false, false);
+        QCOMPARE(object->property("displayText").toString(),
+            QString::fromUtf8("Ctrl+a Super+␣ < &"));
+        const QString styled = object->property("styledText").toString();
+        QVERIFY(styled.contains(QStringLiteral("<font color=\"#875a82\">Ctrl+</font>a")));
+        QVERIFY(styled.contains(QString::fromUtf8(
+            "<font color=\"#875a82\">Super+</font><font color=\"#875a82\">␣</font>")));
+        QVERIFY(styled.endsWith(QStringLiteral("&lt; &amp;")));
+        QCOMPARE(display->property("text").toString(), styled);
 
-            QTest::mouseClick(window, Qt::RightButton, Qt::NoModifier, QPoint(30, 30));
-            QTRY_VERIFY(menu->property("visible").toBool());
-            QCOMPARE(pin->property("text").toString(), QStringLiteral("Unpin"));
-            QMetaObject::invokeMethod(menu, "close");
+        backend.setThemeName(QStringLiteral("white"));
+        QTRY_VERIFY(object->property("styledText").toString().contains(
+            QStringLiteral("<font color=\"#467b9d\">Ctrl+</font>")));
 
-            QScopedPointer<QObject> small(component.createWithInitialProperties(
-                {{QStringLiteral("requestedPanel"), QStringLiteral("key-visualizer")}}));
-            QVERIFY2(small, qPrintable(component.errorString()));
-            auto *smallWindow = qobject_cast<QQuickWindow *>(small.data());
-            QVERIFY(smallWindow);
-            auto *smallMenu = small->findChild<QObject *>(QStringLiteral("panel-context-menu"));
-            auto *smallPin = small->findChild<QQuickItem *>(QStringLiteral("panel-context-pin"));
-            QVERIFY(smallMenu);
-            QVERIFY(smallPin);
-            smallWindow->show();
-            QTRY_VERIFY(smallWindow->isExposed());
-            QTest::mouseClick(smallWindow, Qt::RightButton, Qt::NoModifier,
-                QPoint(20, 20));
-            QTRY_VERIFY(smallMenu->property("visible").toBool());
-            QVERIFY(smallPin->window() != smallWindow);
-            QVERIFY(smallPin->window()->height() > smallWindow->height());
+        auto *visualizer = qobject_cast<QQuickItem *>(object.data());
+        QVERIFY(visualizer);
+        QQuickWindow window;
+        window.resize(480, 78);
+        visualizer->setParentItem(window.contentItem());
+        visualizer->setSize(QSizeF(480, 78));
+        window.show();
+        QTRY_VERIFY(window.isExposed());
+        const QImage image = window.grabWindow();
+        int accentPixels = 0;
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                const QColor pixel = image.pixelColor(x, y);
+                if (qAbs(pixel.red() - 70) < 18 && qAbs(pixel.green() - 123) < 18
+                    && qAbs(pixel.blue() - 157) < 18)
+                    ++accentPixels;
+            }
         }
-        if (previous.isEmpty()) qunsetenv("XDG_CONFIG_HOME");
-        else qputenv("XDG_CONFIG_HOME", previous);
+        QVERIFY(accentPixels > 20);
     }
 
     void fitsLauncherIconsInsideSettings() {

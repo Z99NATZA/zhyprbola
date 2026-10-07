@@ -1,29 +1,9 @@
 import QtQuick
 import QtQuick.Window
-import QtQuick.Controls as Controls
 import "components"
 
 Window {
     id: host
-
-    component ContextAction: Controls.MenuItem {
-        id: action
-        implicitHeight: 36
-        leftPadding: 12
-        rightPadding: 12
-
-        contentItem: Text {
-            text: action.text
-            color: "#f5f5f7"
-            font.pixelSize: 13
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
-        }
-        background: Rectangle {
-            radius: 6
-            color: action.highlighted ? "#48484e" : "transparent"
-        }
-    }
 
     property string requestedPanel: "bluetooth"
     readonly property string panelName: requestedPanel === "tasks" || requestedPanel === "task"
@@ -245,55 +225,4 @@ Window {
         }
     }
 
-    MouseArea {
-        objectName: "panel-context-trigger"
-        anchors.fill: parent
-        z: 400
-        acceptedButtons: Qt.RightButton
-        onClicked: mouse => {
-            contextMenu.pinned = backend.panelPinned(host.panelName)
-            contextMenu.popup(Qt.point(mouse.x, mouse.y))
-        }
-    }
-
-    Controls.Menu {
-        id: contextMenu
-        objectName: "panel-context-menu"
-        property bool pinned: false
-        popupType: Controls.Popup.Window
-        width: 204
-        topPadding: 5
-        bottomPadding: 5
-        leftPadding: 5
-        rightPadding: 5
-
-        background: Rectangle {
-            color: "#303034"
-            radius: 8
-            border.color: "#4a4a50"
-        }
-
-        ContextAction {
-            objectName: "panel-context-pin"
-            text: contextMenu.pinned ? "Unpin" : "Pin on top"
-            onTriggered: backend.setPanelPinned(host.panelName, !contextMenu.pinned)
-        }
-
-        ContextAction {
-            text: "Hide"
-            onTriggered: host.showMinimized()
-        }
-
-        Controls.MenuSeparator {
-            contentItem: Rectangle {
-                implicitHeight: 1
-                color: "#55555a"
-            }
-        }
-
-        ContextAction {
-            text: "Close"
-            onTriggered: host.close()
-        }
-    }
 }

@@ -9,6 +9,8 @@ Item {
     readonly property int padding: settings.fontSize === "lg" ? 24 : 20
     property var history: []
     readonly property string displayText: history.join(" ")
+    readonly property string styledText: history.map(token =>
+        styledToken(token, Theme.accent.toString())).join(" ")
     implicitWidth: settings.widthMode === "fixed" ? settings.maxWidth
         : Math.max(settings.minWidth,
             Math.min(settings.maxWidth, measure.implicitWidth + padding * 2))
@@ -42,6 +44,27 @@ Item {
         const next = history.concat(value)
         history = next.length > 48 ? next.slice(-48) : next
         clearTimer.restart()
+    }
+
+    function escapeText(value) {
+        return value.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+    }
+
+    function styledToken(value, accent) {
+        let remaining = value
+        let result = ""
+        let modifier = /^(Ctrl|Alt|Super|Shift)\+/.exec(remaining)
+        while (modifier) {
+            const prefix = modifier[0]
+            result += '<font color="' + accent + '">' + prefix + '</font>'
+            remaining = remaining.slice(prefix.length)
+            modifier = /^(Ctrl|Alt|Super|Shift)\+/.exec(remaining)
+        }
+        const key = escapeText(remaining)
+        const special = ["␣", "⌫", "↵", "⇥", "Esc", "⌦", "←", "→",
+            "↑", "↓", "Home", "End", "PgUp", "PgDn"].includes(remaining)
+        return result + (special ? '<font color="' + accent + '">' + key + '</font>' : key)
     }
 
     function symbolForGlobal(name) {
@@ -143,10 +166,12 @@ Item {
         color: Theme.cardSurface
 
         Text {
+            objectName: "key-visualizer-display"
             anchors.fill: parent
             anchors.leftMargin: visualizer.padding
             anchors.rightMargin: visualizer.padding
-            text: visualizer.displayText
+            text: visualizer.styledText
+            textFormat: Text.StyledText
             color: Theme.text
             font.family: Qt.application.font.family
             font.pixelSize: visualizer.fontSize
