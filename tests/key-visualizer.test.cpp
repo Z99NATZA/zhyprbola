@@ -1,4 +1,5 @@
 #include "../components/Backend.h"
+#include "../components/SoundBackend.h"
 
 #include <QFile>
 #include <QGuiApplication>
@@ -42,6 +43,74 @@ private:
 class KeyVisualizerTest : public QObject {
     Q_OBJECT
 private slots:
+    void opensCustomContextMenuWithRightClick() {
+        QTemporaryDir config;
+        QVERIFY(config.isValid());
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+        {
+            Backend backend;
+            SoundBackend sound;
+            QQmlEngine engine;
+            engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+            engine.rootContext()->setContextProperty(QStringLiteral("sound"), &sound);
+            const QString file = QFINDTESTDATA("../PanelHost.qml");
+            QVERIFY(!file.isEmpty());
+            QQmlComponent component(&engine, QUrl::fromLocalFile(file));
+            QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+            QScopedPointer<QObject> object(component.createWithInitialProperties(
+                {{QStringLiteral("requestedPanel"), QStringLiteral("clock-weather")}}));
+            QVERIFY2(object, qPrintable(component.errorString()));
+            auto *window = qobject_cast<QQuickWindow *>(object.data());
+            QVERIFY(window);
+            auto *menu = object->findChild<QObject *>(QStringLiteral("panel-context-menu"));
+            auto *pin = object->findChild<QQuickItem *>(QStringLiteral("panel-context-pin"));
+            auto *trigger = object->findChild<QQuickItem *>(QStringLiteral("panel-context-trigger"));
+            QVERIFY(menu);
+            QVERIFY(pin);
+            QVERIFY(trigger);
+            QVERIFY(!menu->property("visible").toBool());
+
+            window->show();
+            QTRY_VERIFY(window->isExposed());
+            QSignalSpy rightClicks(trigger, SIGNAL(clicked(QQuickMouseEvent*)));
+            QVERIFY(rightClicks.isValid());
+            QTest::mouseClick(window, Qt::RightButton, Qt::NoModifier, QPoint(30, 30));
+            QTRY_COMPARE(rightClicks.count(), 1);
+            QTRY_VERIFY(menu->property("visible").toBool());
+            QCOMPARE(pin->property("text").toString(), QStringLiteral("Pin on top"));
+            const QPoint click = pin->mapToScene(
+                QPointF(pin->width() / 2, pin->height() / 2)).toPoint();
+            QVERIFY(pin->window());
+            QTest::mouseClick(pin->window(), Qt::LeftButton, Qt::NoModifier, click);
+            QTRY_VERIFY(backend.panelPinned(QStringLiteral("clock-weather")));
+
+            QTest::mouseClick(window, Qt::RightButton, Qt::NoModifier, QPoint(30, 30));
+            QTRY_VERIFY(menu->property("visible").toBool());
+            QCOMPARE(pin->property("text").toString(), QStringLiteral("Unpin"));
+            QMetaObject::invokeMethod(menu, "close");
+
+            QScopedPointer<QObject> small(component.createWithInitialProperties(
+                {{QStringLiteral("requestedPanel"), QStringLiteral("key-visualizer")}}));
+            QVERIFY2(small, qPrintable(component.errorString()));
+            auto *smallWindow = qobject_cast<QQuickWindow *>(small.data());
+            QVERIFY(smallWindow);
+            auto *smallMenu = small->findChild<QObject *>(QStringLiteral("panel-context-menu"));
+            auto *smallPin = small->findChild<QQuickItem *>(QStringLiteral("panel-context-pin"));
+            QVERIFY(smallMenu);
+            QVERIFY(smallPin);
+            smallWindow->show();
+            QTRY_VERIFY(smallWindow->isExposed());
+            QTest::mouseClick(smallWindow, Qt::RightButton, Qt::NoModifier,
+                QPoint(20, 20));
+            QTRY_VERIFY(smallMenu->property("visible").toBool());
+            QVERIFY(smallPin->window() != smallWindow);
+            QVERIFY(smallPin->window()->height() > smallWindow->height());
+        }
+        if (previous.isEmpty()) qunsetenv("XDG_CONFIG_HOME");
+        else qputenv("XDG_CONFIG_HOME", previous);
+    }
+
     void fitsLauncherIconsInsideSettings() {
         Backend backend;
         QQmlEngine engine;

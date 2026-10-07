@@ -6,6 +6,25 @@ import "components"
 Window {
     id: host
 
+    component ContextAction: Controls.MenuItem {
+        id: action
+        implicitHeight: 36
+        leftPadding: 12
+        rightPadding: 12
+
+        contentItem: Text {
+            text: action.text
+            color: "#f5f5f7"
+            font.pixelSize: 13
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+        }
+        background: Rectangle {
+            radius: 6
+            color: action.highlighted ? "#48484e" : "transparent"
+        }
+    }
+
     property string requestedPanel: "bluetooth"
     readonly property string panelName: requestedPanel === "tasks" || requestedPanel === "task"
         ? "todo" : requestedPanel
@@ -227,31 +246,54 @@ Window {
     }
 
     MouseArea {
+        objectName: "panel-context-trigger"
         anchors.fill: parent
         z: 400
         acceptedButtons: Qt.RightButton
         onClicked: mouse => {
-            pinMenu.pinned = backend.panelPinned(host.panelName)
-            pinMenu.x = Math.max(0, Math.min(mouse.x, host.width - pinMenu.width))
-            pinMenu.y = Math.max(0, Math.min(mouse.y, host.height - pinMenu.height))
-            pinMenu.open()
+            contextMenu.pinned = backend.panelPinned(host.panelName)
+            contextMenu.popup(Qt.point(mouse.x, mouse.y))
         }
     }
 
     Controls.Menu {
-        id: pinMenu
+        id: contextMenu
+        objectName: "panel-context-menu"
         property bool pinned: false
-        width: Math.min(154, host.width)
+        popupType: Controls.Popup.Window
+        width: 204
+        topPadding: 5
+        bottomPadding: 5
+        leftPadding: 5
+        rightPadding: 5
 
         background: Rectangle {
-            color: Theme.panelSurface
-            radius: 6
-            border.color: Theme.secondary
+            color: "#303034"
+            radius: 8
+            border.color: "#4a4a50"
         }
 
-        Controls.MenuItem {
-            text: pinMenu.pinned ? "Unpin" : "Pin on top"
-            onTriggered: backend.setPanelPinned(host.panelName, !pinMenu.pinned)
+        ContextAction {
+            objectName: "panel-context-pin"
+            text: contextMenu.pinned ? "Unpin" : "Pin on top"
+            onTriggered: backend.setPanelPinned(host.panelName, !contextMenu.pinned)
+        }
+
+        ContextAction {
+            text: "Hide"
+            onTriggered: host.showMinimized()
+        }
+
+        Controls.MenuSeparator {
+            contentItem: Rectangle {
+                implicitHeight: 1
+                color: "#55555a"
+            }
+        }
+
+        ContextAction {
+            text: "Close"
+            onTriggered: host.close()
         }
     }
 }
