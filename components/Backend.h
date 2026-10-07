@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QNetworkAccessManager>
+#include <QDateTime>
 #include <QFileSystemWatcher>
 #include <QProcess>
 #include <QTimer>
@@ -58,6 +59,7 @@ class Backend : public QObject {
     Q_PROPERTY(QString edgeSpectrumPosition READ edgeSpectrumPosition NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QVariantList tasks READ tasks NOTIFY tasksChanged)
     Q_PROPERTY(QVariantMap keyVisualizerSettings READ keyVisualizerSettings NOTIFY keyVisualizerSettingsChanged)
+    Q_PROPERTY(QVariantMap dateTimeSettings READ dateTimeSettings NOTIFY dateTimeSettingsChanged)
     Q_PROPERTY(bool keyCaptureAvailable READ keyCaptureAvailable NOTIFY keyCaptureAvailableChanged)
 
 public:
@@ -112,6 +114,7 @@ public:
     QString edgeSpectrumPosition() const { return m_edgeSpectrumPosition; }
     QVariantList tasks() const { return m_tasks; }
     QVariantMap keyVisualizerSettings() const { return m_keyVisualizerSettings; }
+    QVariantMap dateTimeSettings() const { return m_dateTimeSettings; }
     bool keyCaptureAvailable() const { return m_keyCaptureAvailable; }
 
     Q_INVOKABLE void togglePlayback();
@@ -153,6 +156,10 @@ public:
     Q_INVOKABLE void moveTask(const QString &id, int targetIndex);
     Q_INVOKABLE void deleteTask(const QString &id);
     Q_INVOKABLE void setKeyVisualizerSetting(const QString &key, const QVariant &value);
+    Q_INVOKABLE void setDateTimeSetting(const QString &key, const QVariant &value);
+    Q_INVOKABLE QString formatDate(const QDateTime &dateTime) const;
+    Q_INVOKABLE QString formatTime(const QDateTime &dateTime) const;
+    Q_INVOKABLE QString previewDate(const QString &format, const QString &locale) const;
     Q_INVOKABLE void startKeyCapture();
     Q_INVOKABLE void stopKeyCapture();
 
@@ -171,6 +178,7 @@ signals:
     void edgeSpectrumSettingsChanged();
     void tasksChanged();
     void keyVisualizerSettingsChanged();
+    void dateTimeSettingsChanged();
     void keyCaptureAvailableChanged();
     void globalKeyPressed(const QString &name, const QString &text,
         bool shift, bool ctrl, bool alt, bool super);
@@ -185,6 +193,7 @@ private:
     void readSpectrum();
     void refreshTheme();
     void refreshKeyVisualizerSettings();
+    void refreshDateTimeSettings();
     void readKeyCapture();
     void startEvdevKeyCapture();
     bool playerctlAvailable() const;
@@ -257,6 +266,8 @@ private:
     QVariantList m_tasks;
     QFileSystemWatcher m_keyVisualizerWatcher;
     QVariantMap m_keyVisualizerSettings;
+    QFileSystemWatcher m_dateTimeWatcher;
+    QVariantMap m_dateTimeSettings;
     QProcess m_keyCapture;
     QByteArray m_keyCaptureBuffer;
     bool m_keyCaptureAvailable = false;

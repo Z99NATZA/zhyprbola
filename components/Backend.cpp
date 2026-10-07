@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QCoreApplication>
@@ -62,6 +63,76 @@ QVariantMap validatedKeyVisualizerSettings(const QJsonObject &saved) {
         > settings.value(QStringLiteral("maxWidth")).toInt())
         settings.insert(QStringLiteral("maxWidth"), settings.value(QStringLiteral("minWidth")));
     return settings;
+}
+
+QStringList dateFormats() {
+    return {QStringLiteral("yyyy-MM-dd"), QStringLiteral("dd-MM-yyyy"),
+        QStringLiteral("yyyy/MM/dd"), QStringLiteral("dd/MM/yyyy"),
+        QStringLiteral("yyyyMMdd"), QStringLiteral("ddMMyyyy"),
+        QStringLiteral("d MMM yyyy"), QStringLiteral("ddd, d MMM yyyy")};
+}
+
+QVariantMap validatedDateTimeSettings(const QJsonObject &saved) {
+    QVariantMap settings = {{QStringLiteral("dateFormat"), QStringLiteral("yyyy-MM-dd")},
+        {QStringLiteral("dateLocale"), QStringLiteral("global")},
+        {QStringLiteral("timeFormat"), QStringLiteral("24-colon")},
+        {QStringLiteral("timeLocale"), QStringLiteral("global")},
+        {QStringLiteral("showSeconds"), false}};
+    const QString dateFormat = saved.value(QStringLiteral("dateFormat")).toString();
+    if (dateFormats().contains(dateFormat))
+        settings.insert(QStringLiteral("dateFormat"), dateFormat);
+    for (const QString &key : {QStringLiteral("dateLocale"), QStringLiteral("timeLocale")}) {
+        const QString value = saved.value(key).toString();
+        if (value == QLatin1String("global") || value == QLatin1String("thai"))
+            settings.insert(key, value);
+    }
+    const QString timeFormat = saved.value(QStringLiteral("timeFormat")).toString();
+    if (QStringList{QStringLiteral("24-colon"), QStringLiteral("12-colon"),
+            QStringLiteral("24-dot"), QStringLiteral("12-dot")}.contains(timeFormat))
+        settings.insert(QStringLiteral("timeFormat"), timeFormat);
+    if (saved.value(QStringLiteral("showSeconds")).isBool())
+        settings.insert(QStringLiteral("showSeconds"), saved.value(QStringLiteral("showSeconds")).toBool());
+    return settings;
+}
+
+QString localizeDigits(QString text, bool thai) {
+    if (!thai) return text;
+    for (int index = 0; index < text.size(); ++index) {
+        const QChar character = text.at(index);
+        if (character >= QLatin1Char('0') && character <= QLatin1Char('9'))
+            text[index] = QChar(0x0e50 + character.unicode() - '0');
+    }
+    return text;
+}
+
+QString formattedDate(const QDateTime &dateTime, const QString &format,
+    const QString &localeName) {
+    const bool thai = localeName == QLatin1String("thai");
+    const QLocale locale(thai ? QLocale::Thai : QLocale::English,
+        thai ? QLocale::Thailand : QLocale::UnitedStates);
+    if (!thai) return locale.toString(dateTime, format);
+    const int yearPosition = format.indexOf(QStringLiteral("yyyy"));
+    if (yearPosition < 0) return localizeDigits(locale.toString(dateTime, format), true);
+    const QString before = format.left(yearPosition);
+    const QString after = format.mid(yearPosition + 4);
+    return localizeDigits((before.isEmpty() ? QString() : locale.toString(dateTime, before))
+        + QString::number(dateTime.date().year() + 543)
+        + (after.isEmpty() ? QString() : locale.toString(dateTime, after)), true);
+}
+
+QString formattedTime(const QDateTime &dateTime, const QString &format,
+    const QString &localeName, bool showSeconds) {
+    const bool thai = localeName == QLatin1String("thai");
+    const bool twelveHour = format.startsWith(QLatin1String("12"));
+    const QString separator = format.endsWith(QLatin1String("dot"))
+        ? QStringLiteral(".") : QStringLiteral(":");
+    const QString pattern = (twelveHour ? QStringLiteral("hh") : QStringLiteral("HH"))
+        + separator + QStringLiteral("mm")
+        + (showSeconds ? separator + QStringLiteral("ss") : QString())
+        + (twelveHour ? QStringLiteral(" AP") : QString());
+    const QLocale locale(thai ? QLocale::Thai : QLocale::English,
+        thai ? QLocale::Thailand : QLocale::UnitedStates);
+    return localizeDigits(locale.toString(dateTime, pattern), thai);
 }
 
 bool writeDockConfig(const QString &name, const QString &value) {
@@ -186,7 +257,8 @@ bool validComponentKey(const QString &key) {
 }
 
 QStringList dockComponentKeys() {
-    return {QStringLiteral("settings"), QStringLiteral("bluetooth"),
+    return {QStringLiteral("date-display"), QStringLiteral("time-display"),
+        QStringLiteral("settings"), QStringLiteral("bluetooth"),
         QStringLiteral("wifi"), QStringLiteral("clock-weather"),
         QStringLiteral("system-status"), QStringLiteral("audio-spectrum"),
         QStringLiteral("music"), QStringLiteral("sound"), QStringLiteral("todo"),
@@ -244,6 +316,11 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     connect(&m_keyVisualizerWatcher, &QFileSystemWatcher::fileChanged,
         this, &Backend::refreshKeyVisualizerSettings);
     refreshKeyVisualizerSettings();
+    connect(&m_dateTimeWatcher, &QFileSystemWatcher::directoryChanged,
+        this, &Backend::refreshDateTimeSettings);
+    connect(&m_dateTimeWatcher, &QFileSystemWatcher::fileChanged,
+        this, &Backend::refreshDateTimeSettings);
+    refreshDateTimeSettings();
     connect(&m_keyCapture, &QProcess::readyReadStandardOutput,
         this, &Backend::readKeyCapture);
     connect(&m_keyCapture, &QProcess::finished, this,
@@ -332,19 +409,29 @@ Backend::Backend(QObject *parent) : QObject(parent) {
             }
             for (const auto &entry : object.value(QStringLiteral("quick")).toArray()) {
                 const QString name = entry.toString();
-                if (name != QLatin1String("components") && componentNames.contains(name)
+                if (name != QLatin1String("components")
+                    && name != QLatin1String("date-display")
+                    && name != QLatin1String("time-display")
+                    && componentNames.contains(name)
                     && !m_dockVisibleComponents.contains(name)
                     && !m_dockHiddenComponents.contains(name)
                     && !m_dockQuickComponents.contains(name))
                     m_dockQuickComponents.append(name);
             }
             for (const QString &name : componentNames)
-                if (!m_dockVisibleComponents.contains(name)
+                if (name != QLatin1String("date-display")
+                    && name != QLatin1String("time-display")
+                    && !m_dockVisibleComponents.contains(name)
                     && !m_dockHiddenComponents.contains(name)
                     && !m_dockQuickComponents.contains(name))
                     (name == QLatin1String("sound") || name == QLatin1String("key-visualizer")
-                        ? m_dockQuickComponents
-                        : m_dockVisibleComponents).append(name);
+                        ? m_dockQuickComponents : m_dockVisibleComponents).append(name);
+            for (const QString &name : {QStringLiteral("time-display"),
+                     QStringLiteral("date-display")}) {
+                if (!m_dockVisibleComponents.contains(name)
+                    && !m_dockHiddenComponents.contains(name))
+                    m_dockVisibleComponents.prepend(name);
+            }
         }
     }
     QFile wallpaperFile(dockConfigPath(QStringLiteral("use-wallpaper")));
@@ -482,7 +569,9 @@ void Backend::moveDockComponent(const QString &key, const QString &destination,
         || (destination != QLatin1String("visible")
             && destination != QLatin1String("hidden")
             && destination != QLatin1String("quick"))
-        || (key == QLatin1String("components")
+        || ((key == QLatin1String("components")
+                || key == QLatin1String("date-display")
+                || key == QLatin1String("time-display"))
             && destination == QLatin1String("quick"))) return;
 
     QStringList visible = m_dockVisibleComponents;
@@ -538,6 +627,50 @@ void Backend::setKeyVisualizerSetting(const QString &key, const QVariant &value)
         return;
     m_keyVisualizerSettings = settings;
     emit keyVisualizerSettingsChanged();
+}
+
+void Backend::refreshDateTimeSettings() {
+    const QString path = dockConfigPath(QStringLiteral("date-time"));
+    const QString directory = QFileInfo(path).absolutePath();
+    if (QDir().mkpath(directory) && !m_dateTimeWatcher.directories().contains(directory))
+        m_dateTimeWatcher.addPath(directory);
+    if (QFileInfo::exists(path) && !m_dateTimeWatcher.files().contains(path))
+        m_dateTimeWatcher.addPath(path);
+    QFile file(path);
+    QJsonObject saved;
+    if (file.open(QIODevice::ReadOnly))
+        saved = QJsonDocument::fromJson(file.readAll()).object();
+    const QVariantMap settings = validatedDateTimeSettings(saved);
+    if (settings == m_dateTimeSettings) return;
+    m_dateTimeSettings = settings;
+    emit dateTimeSettingsChanged();
+}
+
+void Backend::setDateTimeSetting(const QString &key, const QVariant &value) {
+    QJsonObject saved = QJsonObject::fromVariantMap(m_dateTimeSettings);
+    saved.insert(key, QJsonValue::fromVariant(value));
+    const QVariantMap settings = validatedDateTimeSettings(saved);
+    if (settings == m_dateTimeSettings) return;
+    if (!writeDockConfig(QStringLiteral("date-time"),
+            QString::fromUtf8(QJsonDocument::fromVariant(settings).toJson(QJsonDocument::Compact))))
+        return;
+    m_dateTimeSettings = settings;
+    emit dateTimeSettingsChanged();
+}
+
+QString Backend::formatDate(const QDateTime &dateTime) const {
+    return formattedDate(dateTime, m_dateTimeSettings.value(QStringLiteral("dateFormat")).toString(),
+        m_dateTimeSettings.value(QStringLiteral("dateLocale")).toString());
+}
+
+QString Backend::formatTime(const QDateTime &dateTime) const {
+    return formattedTime(dateTime, m_dateTimeSettings.value(QStringLiteral("timeFormat")).toString(),
+        m_dateTimeSettings.value(QStringLiteral("timeLocale")).toString(),
+        m_dateTimeSettings.value(QStringLiteral("showSeconds")).toBool());
+}
+
+QString Backend::previewDate(const QString &format, const QString &locale) const {
+    return formattedDate(QDateTime(QDate(2026, 10, 7), QTime(14, 5)), format, locale);
 }
 
 void Backend::startKeyCapture() {

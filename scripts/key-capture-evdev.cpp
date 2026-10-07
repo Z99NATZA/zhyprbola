@@ -95,6 +95,7 @@ public:
     bool ready() const { return m_ready; }
 
     void selfTest() {
+        m_sourcePath.clear();
         const auto testKey = [this](quint16 code, qint32 value) {
             input_event event = {};
             event.type = EV_KEY;

@@ -3,6 +3,7 @@ import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
+import Pango from 'gi://Pango';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {AppMenu} from 'resource:///org/gnome/shell/ui/appMenu.js';
@@ -36,6 +37,8 @@ const DOCK_GROUPS = ['apps', 'running', 'zhyprbola'];
 const DEFAULT_ENABLED_DOCK_GROUPS = ['zhyprbola', 'running'];
 const DEFAULT_DOCK_GROUP_ORDER = ['apps', 'running', 'zhyprbola'];
 const DOCK_COMPONENTS = [
+    ['date-display', 'Date'],
+    ['time-display', 'Time'],
     ['settings', 'Zhyprbola settings'],
     ['bluetooth', 'Bluetooth'],
     ['wifi', 'Wi-Fi'],
@@ -141,6 +144,8 @@ export default class ZhyprbolaExtension extends Extension {
             GLib.get_user_config_dir(), 'zhyprbola', 'dock-group-order']);
         this._dockComponentsPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'dock-components']);
+        this._dateTimePath = GLib.build_filenamev([
+            GLib.get_user_config_dir(), 'zhyprbola', 'date-time']);
         this._pinnedAppsPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'pinned-apps']);
         this._panelRequestPath = GLib.build_filenamev([
@@ -155,6 +160,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockGroups = this._readDockGroups();
         this._dockGroupOrder = this._readDockGroupOrder();
         this._dockComponents = this._readDockComponents();
+        this._dateTimeSettings = this._readDateTimeSettings();
         this._pinnedApps = this._readPinnedApps();
         this._panelRequest = this._readPanelRequest();
         this._appSystem = Shell.AppSystem.get_default();
@@ -171,6 +177,10 @@ export default class ZhyprbolaExtension extends Extension {
         this._publishedInputSource = null;
 
         this._createDock();
+        this._dateTimeTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
+            this._refreshDateTimeLabels();
+            return GLib.SOURCE_CONTINUE;
+        });
         this._applyDockPosition();
         this._applyTheme();
         this._applyWallpaper(true);
@@ -227,6 +237,10 @@ export default class ZhyprbolaExtension extends Extension {
         this._inputSourceSettings.disconnectObject(this);
         this._inputSourceManager?.disconnectObject?.(this);
         GLib.unlink(this._inputSourcePath);
+        if (this._dateTimeTimerId) {
+            GLib.source_remove(this._dateTimeTimerId);
+            this._dateTimeTimerId = 0;
+        }
 
         if (this._layoutIdleId) {
             GLib.source_remove(this._layoutIdleId);
@@ -293,6 +307,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockItems = new Map();
         this._dockRenderState = new Map();
         this._panelIcons = new Map();
+        this._dateTimeLabels = new Map();
         this._menuManager = new ClickOnlyPopupMenuManager(this._dock);
         for (const name of this._dockGroupOrder) {
             const region = new St.Widget({
@@ -435,7 +450,8 @@ export default class ZhyprbolaExtension extends Extension {
 
         const labels = new Map(DOCK_COMPONENTS);
         this._dockItems.set('zhyprbola', this._dockComponents.visible.map(name => ({
-            kind: name === 'input-source' ? 'input-source' : 'panel',
+            kind: name === 'input-source' ? 'input-source'
+                : name === 'date-display' || name === 'time-display' ? 'date-time' : 'panel',
             name,
             label: labels.get(name),
         })));
@@ -975,19 +991,114 @@ export default class ZhyprbolaExtension extends Extension {
             const hidden = [...new Set(saved.hidden.filter(name =>
                 known.has(name) && !visible.includes(name)))];
             const quick = [...new Set((Array.isArray(saved.quick) ? saved.quick : [])
-                .filter(name => name !== 'components' && known.has(name) &&
+                .filter(name => name !== 'components' && name !== 'date-display'
+                    && name !== 'time-display' && known.has(name) &&
                     !visible.includes(name) && !hidden.includes(name)))];
             for (const name of defaults) {
                 if (!visible.includes(name) && !hidden.includes(name) &&
-                    !quick.includes(name))
+                    !quick.includes(name) && name !== 'date-display'
+                    && name !== 'time-display')
                     (name === 'sound' || name === 'key-visualizer'
                         ? quick : visible).push(name);
+            }
+            for (const name of ['time-display', 'date-display']) {
+                if (!visible.includes(name) && !hidden.includes(name))
+                    visible.unshift(name);
             }
             return {visible, hidden, quick};
         } catch (_) {
             return {visible: defaults.filter(name =>
                 name !== 'sound' && name !== 'key-visualizer'),
                 hidden: [], quick: ['sound', 'key-visualizer']};
+        }
+    }
+
+    _readDateTimeSettings() {
+        const defaults = {dateFormat: 'yyyy-MM-dd', dateLocale: 'global',
+            timeFormat: '24-colon', timeLocale: 'global', showSeconds: false};
+        try {
+            const [, contents] = GLib.file_get_contents(this._dateTimePath);
+            const saved = JSON.parse(new TextDecoder().decode(contents));
+            const dateFormats = ['yyyy-MM-dd', 'dd-MM-yyyy', 'yyyy/MM/dd', 'dd/MM/yyyy',
+                'yyyyMMdd', 'ddMMyyyy', 'd MMM yyyy', 'ddd, d MMM yyyy'];
+            return {
+                dateFormat: dateFormats.includes(saved.dateFormat)
+                    ? saved.dateFormat : defaults.dateFormat,
+                dateLocale: ['global', 'thai'].includes(saved.dateLocale)
+                    ? saved.dateLocale : defaults.dateLocale,
+                timeFormat: ['24-colon', '12-colon', '24-dot', '12-dot']
+                    .includes(saved.timeFormat) ? saved.timeFormat : defaults.timeFormat,
+                timeLocale: ['global', 'thai'].includes(saved.timeLocale)
+                    ? saved.timeLocale : defaults.timeLocale,
+                showSeconds: typeof saved.showSeconds === 'boolean'
+                    ? saved.showSeconds : defaults.showSeconds,
+            };
+        } catch (_) {
+            return defaults;
+        }
+    }
+
+    _dateTimeLocale(name) {
+        return name === 'thai' ? 'th-TH-u-ca-buddhist-nu-thai' : 'en-US';
+    }
+
+    _formatDockDate(now = new Date()) {
+        const {dateFormat, dateLocale} = this._dateTimeSettings;
+        const locale = this._dateTimeLocale(dateLocale);
+        const parts = Object.fromEntries(new Intl.DateTimeFormat(locale,
+            {year: 'numeric', month: '2-digit', day: '2-digit'})
+            .formatToParts(now).filter(part => part.type !== 'literal')
+            .map(part => [part.type, part.value]));
+        const day = new Intl.DateTimeFormat(locale, {day: 'numeric'}).format(now);
+        const monthShort = new Intl.DateTimeFormat(locale, {month: 'short'}).format(now);
+        const weekdayShort = new Intl.DateTimeFormat(locale, {weekday: 'short'}).format(now);
+        switch (dateFormat) {
+        case 'dd-MM-yyyy': return `${parts.day}-${parts.month}-${parts.year}`;
+        case 'yyyy/MM/dd': return `${parts.year}/${parts.month}/${parts.day}`;
+        case 'dd/MM/yyyy': return `${parts.day}/${parts.month}/${parts.year}`;
+        case 'yyyyMMdd': return `${parts.year}${parts.month}${parts.day}`;
+        case 'ddMMyyyy': return `${parts.day}${parts.month}${parts.year}`;
+        case 'd MMM yyyy': return `${day} ${monthShort} ${parts.year}`;
+        case 'ddd, d MMM yyyy': return `${weekdayShort}, ${day} ${monthShort} ${parts.year}`;
+        default: return `${parts.year}-${parts.month}-${parts.day}`;
+        }
+    }
+
+    _formatDockTime(now = new Date()) {
+        const {timeFormat, timeLocale, showSeconds} = this._dateTimeSettings;
+        const twelveHour = timeFormat.startsWith('12');
+        const parts = Object.fromEntries(new Intl.DateTimeFormat(
+            this._dateTimeLocale(timeLocale), {hour: '2-digit', minute: '2-digit',
+                second: '2-digit', hourCycle: twelveHour ? 'h12' : 'h23'})
+            .formatToParts(now).filter(part => part.type !== 'literal')
+            .map(part => [part.type, part.value]));
+        const separator = timeFormat.endsWith('dot') ? '.' : ':';
+        const time = [parts.hour, parts.minute, ...(showSeconds ? [parts.second] : [])]
+            .join(separator);
+        return twelveHour ? `${time} ${parts.dayPeriod}` : time;
+    }
+
+    _dateTimeItemLength(name) {
+        if (name === 'time-display') {
+            const twelveHour = this._dateTimeSettings.timeFormat.startsWith('12');
+            return (twelveHour ? 76 : 52) +
+                (this._dateTimeSettings.showSeconds ? 24 : 0);
+        }
+        const format = this._dateTimeSettings.dateFormat;
+        if (format.includes('ddd')) return 178;
+        if (format.includes('MMM')) return 136;
+        return 106;
+    }
+
+    _refreshDateTimeLabels() {
+        if (!this._dateTimeLabels)
+            return;
+        const now = new Date();
+        for (const [name, label] of this._dateTimeLabels) {
+            const value = name === 'date-display'
+                ? this._formatDockDate(now) : this._formatDockTime(now);
+            if (label.text !== value)
+                label.text = value;
         }
     }
 
@@ -1075,6 +1186,7 @@ export default class ZhyprbolaExtension extends Extension {
         const dockGroups = this._readDockGroups();
         const dockGroupOrder = this._readDockGroupOrder();
         const dockComponents = this._readDockComponents();
+        const dateTimeSettings = this._readDateTimeSettings();
         const pinnedApps = this._readPinnedApps();
         const themeChanged = theme !== this._themeName;
         const positionChanged = position !== this._dockPosition;
@@ -1090,6 +1202,8 @@ export default class ZhyprbolaExtension extends Extension {
             this._dockComponents.visible.join(',') || dockComponents.hidden.join(',') !==
             this._dockComponents.hidden.join(',') || dockComponents.quick.join(',') !==
             this._dockComponents.quick.join(',');
+        const dateTimeChanged = JSON.stringify(dateTimeSettings) !==
+            JSON.stringify(this._dateTimeSettings);
 
         this._themeName = theme;
         this._dockPosition = position;
@@ -1101,6 +1215,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockGroups = dockGroups;
         this._dockGroupOrder = dockGroupOrder;
         this._dockComponents = dockComponents;
+        this._dateTimeSettings = dateTimeSettings;
         this._pinnedApps = pinnedApps;
 
         this._handlePanelRequest();
@@ -1110,6 +1225,11 @@ export default class ZhyprbolaExtension extends Extension {
             this._applyTheme();
         else if (bgOpacityChanged)
             this._applyDockBackground();
+        if (dateTimeChanged) {
+            this._dockRenderState.delete('zhyprbola');
+            this._queueLayout();
+            this._refreshDateTimeLabels();
+        }
         if (themeChanged || wallpaperChanged)
             this._applyWallpaper(wallpaperChanged && useWallpaper);
         if (edgeChanged)
@@ -1605,6 +1725,34 @@ export default class ZhyprbolaExtension extends Extension {
         return button;
     }
 
+    _createDateTimeWidget(name, vertical) {
+        const length = this._dateTimeItemLength(name);
+        const label = new St.Label({
+            text: name === 'date-display' ? this._formatDockDate() : this._formatDockTime(),
+            style_class: 'zhyprbola-dock-datetime-label',
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        label.set_size(length - 8, DOCK_CONFIG.buttonSize);
+        const widget = new St.Widget({
+            style_class: 'zhyprbola-dock-datetime',
+            layout_manager: new Clutter.FixedLayout(),
+            width: vertical ? DOCK_CONFIG.buttonSize : length,
+            height: vertical ? length : DOCK_CONFIG.buttonSize,
+        });
+        if (vertical) {
+            label.set_pivot_point(0.5, 0.5);
+            label.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, -90);
+            label.set_position((DOCK_CONFIG.buttonSize - length + 8) / 2,
+                (length - DOCK_CONFIG.buttonSize) / 2);
+        } else {
+            label.set_position(4, 0);
+        }
+        widget.add_child(label);
+        this._dateTimeLabels.set(name, label);
+        return widget;
+    }
+
     _panelGicon(name, color = '#ffffff') {
         const path = GLib.build_filenamev([this.path, 'icons', `${name}.svg`]);
         try {
@@ -1660,14 +1808,27 @@ export default class ZhyprbolaExtension extends Extension {
             }
             this._inputSourceButton = null;
             this._inputSourceLabel = null;
+            this._dateTimeLabels.clear();
             this._powerMenu?.destroy();
             this._powerMenu = null;
             this._panelIcons.clear();
         }
-        const maxSlots = Math.max(0, Math.floor((length + DOCK_CONFIG.groupSpacing) /
-            (DOCK_CONFIG.buttonSize + DOCK_CONFIG.groupSpacing)));
-        const overflow = items.length > maxSlots;
-        const visibleCount = overflow ? Math.max(0, maxSlots - 1) : items.length;
+        const itemLengths = items.map(item => item.kind === 'date-time'
+            ? this._dateTimeItemLength(item.name) : DOCK_CONFIG.buttonSize);
+        const preferred = itemLengths.reduce((sum, size) => sum + size, 0) +
+            Math.max(0, items.length - 1) * DOCK_CONFIG.groupSpacing;
+        const overflow = preferred > length;
+        const itemLimit = length - (overflow
+            ? DOCK_CONFIG.buttonSize + DOCK_CONFIG.groupSpacing : 0);
+        let visibleCount = 0;
+        let used = 0;
+        for (const itemLength of itemLengths) {
+            const next = used + (visibleCount ? DOCK_CONFIG.groupSpacing : 0) + itemLength;
+            if (next > itemLimit)
+                break;
+            used = next;
+            visibleCount++;
+        }
         const visibleKeys = new Set(items.slice(0, visibleCount)
             .filter(item => item.kind === 'app').map(item => this._itemOrderKey(item)));
         for (const child of group.get_children()) {
@@ -1684,6 +1845,8 @@ export default class ZhyprbolaExtension extends Extension {
             }
             const button = item.kind === 'input-source'
                 ? this._createInputSourceButton()
+                : item.kind === 'date-time'
+                ? this._createDateTimeWidget(item.name, vertical)
                 : item.kind === 'panel'
                 ? this._createPanelButton({iconName: item.name,
                     accessibleName: item.label, panelName: item.name})
@@ -1706,9 +1869,8 @@ export default class ZhyprbolaExtension extends Extension {
             group.add_child(more);
         }
 
-        const count = visibleCount + (overflow ? 1 : 0);
-        const used = count * DOCK_CONFIG.buttonSize +
-            Math.max(0, count - 1) * DOCK_CONFIG.groupSpacing;
+        used += overflow ? DOCK_CONFIG.buttonSize +
+            (visibleCount ? DOCK_CONFIG.groupSpacing : 0) : 0;
         const offset = slot === 0 ? 0 : slot === 1
             ? Math.floor((length - used) / 2) : length - used;
         group.set_size(vertical ? DOCK_CONFIG.buttonSize : used,
@@ -1735,6 +1897,13 @@ export default class ZhyprbolaExtension extends Extension {
         menu.actor.add_style_class_name('zhyprbola-overflow-menu');
         menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor};`);
         for (const item of items) {
+            if (item.kind === 'date-time') {
+                const value = item.name === 'date-display'
+                    ? this._formatDockDate() : this._formatDockTime();
+                menu.addMenuItem(new PopupMenu.PopupMenuItem(
+                    `${item.label}: ${value}`, {reactive: false, can_focus: false}));
+                continue;
+            }
             const icon = item.kind === 'panel'
                 ? this._panelGicon(item.name, theme.iconColor)
                 : item.kind === 'input-source' ? null : item.app.get_icon();
@@ -2064,11 +2233,31 @@ export default class ZhyprbolaExtension extends Extension {
         const thickness = DOCK_CONFIG.buttonSize;
         const width = vertical ? thickness : monitor.width;
         const height = vertical ? monitor.height : thickness;
-        const available = (vertical ? height : width) - 2 * DOCK_CONFIG.padding;
+        const available = Math.max(0, (vertical ? height : width) - 2 * DOCK_CONFIG.padding);
+        const regionCount = this._dockGroupOrder.length;
+        const dateTimeIndex = this._dockGroupOrder.indexOf('zhyprbola');
+        const hasDateTime = this._dockComponents.visible.some(name =>
+            name === 'date-display' || name === 'time-display');
+        let regionLengths = Array.from({length: regionCount}, (_, index) =>
+            Math.floor(available * (index + 1) / regionCount) -
+            Math.floor(available * index / regionCount));
+        if (hasDateTime && regionCount > 1 && dateTimeIndex >= 0) {
+            const items = this._dockItems.get('zhyprbola') ?? [];
+            const desired = items.reduce((sum, item) => sum +
+                (item.kind === 'date-time' ? this._dateTimeItemLength(item.name)
+                    : DOCK_CONFIG.buttonSize), 0)
+                + Math.max(0, items.length - 1) * DOCK_CONFIG.groupSpacing
+                + (dateTimeIndex === regionCount - 1 ? SHOW_DESKTOP_SIZE : 0);
+            const target = Math.min(Math.floor(available * 0.68),
+                Math.max(regionLengths[dateTimeIndex], desired));
+            const remaining = available - target;
+            let otherIndex = 0;
+            regionLengths = regionLengths.map((_, index) => index === dateTimeIndex
+                ? target : Math.floor(remaining * ++otherIndex / (regionCount - 1)) -
+                    Math.floor(remaining * (otherIndex - 1) / (regionCount - 1)));
+        }
         for (const [index, name] of this._dockGroupOrder.entries()) {
-            const start = Math.floor(available * index / this._dockGroupOrder.length);
-            const end = Math.floor(available * (index + 1) / this._dockGroupOrder.length);
-            const regionLength = Math.max(0, end - start);
+            const regionLength = regionLengths[index];
             const region = this._dockRegions.get(name);
             region.set_size(vertical ? DOCK_CONFIG.buttonSize : regionLength,
                 vertical ? regionLength : DOCK_CONFIG.buttonSize);

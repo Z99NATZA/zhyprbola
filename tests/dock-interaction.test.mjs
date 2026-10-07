@@ -50,6 +50,8 @@ class Actor {
     set_size(width, height) { this.live(); Object.assign(this, {width, height}); }
     set_position(x, y) { this.live(); Object.assign(this, {x, y}); }
     set_style() { this.live(); }
+    set_pivot_point(x, y) { Object.assign(this, {pivotX: x, pivotY: y}); }
+    set_rotation_angle(axis, angle) { Object.assign(this, {rotationAxis: axis, angle}); }
     add_style_class_name() { this.live(); }
     remove_style_class_name() { this.live(); }
     add_style_pseudo_class() { this.live(); }
@@ -72,11 +74,16 @@ function fixture(length = 400) {
     const idles = new Map();
     let nextId = 0;
     const context = vm.createContext({
-        St: {Widget: Actor, Icon: Actor, Button: Actor, ButtonMask: {ONE: 1},
+        St: {Widget: Actor, Icon: Actor, Button: Actor,
+            Label: class extends Actor {
+                constructor(props) { super(props); this.clutter_text = {}; }
+            }, ButtonMask: {ONE: 1},
             Side: {LEFT: 0, RIGHT: 1, TOP: 2, BOTTOM: 3},
             DirectionType: {TAB_FORWARD: 0}},
         Clutter: {FixedLayout: class {}, AnimationMode: {EASE_OUT_QUAD: 0},
+            RotateAxis: {Z_AXIS: 2}, ActorAlign: {CENTER: 0},
             ClickGesture: Actor, BUTTON_SECONDARY: 3},
+        Pango: {EllipsizeMode: {END: 3}},
         DND: {makeDraggable: actor => (actor.draggable = new Actor())},
         GLib: {PRIORITY_DEFAULT_IDLE: 0, SOURCE_REMOVE: false,
             idle_add: (_, callback) => { idles.set(++nextId, callback); return nextId; }},
@@ -96,6 +103,7 @@ function fixture(length = 400) {
     dock._dock.add_child(group);
     Object.assign(dock, {
         _dockPosition: 'bottom', _dockInteractions: new Set(), _dockRebuildPending: false,
+        _dockComponents: {visible: [], hidden: [], quick: []},
         _dockGroupsByName: new Map([['running', group]]), _dockGroupOrder: ['running'],
         _dockRegions: new Map([['running', new Actor()]]),
         _dockItems: new Map([['running', []]]), _dockRenderState: new Map(),
@@ -404,6 +412,86 @@ test('Key Visualizer defaults to Quick and respects saved placement', () => {
     const saved = dock._readDockComponents();
     assert.equal(saved.visible.includes('key-visualizer'), true);
     assert.equal(saved.quick.includes('key-visualizer'), false);
+});
+
+test('Date and Time default to dock and migrate old Quick placement', () => {
+    const {dock, context} = fixture();
+    const fresh = dock._readDockComponents();
+    for (const name of ['date-display', 'time-display']) {
+        assert.equal(fresh.visible.includes(name), true);
+        assert.equal(fresh.quick.includes(name), false);
+    }
+    context.TextDecoder = TextDecoder;
+    context.GLib.file_get_contents = () => [true,
+        new TextEncoder().encode(JSON.stringify({visible: [], hidden: [],
+            quick: ['date-display', 'time-display']}))];
+    const saved = dock._readDockComponents();
+    assert.equal(saved.visible.includes('date-display'), true);
+    assert.equal(saved.visible.includes('time-display'), true);
+    assert.equal(saved.quick.includes('date-display'), false);
+    assert.equal(saved.quick.includes('time-display'), false);
+});
+
+test('Date and Time enter the dock as labels, not panel launchers', () => {
+    const {dock} = fixture();
+    dock._dockGroupsByName.set('zhyprbola', new Actor());
+    dock._dockComponents.visible = ['date-display', 'time-display'];
+    dock._createComponentButtons();
+    assert.deepEqual(dock._dockItems.get('zhyprbola').map(item => item.kind),
+        ['date-time', 'date-time']);
+});
+
+test('dock date and time follow locale, format and seconds settings', () => {
+    const {dock} = fixture();
+    const now = new Date(2026, 9, 7, 15, 14, 9);
+    dock._dateTimeSettings = {dateFormat: 'yyyy-MM-dd', dateLocale: 'global',
+        timeFormat: '24-colon', timeLocale: 'global', showSeconds: false};
+    assert.equal(dock._formatDockDate(now), '2026-10-07');
+    assert.equal(dock._formatDockTime(now), '15:14');
+    dock._dateTimeSettings.dateFormat = 'dd/MM/yyyy';
+    dock._dateTimeSettings.dateLocale = 'thai';
+    dock._dateTimeSettings.timeLocale = 'thai';
+    dock._dateTimeSettings.showSeconds = true;
+    assert.equal(dock._formatDockDate(now), '๐๗/๑๐/๒๕๖๙');
+    assert.equal(dock._formatDockTime(now), '๑๕:๑๔:๐๙');
+});
+
+test('dock reserves enough region width for inline date and time', () => {
+    const {dock} = fixture(828);
+    dock._dockGroupOrder = ['apps', 'running', 'zhyprbola'];
+    dock._dockRegions = new Map(dock._dockGroupOrder.map(name => [name, new Actor()]));
+    dock._dateTimeSettings = {dateFormat: 'yyyy-MM-dd', dateLocale: 'global',
+        timeFormat: '24-colon', timeLocale: 'global', showSeconds: false};
+    const names = ['date-display', 'time-display', 'settings', 'bluetooth',
+        'wifi', 'clock-weather', 'system-status', 'audio-spectrum', 'music'];
+    dock._dockComponents.visible = names;
+    dock._dockItems.set('zhyprbola', names.map(name => ({name,
+        kind: name.endsWith('-display') ? 'date-time' : 'panel'})));
+    dock._renderDockRegion = () => {};
+    dock._layoutDock();
+    const componentsWidth = dock._dockRegions.get('zhyprbola').width;
+    assert.ok(componentsWidth > 828 / 3);
+    assert.ok(componentsWidth <= 828 * 0.68);
+});
+
+test('dock renders date and time as labels in both orientations', () => {
+    const {dock} = fixture();
+    dock._dateTimeSettings = {dateFormat: 'yyyy-MM-dd', dateLocale: 'global',
+        timeFormat: '24-colon', timeLocale: 'global', showSeconds: false};
+    dock._dateTimeLabels = new Map();
+    dock._dockItems.set('running', [
+        {kind: 'date-time', name: 'date-display'},
+        {kind: 'date-time', name: 'time-display'},
+    ]);
+    const group = dock._dockGroupsByName.get('running');
+    dock._renderDockRegion('running', 200, false, 0);
+    assert.equal(group.get_children().length, 2);
+    assert.equal(group.get_children()[0].width, 106);
+    assert.equal(group.get_children()[1].width, 52);
+    assert.match(dock._dateTimeLabels.get('date-display').text, /^\d{4}-\d{2}-\d{2}$/);
+    dock._renderDockRegion('running', 200, true, 0);
+    assert.equal(group.get_children()[0].height, 106);
+    assert.equal(group.get_children()[0].children[0].angle, -90);
 });
 
 test('opening an existing Key Visualizer follows the shared panel toggle', () => {

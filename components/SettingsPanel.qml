@@ -30,7 +30,12 @@ Item {
         {key: "components", label: "Components"},
         {key: "spectrum", label: "Spectrum"},
         {key: "keys", label: "Keys"},
+        {key: "date-time", label: "Date & Time"},
         {key: "wallpaper", label: "Wallpaper"}
+    ]
+    readonly property var dateFormats: [
+        "yyyy-MM-dd", "dd-MM-yyyy", "yyyy/MM/dd", "dd/MM/yyyy",
+        "yyyyMMdd", "ddMMyyyy", "d MMM yyyy", "ddd, d MMM yyyy"
     ]
     readonly property var themes: [
         {key: "current", label: "Purple", accent: "#875A82"},
@@ -82,7 +87,9 @@ Item {
             .filter(key => key !== "settings"
                 && key !== "input-source"
                 && key !== "power"
-                && key !== "components")
+                && key !== "components"
+                && key !== "date-display"
+                && key !== "time-display")
     }
 
     function beginGroupDrag(name, point, offsetX, offsetY) {
@@ -166,7 +173,9 @@ Item {
             const local = zone.mapFromItem(panel, point.x, point.y)
             if (local.x >= 0 && local.x < zone.width
                 && local.y >= 0 && local.y < zone.height
-                && (zone.zoneKey !== "quick" || draggedComponent !== "components")) {
+                && (zone.zoneKey !== "quick" || (draggedComponent !== "components"
+                    && draggedComponent !== "date-display"
+                    && draggedComponent !== "time-display"))) {
                 destination = zone
                 localPoint = local
                 break
@@ -366,7 +375,8 @@ Item {
             : (panel.section === "dock" ? "Dock"
             : (panel.section === "components" ? "Components"
             : (panel.section === "spectrum" ? "Edge spectrum"
-            : (panel.section === "keys" ? "Key visualizer" : "Wallpaper"))))
+            : (panel.section === "keys" ? "Key visualizer"
+            : (panel.section === "date-time" ? "Date & Time" : "Wallpaper")))))
         color: Theme.text
         font.family: Qt.application.font.family
         font.pixelSize: 20
@@ -1269,6 +1279,52 @@ Item {
         }
     }
 
+    component DateTimeToggle: Rectangle {
+        id: dateTimeToggle
+        required property string title
+        required property bool active
+        signal toggled()
+        width: panel.contentWidth
+        height: panel.contentRowHeight
+        radius: 11
+        color: active ? Theme.selected : Theme.control
+
+        Text {
+            x: 16
+            anchors.verticalCenter: parent.verticalCenter
+            text: dateTimeToggle.title
+            color: Theme.text
+            font.family: Qt.application.font.family
+            font.pixelSize: 14
+            font.weight: dateTimeToggle.active ? Font.DemiBold : Font.Normal
+        }
+
+        Rectangle {
+            anchors.right: parent.right
+            anchors.rightMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
+            width: 44
+            height: 26
+            radius: 13
+            color: dateTimeToggle.active ? Theme.accent : Theme.track
+
+            Rectangle {
+                x: dateTimeToggle.active ? 21 : 3
+                anchors.verticalCenter: parent.verticalCenter
+                width: 20
+                height: 20
+                radius: 10
+                color: "#ffffff"
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: dateTimeToggle.toggled()
+        }
+    }
+
     component WidthStepper: Rectangle {
         id: stepper
         required property string label
@@ -1409,6 +1465,236 @@ Item {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: backend.openDockComponent("key-visualizer")
+            }
+        }
+    }
+
+    component DateTimeChoice: Column {
+        required property string title
+        required property string settingKey
+        required property var options
+        width: panel.contentWidth
+        spacing: 6
+
+        Text {
+            text: title
+            color: Theme.mutedText
+            font.family: Qt.application.font.family
+            font.pixelSize: 12
+        }
+
+        Row {
+            width: parent.width
+            spacing: 8
+
+            Repeater {
+                model: options
+
+                delegate: Rectangle {
+                    required property var modelData
+                    width: (panel.contentWidth - 8 * (options.length - 1)) / options.length
+                    height: 42
+                    radius: 8
+                    color: backend.dateTimeSettings[settingKey] === modelData.key
+                        ? Theme.selected : (choiceMouse.containsMouse
+                            ? Theme.controlHover : Theme.control)
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: modelData.label
+                        color: Theme.text
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 14
+                        font.weight: backend.dateTimeSettings[settingKey]
+                            === modelData.key ? Font.DemiBold : Font.Normal
+                    }
+
+                    Text {
+                        anchors.right: parent.right
+                        anchors.rightMargin: 11
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: backend.dateTimeSettings[settingKey] === modelData.key
+                        text: "✓"
+                        color: Theme.accent
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
+                    }
+
+                    MouseArea {
+                        id: choiceMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: backend.setDateTimeSetting(settingKey, modelData.key)
+                    }
+                }
+            }
+        }
+    }
+
+    Flickable {
+        objectName: "date-time-scroll"
+        x: panel.contentX
+        y: 76
+        width: panel.contentWidth
+        height: panel.height - y - 12
+        contentWidth: width
+        contentHeight: dateTimeColumn.height
+        clip: true
+        boundsBehavior: Flickable.DragAndOvershootBounds
+        flickableDirection: Flickable.VerticalFlick
+        visible: panel.section === "date-time"
+
+        Column {
+            id: dateTimeColumn
+            width: parent.width
+            spacing: 16
+
+            Text {
+                text: "Date"
+                color: Theme.text
+                font.family: Qt.application.font.family
+                font.pixelSize: 16
+                font.weight: Font.DemiBold
+            }
+
+            DateTimeChoice {
+                title: "Language"
+                settingKey: "dateLocale"
+                options: [{key: "global", label: "Global"},
+                    {key: "thai", label: "ไทย (พ.ศ.)"}]
+            }
+
+            Column {
+                width: parent.width
+                spacing: 6
+
+                Text {
+                    text: "Format"
+                    color: Theme.mutedText
+                    font.family: Qt.application.font.family
+                    font.pixelSize: 12
+                }
+
+                Grid {
+                    width: parent.width
+                    columns: 2
+                    spacing: 8
+
+                    Repeater {
+                        model: panel.dateFormats
+
+                        delegate: Rectangle {
+                            required property string modelData
+                            width: (panel.contentWidth - 8) / 2
+                            height: 56
+                            radius: 8
+                            color: backend.dateTimeSettings.dateFormat === modelData
+                                ? Theme.selected : (dateFormatMouse.containsMouse
+                                    ? Theme.controlHover : Theme.control)
+
+                            Column {
+                                x: 12
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width - 24
+                                spacing: 3
+
+                                Text {
+                                    width: parent.width - (backend.dateTimeSettings.dateFormat
+                                        === modelData ? 18 : 0)
+                                    text: modelData
+                                    elide: Text.ElideRight
+                                    color: Theme.text
+                                    font.family: Qt.application.font.family
+                                    font.pixelSize: 13
+                                    font.weight: backend.dateTimeSettings.dateFormat
+                                        === modelData ? Font.DemiBold : Font.Normal
+                                }
+
+                                Text {
+                                    width: parent.width
+                                    text: backend.previewDate(modelData,
+                                        backend.dateTimeSettings.dateLocale)
+                                    elide: Text.ElideRight
+                                    color: Theme.mutedText
+                                    font.family: Qt.application.font.family
+                                    font.pixelSize: 11
+                                }
+                            }
+
+                            Text {
+                                anchors.right: parent.right
+                                anchors.rightMargin: 11
+                                anchors.top: parent.top
+                                anchors.topMargin: 8
+                                visible: backend.dateTimeSettings.dateFormat === modelData
+                                text: "✓"
+                                color: Theme.accent
+                                font.family: Qt.application.font.family
+                                font.pixelSize: 15
+                                font.weight: Font.Bold
+                            }
+
+                            MouseArea {
+                                id: dateFormatMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: backend.setDateTimeSetting("dateFormat", modelData)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Text {
+                text: "Time"
+                color: Theme.text
+                font.family: Qt.application.font.family
+                font.pixelSize: 16
+                font.weight: Font.DemiBold
+            }
+
+            DateTimeChoice {
+                title: "Language"
+                settingKey: "timeLocale"
+                options: [{key: "global", label: "Global"},
+                    {key: "thai", label: "ไทย"}]
+            }
+
+            DateTimeChoice {
+                title: "Format"
+                settingKey: "timeFormat"
+                options: [{key: "24-colon", label: "24h :"},
+                    {key: "12-colon", label: "12h :"},
+                    {key: "24-dot", label: "24h ."},
+                    {key: "12-dot", label: "12h ."}]
+            }
+
+            DateTimeToggle {
+                title: "Show seconds"
+                active: backend.dateTimeSettings.showSeconds
+                onToggled: backend.setDateTimeSetting("showSeconds", !active)
+            }
+
+            Row {
+                spacing: 8
+
+                Repeater {
+                    model: [{key: "date-display", label: "Date on dock"},
+                        {key: "time-display", label: "Time on dock"}]
+
+                    delegate: DateTimeToggle {
+                        required property var modelData
+                        width: (panel.contentWidth - 8) / 2
+                        title: modelData.label
+                        active: backend.dockVisibleComponents.includes(modelData.key)
+                        onToggled: backend.moveDockComponent(modelData.key,
+                            active ? "hidden" : "visible",
+                            active ? "" : (backend.dockVisibleComponents[0] || ""))
+                    }
+                }
             }
         }
     }
