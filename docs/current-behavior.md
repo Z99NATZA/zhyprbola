@@ -95,8 +95,11 @@ and controls as other components, and reads
 change. Click selects one image, Ctrl-click toggles it, and Shift-click selects a
 range. Dragging a rectangle from a thumbnail or the blank gutter selects the
 images it covers. The Select all button toggles between selecting and clearing
-all images; Ctrl+A selects all. Ctrl+C copies
-selected absolute paths as newline separated text. The bottom-right Delete button
+all images; Ctrl+A selects all. Ctrl+C copies selected absolute paths as newline
+separated text. Double-clicking a thumbnail opens a transparent, borderless,
+resizable image preview with a close icon 20 px from the displayed image's
+top-right edge.
+The preview closes when the browser hides. The bottom-right Delete button
 or Delete key moves selected files
 into `.zhyprbola-trash` inside the
 screenshots directory. Ctrl+Z restores the last deletion, including after reopening
