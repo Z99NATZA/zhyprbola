@@ -3,6 +3,7 @@
 #include <QAbstractListModel>
 #include <QFileSystemWatcher>
 #include <QTimer>
+#include <QVariantList>
 
 class ScreenshotBackend : public QAbstractListModel {
     Q_OBJECT
@@ -31,6 +32,7 @@ public:
     Q_INVOKABLE void setPosition(const QString &side, const QString &alignment);
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void select(int index, bool control, bool shift);
+    Q_INVOKABLE void selectIndices(const QVariantList &indices);
     Q_INVOKABLE void selectAll();
     Q_INVOKABLE void copyPaths();
     Q_INVOKABLE void deleteSelected();

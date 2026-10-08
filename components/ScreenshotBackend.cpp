@@ -11,6 +11,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 #include <QUuid>
 #include <QUrl>
@@ -173,6 +174,22 @@ void ScreenshotBackend::select(int index, bool control, bool shift) {
 
 void ScreenshotBackend::selectAll() {
     m_selected = m_paths;
+    emit selectionChanged();
+}
+
+void ScreenshotBackend::selectIndices(const QVariantList &indices) {
+    QSet<int> selectedIndices;
+    for (const QVariant &value : indices) {
+        bool valid = false;
+        const int index = value.toInt(&valid);
+        if (valid && index >= 0 && index < m_paths.size()) selectedIndices.insert(index);
+    }
+    QStringList selected;
+    for (int index = 0; index < m_paths.size(); ++index)
+        if (selectedIndices.contains(index)) selected.append(m_paths[index]);
+    if (selected == m_selected) return;
+    m_selected = selected;
+    m_anchor = selected.isEmpty() ? QString() : selected.last();
     emit selectionChanged();
 }
 

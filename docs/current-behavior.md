@@ -91,8 +91,11 @@ blocking other windows or staying above them, uses the same theme surface, text,
 and controls as other components, and reads
 `Pictures/Screenshots`, shows thumbnails newest first, and updates when files
 change. Click selects one image, Ctrl-click toggles it, and Shift-click selects a
-range. Ctrl+A selects all and Ctrl+C copies selected absolute paths as newline
-separated text. The bottom-right Delete button or Delete key moves selected files
+range. Dragging a rectangle from a thumbnail or the blank gutter selects the
+images it covers. The Select all button toggles between selecting and clearing
+all images; Ctrl+A selects all. Ctrl+C copies
+selected absolute paths as newline separated text. The bottom-right Delete button
+or Delete key moves selected files
 into `.zhyprbola-trash` inside the
 screenshots directory. Ctrl+Z restores the last deletion, including after reopening
 the browser. Restore never overwrites an existing file. Clicking outside, Escape,

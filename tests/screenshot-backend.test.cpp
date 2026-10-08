@@ -10,6 +10,7 @@
 #include <QQmlPropertyMap>
 #include <QQuickWindow>
 #include <QQuickItem>
+#include <QWheelEvent>
 #include <QtTest>
 
 class ScreenshotTest : public QObject {
@@ -144,6 +145,10 @@ private slots:
         model.refresh();
         QTRY_VERIFY(scrollbar->isVisible());
         QCOMPARE(list->width(), width);
+        QWheelEvent wheel(QPointF(200, 200), window->mapToGlobal(QPoint(200, 200)),
+            {}, QPoint(0, -120), Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+        QCoreApplication::sendEvent(window, &wheel);
+        QTRY_VERIFY(list->property("contentY").toReal() > 0);
         model.selectAll();
         model.deleteSelected();
         QTRY_VERIFY(!scrollbar->isVisible());
@@ -208,6 +213,61 @@ private slots:
         QTest::keyClick(window, Qt::Key_Escape);
         QTRY_VERIFY(!model.opened());
         QTRY_VERIFY(!window->isVisible());
+    }
+
+    void selectAllButtonAndMarqueeFromGutter() {
+        QTemporaryDir dir;
+        QImage image(10, 10, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        for (const QString name : {"a.png", "b.png", "c.png", "d.png"})
+            QVERIFY(image.save(dir.filePath(name)));
+        ScreenshotBackend model(dir.path());
+        QQmlPropertyMap theme;
+        theme.insert("themeName", "current");
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("screenshots", &model);
+        engine.rootContext()->setContextProperty("backend", &theme);
+        engine.load(QUrl::fromLocalFile(QFINDTESTDATA("../ScreenshotHost.qml")));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        auto selectAll = window->findChild<QQuickItem *>("screenshotSelectAllButton");
+        auto deleteButton = window->findChild<QQuickItem *>("screenshotDeleteButton");
+        auto selectionArea = window->findChild<QQuickItem *>("screenshotSelectionArea");
+        QVERIFY(selectAll);
+        QVERIFY(deleteButton);
+        QVERIFY(selectionArea);
+        QVERIFY(selectAll->x() + selectAll->width() <= deleteButton->x());
+        QCOMPARE(selectAll->property("text").toString(), QStringLiteral("Select all"));
+        const QPoint selectAllCenter = selectAll->mapToScene(
+            QPointF(selectAll->width() / 2, selectAll->height() / 2)).toPoint();
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, selectAllCenter);
+        QCOMPARE(model.selectedPaths().size(), 4);
+        QCOMPARE(selectAll->property("text").toString(), QStringLiteral("Deselect all"));
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, selectAllCenter);
+        QCOMPARE(model.selectedPaths().size(), 0);
+        QCOMPARE(selectAll->property("text").toString(), QStringLiteral("Select all"));
+
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(80, 90));
+        QCOMPARE(model.selectedPaths().size(), 1);
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+            selectAllCenter);
+        QCOMPARE(model.selectedPaths().size(), 4);
+
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(20, 90));
+        QCOMPARE(model.selectedPaths().size(), 0);
+        QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, QPoint(20, 72));
+        QTest::mouseMove(window, QPoint(150, 300), 10);
+        QCOMPARE(model.selectedPaths().size(), 3);
+        const QString screenshot = qEnvironmentVariable("ZHYPRBOLA_MARQUEE_TEST_SCREENSHOT");
+        if (!screenshot.isEmpty())
+            QVERIFY(window->grabWindow().save(screenshot));
+        QTest::mouseMove(window, QPoint(150, 210), 10);
+        QCOMPARE(model.selectedPaths().size(), 2);
+        QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, QPoint(150, 210));
+        QCOMPARE(model.selectedPaths().size(), 2);
+        QCOMPARE(model.selectedPaths(), QStringList({pathAt(model, 0), pathAt(model, 1)}));
     }
 };
 QTEST_MAIN(ScreenshotTest)
