@@ -158,6 +158,77 @@ private slots:
         QTRY_VERIFY(scrollbar->isVisible());
         QCOMPARE(list->width(), width);
     }
+    void doubleClickOpensResizableTransparentPreview() {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("preview.png"));
+        const QString sample = qEnvironmentVariable("ZHYPRBOLA_PREVIEW_TEST_IMAGE");
+        if (sample.isEmpty()) {
+            QImage screenshot(600, 564, QImage::Format_RGB32);
+            screenshot.fill(Qt::red);
+            QVERIFY(screenshot.save(path));
+        } else {
+            QVERIFY(QFile::copy(sample, path));
+        }
+        ScreenshotBackend model(dir.path());
+        QQmlPropertyMap theme;
+        theme.insert("themeName", "current");
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("screenshots", &model);
+        engine.rootContext()->setContextProperty("backend", &theme);
+        engine.load(QUrl::fromLocalFile(QFINDTESTDATA("../ScreenshotHost.qml")));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        auto *preview = window->findChild<QQuickWindow *>("screenshotPreviewWindow");
+        QVERIFY(preview);
+        QVERIFY(!preview->isVisible());
+
+        QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(200, 95));
+        QTRY_VERIFY(preview->isVisible());
+        QCOMPARE(model.selectedPaths(), QStringList{path});
+        QCOMPARE(preview->transientParent(), window);
+        QCOMPARE(preview->modality(), Qt::WindowModal);
+        QVERIFY(preview->flags() & Qt::FramelessWindowHint);
+        QCOMPARE(preview->color().alpha(), 0);
+        QCOMPARE(preview->size(), QSize(660, 510));
+
+        auto *image = preview->findChild<QQuickItem *>("screenshotPreviewImage");
+        auto *close = preview->findChild<QQuickItem *>("screenshotPreviewCloseButton");
+        auto *resize = preview->findChild<QQuickItem *>("screenshotPreviewResizeHandle");
+        QVERIFY(image);
+        QVERIFY(close);
+        QVERIFY(resize);
+        QCOMPARE(image->property("source").toUrl(), QUrl::fromLocalFile(path));
+        QTRY_VERIFY(image->property("paintedWidth").toReal() > 0);
+        QCOMPARE(image->size(), preview->size());
+        const QString previewCapture = qEnvironmentVariable("ZHYPRBOLA_PREVIEW_TEST_SCREENSHOT");
+        if (!previewCapture.isEmpty())
+            QVERIFY(preview->grabWindow().save(previewCapture));
+        const auto checkCloseOffset = [preview, image, close] {
+            const qreal paintedWidth = image->property("paintedWidth").toReal();
+            const qreal paintedHeight = image->property("paintedHeight").toReal();
+            const qreal right = (preview->width() + paintedWidth) / 2;
+            const qreal top = (preview->height() - paintedHeight) / 2;
+            QCOMPARE(right - close->x() - close->width(), 20.0);
+            QCOMPARE(close->y() - top, 20.0);
+        };
+        checkCloseOffset();
+        preview->resize(760, 590);
+        QTRY_COMPARE(preview->size(), QSize(760, 590));
+        QTRY_COMPARE(image->size(), QSizeF(preview->size()));
+        checkCloseOffset();
+
+        const QPoint closePoint = close->mapToScene(
+            QPointF(close->width() / 2, close->height() / 2)).toPoint();
+        QTest::mouseClick(preview, Qt::LeftButton, Qt::NoModifier, closePoint);
+        QTRY_VERIFY(!preview->isVisible());
+        QVERIFY(window->isVisible());
+        QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(200, 95));
+        QTRY_VERIFY(preview->isVisible());
+        model.Hide();
+        QTRY_VERIFY(!preview->isVisible());
+    }
     void mouseSelectionAndKeyboardShortcuts() {
         QTemporaryDir dir;
         for (const QString name : {"a.png", "b.png", "c.png"}) {
