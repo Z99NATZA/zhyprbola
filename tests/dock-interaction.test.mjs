@@ -382,6 +382,21 @@ test('Sound defaults to Quick when adding it to an existing component layout', (
     assert.equal(layout.quick[0], 'wifi');
 });
 
+test('Settings remains in Show when an older layout placed it in Hidden or Quick', () => {
+    for (const zone of ['hidden', 'quick']) {
+        const {dock, context} = fixture();
+        context.TextDecoder = TextDecoder;
+        const saved = {visible: [], hidden: [], quick: []};
+        saved[zone] = ['settings'];
+        context.GLib.file_get_contents = () => [true,
+            new TextEncoder().encode(JSON.stringify(saved))];
+        const layout = dock._readDockComponents();
+        assert.equal(layout.visible.filter(name => name === 'settings').length, 1);
+        assert.equal(layout.hidden.includes('settings'), false);
+        assert.equal(layout.quick.includes('settings'), false);
+    }
+});
+
 test('Sound respects explicit visible and hidden placement', () => {
     for (const zone of ['visible', 'hidden']) {
         const {dock, context} = fixture();

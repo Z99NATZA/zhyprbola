@@ -193,6 +193,7 @@ Item {
             const local = zone.mapFromItem(panel, point.x, point.y)
             if (local.x >= 0 && local.x < zone.width
                 && local.y >= 0 && local.y < zone.height
+                && (draggedComponent !== "settings" || zone.zoneKey === "visible")
                 && (zone.zoneKey !== "quick" || (draggedComponent !== "components"
                     && draggedComponent !== "date-display"
                     && draggedComponent !== "time-display"))) {

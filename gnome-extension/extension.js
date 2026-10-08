@@ -1026,11 +1026,13 @@ export default class ZhyprbolaExtension extends Extension {
             const known = new Set(defaults);
             const visible = [...new Set(saved.visible.filter(name => known.has(name)))];
             const hidden = [...new Set(saved.hidden.filter(name =>
-                known.has(name) && !visible.includes(name)))];
+                name !== 'settings' && known.has(name) && !visible.includes(name)))];
             const quick = [...new Set((Array.isArray(saved.quick) ? saved.quick : [])
-                .filter(name => name !== 'components' && name !== 'date-display'
+                .filter(name => name !== 'settings' && name !== 'components'
+                    && name !== 'date-display'
                     && name !== 'time-display' && known.has(name) &&
                     !visible.includes(name) && !hidden.includes(name)))];
+            if (!visible.includes('settings')) visible.push('settings');
             for (const name of defaults) {
                 if (!visible.includes(name) && !hidden.includes(name) &&
                     !quick.includes(name) && name !== 'date-display'

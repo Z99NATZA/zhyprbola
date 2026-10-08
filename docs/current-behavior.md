@@ -65,6 +65,8 @@ The Input Source dock component shows the current language code such as `en`
 or `th` and opens a language-only switcher menu.
 The Date and Time dock labels open Settings directly to Date & Time, including
 when Settings is already open or the labels are in the dock overflow menu.
+The Settings icon always stays in Show; it can be reordered there but cannot be
+moved to Hidden or Quick. Older layouts with Settings elsewhere are restored to Show.
 The Key Visualizer opens a floating bubble from Quick by default.
 Settings > Keys controls font size, min/max width, fit or fixed width, and text
 alignment. It shows the latest keys only and clears after five seconds. It can

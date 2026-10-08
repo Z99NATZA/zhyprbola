@@ -65,6 +65,35 @@ private slots:
         QVERIFY(backend.dockHiddenComponents().contains(QStringLiteral("date-display")));
     }
 
+    void keepsSettingsInShow() {
+        for (const QByteArray &saved : {
+                 QByteArrayLiteral("{\"visible\":[],\"hidden\":[\"settings\"],\"quick\":[]}"),
+                 QByteArrayLiteral("{\"visible\":[],\"hidden\":[],\"quick\":[\"settings\"]}")}) {
+            QTemporaryDir directory;
+            QVERIFY(directory.isValid());
+            qputenv("XDG_CONFIG_HOME", directory.path().toUtf8());
+            QVERIFY(QDir().mkpath(directory.filePath(QStringLiteral("zhyprbola"))));
+            QFile config(directory.filePath(QStringLiteral("zhyprbola/dock-components")));
+            QVERIFY(config.open(QIODevice::WriteOnly));
+            QCOMPARE(config.write(saved), saved.size());
+            config.close();
+
+            Backend backend;
+            const QString settings = QStringLiteral("settings");
+            QVERIFY(backend.dockVisibleComponents().contains(settings));
+            QVERIFY(!backend.dockHiddenComponents().contains(settings));
+            QVERIFY(!backend.dockQuickComponents().contains(settings));
+            backend.moveDockComponent(settings, QStringLiteral("hidden"), {});
+            backend.moveDockComponent(settings, QStringLiteral("quick"), {});
+            QVERIFY(backend.dockVisibleComponents().contains(settings));
+            QVERIFY(!backend.dockHiddenComponents().contains(settings));
+            QVERIFY(!backend.dockQuickComponents().contains(settings));
+            backend.moveDockComponent(settings, QStringLiteral("visible"),
+                QStringLiteral("date-display"));
+            QCOMPARE(backend.dockVisibleComponents().first(), settings);
+        }
+    }
+
     void loadsDateTimeSettings() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());

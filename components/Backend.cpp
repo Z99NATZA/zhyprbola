@@ -443,6 +443,10 @@ Backend::Backend(QObject *parent) : QObject(parent) {
             }
         }
     }
+    m_dockHiddenComponents.removeAll(QStringLiteral("settings"));
+    m_dockQuickComponents.removeAll(QStringLiteral("settings"));
+    if (!m_dockVisibleComponents.contains(QStringLiteral("settings")))
+        m_dockVisibleComponents.append(QStringLiteral("settings"));
     QFile wallpaperFile(dockConfigPath(QStringLiteral("use-wallpaper")));
     if (wallpaperFile.open(QIODevice::ReadOnly))
         m_useWallpaper = wallpaperFile.readAll().trimmed() == "true";
@@ -578,6 +582,7 @@ void Backend::moveDockComponent(const QString &key, const QString &destination,
         || (destination != QLatin1String("visible")
             && destination != QLatin1String("hidden")
             && destination != QLatin1String("quick"))
+        || (key == QLatin1String("settings") && destination != QLatin1String("visible"))
         || ((key == QLatin1String("components")
                 || key == QLatin1String("date-display")
                 || key == QLatin1String("time-display"))
