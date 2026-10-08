@@ -148,6 +148,7 @@ private slots:
         QWheelEvent wheel(QPointF(200, 200), window->mapToGlobal(QPoint(200, 200)),
             {}, QPoint(0, -120), Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
         QCoreApplication::sendEvent(window, &wheel);
+        QVERIFY(list->property("moving").toBool());
         QTRY_VERIFY(list->property("contentY").toReal() > 0);
         model.selectAll();
         model.deleteSelected();

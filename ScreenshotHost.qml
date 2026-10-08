@@ -58,7 +58,8 @@ Window {
                 leftMargin: 12; rightMargin: 12; topMargin: 54; bottomMargin: 10 }
             clip: true
             spacing: 6
-            interactive: false
+            boundsBehavior: Flickable.DragAndOvershootBounds
+            flickableDirection: Flickable.VerticalFlick
             model: screenshots
             header: Item { width: images.width; height: 12 }
             footer: Item { width: images.width; height: 20 }
@@ -211,10 +212,7 @@ Window {
             }
             onExited: images.hoveredIndex = -1
             onWheel: function(wheel) {
-                const limit = Math.max(0, images.contentHeight - images.height)
-                images.contentY = Math.max(0, Math.min(limit,
-                    images.contentY - wheel.angleDelta.y / 120 * 72))
-                wheel.accepted = true
+                wheel.accepted = false
             }
 
             Rectangle {
