@@ -1611,56 +1611,55 @@ Item {
         }
     }
 
-    component DateTimeChoice: Column {
+    component DateTimeChoice: Row {
+        id: choiceRow
         required property string title
-        required property string settingKey
+        required property string selectedKey
         required property var options
+        signal chosen(string key)
         width: panel.contentWidth
-        spacing: 6
+        height: 36
+        spacing: 8
 
         Text {
+            width: 76
+            height: parent.height
             text: title
+            verticalAlignment: Text.AlignVCenter
             color: Theme.mutedText
             font.family: Qt.application.font.family
             font.pixelSize: 12
         }
 
         Row {
-            width: parent.width
-            spacing: 8
+            width: choiceRow.width - 84
+            height: parent.height
+            spacing: 6
 
             Repeater {
-                model: options
+                model: choiceRow.options
 
                 delegate: Rectangle {
                     required property var modelData
-                    width: (panel.contentWidth - 8 * (options.length - 1)) / options.length
-                    height: 42
+                    width: (choiceRow.width - 84 - 6 * (choiceRow.options.length - 1))
+                        / choiceRow.options.length
+                    height: choiceRow.height
                     radius: 8
-                    color: backend.dateTimeSettings[settingKey] === modelData.key
+                    color: choiceRow.selectedKey === modelData.key
                         ? Theme.selected : (choiceMouse.containsMouse
                             ? Theme.controlHover : Theme.control)
 
                     Text {
                         anchors.centerIn: parent
+                        width: parent.width - 12
                         text: modelData.label
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
                         color: Theme.text
                         font.family: Qt.application.font.family
-                        font.pixelSize: 14
-                        font.weight: backend.dateTimeSettings[settingKey]
+                        font.pixelSize: 12
+                        font.weight: choiceRow.selectedKey
                             === modelData.key ? Font.DemiBold : Font.Normal
-                    }
-
-                    Text {
-                        anchors.right: parent.right
-                        anchors.rightMargin: 11
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: backend.dateTimeSettings[settingKey] === modelData.key
-                        text: "✓"
-                        color: Theme.accent
-                        font.family: Qt.application.font.family
-                        font.pixelSize: 15
-                        font.weight: Font.Bold
                     }
 
                     MouseArea {
@@ -1668,10 +1667,35 @@ Item {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: backend.setDateTimeSetting(settingKey, modelData.key)
+                        onClicked: choiceRow.chosen(modelData.key)
                     }
                 }
             }
+        }
+    }
+
+    component DateTimeHeading: Row {
+        required property string title
+        required property string preview
+        width: panel.contentWidth
+        height: 24
+
+        Text {
+            text: title
+            color: Theme.text
+            font.family: Qt.application.font.family
+            font.pixelSize: 16
+            font.weight: Font.DemiBold
+        }
+
+        Text {
+            width: parent.width - x
+            text: preview
+            horizontalAlignment: Text.AlignRight
+            elide: Text.ElideRight
+            color: Theme.mutedText
+            font.family: Qt.application.font.family
+            font.pixelSize: 13
         }
     }
 
@@ -1691,131 +1715,112 @@ Item {
         Column {
             id: dateTimeColumn
             width: parent.width
-            spacing: 16
-
-            Text {
-                text: "Date"
-                color: Theme.text
-                font.family: Qt.application.font.family
-                font.pixelSize: 16
-                font.weight: Font.DemiBold
-            }
+            spacing: 7
 
             DateTimeChoice {
                 title: "Language"
-                settingKey: "dateLocale"
+                selectedKey: backend.dateTimeSettings.dateLocale
+                    === backend.dateTimeSettings.timeLocale
+                    ? backend.dateTimeSettings.dateLocale : ""
                 options: [{key: "global", label: "Global"},
                     {key: "thai", label: "ไทย (พ.ศ.)"}]
+                onChosen: key => {
+                    backend.setDateTimeSetting("dateLocale", key)
+                    backend.setDateTimeSetting("timeLocale", key)
+                }
             }
 
-            Column {
+            Text {
+                visible: backend.dateTimeSettings.dateLocale
+                    !== backend.dateTimeSettings.timeLocale
+                text: "Date and time use different languages; choose one to sync them."
+                color: Theme.mutedText
+                font.family: Qt.application.font.family
+                font.pixelSize: 11
+            }
+
+            DateTimeHeading {
+                title: "Date"
+                preview: backend.previewDate(backend.dateTimeSettings.dateFormat,
+                    backend.dateTimeSettings.dateLocale)
+            }
+
+            Grid {
                 width: parent.width
-                spacing: 6
+                columns: 2
+                spacing: 4
 
-                Text {
-                    text: "Format"
-                    color: Theme.mutedText
-                    font.family: Qt.application.font.family
-                    font.pixelSize: 12
-                }
+                Repeater {
+                    model: panel.dateFormats
 
-                Grid {
-                    width: parent.width
-                    columns: 2
-                    spacing: 8
+                    delegate: Rectangle {
+                        required property string modelData
+                        width: (panel.contentWidth - 4) / 2
+                        height: 40
+                        radius: 8
+                        color: backend.dateTimeSettings.dateFormat === modelData
+                            ? Theme.selected : (dateFormatMouse.containsMouse
+                                ? Theme.controlHover : Theme.control)
 
-                    Repeater {
-                        model: panel.dateFormats
+                        Column {
+                            x: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - 20
+                            spacing: 1
 
-                        delegate: Rectangle {
-                            required property string modelData
-                            width: (panel.contentWidth - 8) / 2
-                            height: 56
-                            radius: 8
-                            color: backend.dateTimeSettings.dateFormat === modelData
-                                ? Theme.selected : (dateFormatMouse.containsMouse
-                                    ? Theme.controlHover : Theme.control)
-
-                            Column {
-                                x: 12
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: parent.width - 24
-                                spacing: 3
-
-                                Text {
-                                    width: parent.width - (backend.dateTimeSettings.dateFormat
-                                        === modelData ? 18 : 0)
-                                    text: modelData
-                                    elide: Text.ElideRight
-                                    color: Theme.text
-                                    font.family: Qt.application.font.family
-                                    font.pixelSize: 13
-                                    font.weight: backend.dateTimeSettings.dateFormat
-                                        === modelData ? Font.DemiBold : Font.Normal
-                                }
-
-                                Text {
-                                    width: parent.width
-                                    text: backend.previewDate(modelData,
-                                        backend.dateTimeSettings.dateLocale)
-                                    elide: Text.ElideRight
-                                    color: Theme.mutedText
-                                    font.family: Qt.application.font.family
-                                    font.pixelSize: 11
-                                }
+                            Text {
+                                width: parent.width
+                                text: modelData
+                                elide: Text.ElideRight
+                                color: Theme.text
+                                font.family: Qt.application.font.family
+                                font.pixelSize: 12
+                                font.weight: backend.dateTimeSettings.dateFormat
+                                    === modelData ? Font.DemiBold : Font.Normal
                             }
 
                             Text {
-                                anchors.right: parent.right
-                                anchors.rightMargin: 11
-                                anchors.top: parent.top
-                                anchors.topMargin: 8
-                                visible: backend.dateTimeSettings.dateFormat === modelData
-                                text: "✓"
-                                color: Theme.accent
+                                width: parent.width
+                                text: backend.previewDate(modelData,
+                                    backend.dateTimeSettings.dateLocale)
+                                elide: Text.ElideRight
+                                color: Theme.mutedText
                                 font.family: Qt.application.font.family
-                                font.pixelSize: 15
-                                font.weight: Font.Bold
+                                font.pixelSize: 11
                             }
+                        }
 
-                            MouseArea {
-                                id: dateFormatMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: backend.setDateTimeSetting("dateFormat", modelData)
-                            }
+                        MouseArea {
+                            id: dateFormatMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: backend.setDateTimeSetting("dateFormat", modelData)
                         }
                     }
                 }
             }
 
-            Text {
-                text: "Time"
-                color: Theme.text
-                font.family: Qt.application.font.family
-                font.pixelSize: 16
-                font.weight: Font.DemiBold
-            }
-
-            DateTimeChoice {
-                title: "Language"
-                settingKey: "timeLocale"
-                options: [{key: "global", label: "Global"},
-                    {key: "thai", label: "ไทย"}]
+            DateTimeHeading {
+                title: "Time"
+                preview: backend.previewTime(backend.dateTimeSettings.timeFormat,
+                    backend.dateTimeSettings.timeLocale,
+                    backend.dateTimeSettings.showSeconds)
             }
 
             DateTimeChoice {
                 title: "Format"
-                settingKey: "timeFormat"
+                selectedKey: backend.dateTimeSettings.timeFormat
                 options: [{key: "24-colon", label: "24h :"},
                     {key: "12-colon", label: "12h :"},
                     {key: "24-dot", label: "24h ."},
                     {key: "12-dot", label: "12h ."}]
+                onChosen: key => backend.setDateTimeSetting("timeFormat", key)
             }
 
             DateTimeToggle {
                 title: "Show seconds"
+                height: 40
                 active: backend.dateTimeSettings.showSeconds
                 onToggled: backend.setDateTimeSetting("showSeconds", !active)
             }
@@ -1830,6 +1835,7 @@ Item {
                     delegate: DateTimeToggle {
                         required property var modelData
                         width: (panel.contentWidth - 8) / 2
+                        height: 40
                         title: modelData.label
                         active: backend.dockVisibleComponents.includes(modelData.key)
                         onToggled: backend.moveDockComponent(modelData.key,

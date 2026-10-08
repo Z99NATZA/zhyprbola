@@ -162,6 +162,8 @@ public:
     Q_INVOKABLE QString formatDate(const QDateTime &dateTime) const;
     Q_INVOKABLE QString formatTime(const QDateTime &dateTime) const;
     Q_INVOKABLE QString previewDate(const QString &format, const QString &locale) const;
+    Q_INVOKABLE QString previewTime(const QString &format, const QString &locale,
+        bool showSeconds) const;
     Q_INVOKABLE void startKeyCapture();
     Q_INVOKABLE void stopKeyCapture();
 

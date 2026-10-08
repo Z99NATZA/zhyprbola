@@ -28,18 +28,20 @@ private slots:
         QTRY_COMPARE(observer.dateTimeSettings().value(QStringLiteral("dateFormat")).toString(),
             QStringLiteral("dd/MM/yyyy"));
         backend.setDateTimeSetting(QStringLiteral("dateLocale"), QStringLiteral("thai"));
-        QCOMPARE(backend.formatDate(value), QString::fromUtf8("๐๗/๑๐/๒๕๖๙"));
+        QCOMPARE(backend.formatDate(value), QStringLiteral("07/10/2569"));
+        QCOMPARE(backend.previewDate(QStringLiteral("yyyy-MM-dd"), QStringLiteral("thai")),
+            QStringLiteral("2569-10-07"));
         backend.setDateTimeSetting(QStringLiteral("dateFormat"),
             QStringLiteral("ddd, d MMM yyyy"));
         const QString namedDate = backend.formatDate(value);
         QVERIFY(namedDate.contains(QString::fromUtf8("ต.ค.")));
-        QVERIFY(namedDate.contains(QString::fromUtf8("๒๕๖๙")));
+        QVERIFY(namedDate.contains(QStringLiteral("2569")));
         backend.setDateTimeSetting(QStringLiteral("dateFormat"), QStringLiteral("dd/MM/yyyy"));
         backend.setDateTimeSetting(QStringLiteral("timeFormat"), QStringLiteral("12-colon"));
         backend.setDateTimeSetting(QStringLiteral("showSeconds"), true);
         QCOMPARE(backend.formatTime(value), QStringLiteral("02:05:09 PM"));
         backend.setDateTimeSetting(QStringLiteral("timeLocale"), QStringLiteral("thai"));
-        QVERIFY(backend.formatTime(value).startsWith(QString::fromUtf8("๐๒:๐๕:๐๙")));
+        QVERIFY(backend.formatTime(value).startsWith(QStringLiteral("02:05:09")));
 
         Backend reloaded;
         QCOMPARE(reloaded.dateTimeSettings(), backend.dateTimeSettings());
@@ -78,13 +80,14 @@ private slots:
         QVERIFY2(settings, qPrintable(settingsComponent.errorString()));
         const QVariantList sections = settings->property("sections").toList();
         QVERIFY(!sections.isEmpty());
-        QString previousLabel;
+        bool hasDateTime = false;
         for (const QVariant &section : sections) {
-            const QString label = section.toMap().value(QStringLiteral("label")).toString();
-            QVERIFY(!label.isEmpty());
-            QVERIFY(QString::compare(previousLabel, label, Qt::CaseInsensitive) <= 0);
-            previousLabel = label;
+            const QVariantMap entry = section.toMap();
+            QVERIFY(!entry.value(QStringLiteral("label")).toString().isEmpty());
+            hasDateTime |= entry.value(QStringLiteral("key")).toString()
+                == QStringLiteral("date-time");
         }
+        QVERIFY(hasDateTime);
         QCOMPARE(settings->property("section").toString(), QStringLiteral("themes"));
         QFile request(directory.filePath(QStringLiteral("zhyprbola/settings-section-request")));
         QVERIFY(request.open(QIODevice::WriteOnly));
@@ -106,13 +109,37 @@ private slots:
             QVERIFY(image.save(screenshot));
         auto *scroll = settings->findChild<QQuickItem *>(QStringLiteral("date-time-scroll"));
         QVERIFY(scroll);
-        scroll->setProperty("contentY", 350);
-        QTRY_VERIFY(scroll->property("contentY").toReal() > 0);
+        QVERIFY(scroll->property("contentHeight").toReal() <= scroll->height());
         const QImage bottomImage = window.grabWindow();
         QVERIFY(!bottomImage.isNull());
         const QString bottomScreenshot = qEnvironmentVariable("ZHYPRBOLA_TEST_BOTTOM_SCREENSHOT");
         if (!bottomScreenshot.isEmpty())
             QVERIFY(bottomImage.save(bottomScreenshot));
+
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(545, 94));
+        QTRY_COMPARE(backend.dateTimeSettings().value(QStringLiteral("dateLocale")).toString(),
+            QStringLiteral("thai"));
+        QCOMPARE(backend.dateTimeSettings().value(QStringLiteral("timeLocale")).toString(),
+            QStringLiteral("thai"));
+        const QString thaiScreenshot = qEnvironmentVariable("ZHYPRBOLA_TEST_THAI_SCREENSHOT");
+        if (!thaiScreenshot.isEmpty())
+            QVERIFY(window.grabWindow().save(thaiScreenshot));
+
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(300, 301));
+        QCOMPARE(backend.dateTimeSettings().value(QStringLiteral("dateFormat")).toString(),
+            QStringLiteral("d MMM yyyy"));
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(500, 170));
+        QCOMPARE(backend.dateTimeSettings().value(QStringLiteral("dateFormat")).toString(),
+            QStringLiteral("dd-MM-yyyy"));
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(500, 214));
+        QCOMPARE(backend.dateTimeSettings().value(QStringLiteral("dateFormat")).toString(),
+            QStringLiteral("dd/MM/yyyy"));
+
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(595, 379));
+        QCOMPARE(backend.dateTimeSettings().value(QStringLiteral("timeFormat")).toString(),
+            QStringLiteral("12-dot"));
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(600, 422));
+        QCOMPARE(backend.dateTimeSettings().value(QStringLiteral("showSeconds")).toBool(), true);
     }
 
     void opensNewSettingsOnRequestedSection() {

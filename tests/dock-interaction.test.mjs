@@ -454,8 +454,10 @@ test('dock date and time follow locale, format and seconds settings', () => {
     dock._dateTimeSettings.dateLocale = 'thai';
     dock._dateTimeSettings.timeLocale = 'thai';
     dock._dateTimeSettings.showSeconds = true;
-    assert.equal(dock._formatDockDate(now), '๐๗/๑๐/๒๕๖๙');
-    assert.equal(dock._formatDockTime(now), '๑๕:๑๔:๐๙');
+    assert.equal(dock._formatDockDate(now), '07/10/2569');
+    assert.equal(dock._formatDockTime(now), '15:14:09');
+    dock._dateTimeSettings.dateFormat = 'yyyy-MM-dd';
+    assert.equal(dock._formatDockDate(now), '2569-10-07');
 });
 
 test('dock reserves enough region width for inline date and time', () => {

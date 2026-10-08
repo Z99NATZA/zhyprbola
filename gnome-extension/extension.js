@@ -1076,7 +1076,7 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _dateTimeLocale(name) {
-        return name === 'thai' ? 'th-TH-u-ca-buddhist-nu-thai' : 'en-US';
+        return name === 'thai' ? 'th-TH-u-ca-buddhist-nu-latn' : 'en-US';
     }
 
     _formatDockDate(now = new Date()) {

@@ -97,12 +97,11 @@ QVariantMap validatedDateTimeSettings(const QJsonObject &saved) {
     return settings;
 }
 
-QString localizeDigits(QString text, bool thai) {
-    if (!thai) return text;
+QString latinDigits(QString text) {
     for (int index = 0; index < text.size(); ++index) {
         const QChar character = text.at(index);
-        if (character >= QLatin1Char('0') && character <= QLatin1Char('9'))
-            text[index] = QChar(0x0e50 + character.unicode() - '0');
+        if (character.unicode() >= 0x0e50 && character.unicode() <= 0x0e59)
+            text[index] = QChar('0' + character.unicode() - 0x0e50);
     }
     return text;
 }
@@ -114,12 +113,12 @@ QString formattedDate(const QDateTime &dateTime, const QString &format,
         thai ? QLocale::Thailand : QLocale::UnitedStates);
     if (!thai) return locale.toString(dateTime, format);
     const int yearPosition = format.indexOf(QStringLiteral("yyyy"));
-    if (yearPosition < 0) return localizeDigits(locale.toString(dateTime, format), true);
+    if (yearPosition < 0) return latinDigits(locale.toString(dateTime, format));
     const QString before = format.left(yearPosition);
     const QString after = format.mid(yearPosition + 4);
-    return localizeDigits((before.isEmpty() ? QString() : locale.toString(dateTime, before))
+    return latinDigits((before.isEmpty() ? QString() : locale.toString(dateTime, before))
         + QString::number(dateTime.date().year() + 543)
-        + (after.isEmpty() ? QString() : locale.toString(dateTime, after)), true);
+        + (after.isEmpty() ? QString() : locale.toString(dateTime, after)));
 }
 
 QString formattedTime(const QDateTime &dateTime, const QString &format,
@@ -134,7 +133,7 @@ QString formattedTime(const QDateTime &dateTime, const QString &format,
         + (twelveHour ? QStringLiteral(" AP") : QString());
     const QLocale locale(thai ? QLocale::Thai : QLocale::English,
         thai ? QLocale::Thailand : QLocale::UnitedStates);
-    return localizeDigits(locale.toString(dateTime, pattern), thai);
+    return latinDigits(locale.toString(dateTime, pattern));
 }
 
 bool writeDockConfig(const QString &name, const QString &value) {
@@ -703,6 +702,12 @@ QString Backend::formatTime(const QDateTime &dateTime) const {
 
 QString Backend::previewDate(const QString &format, const QString &locale) const {
     return formattedDate(QDateTime(QDate(2026, 10, 7), QTime(14, 5)), format, locale);
+}
+
+QString Backend::previewTime(const QString &format, const QString &locale,
+    bool showSeconds) const {
+    return formattedTime(QDateTime(QDate(2026, 10, 7), QTime(14, 5, 9)), format,
+        locale, showSeconds);
 }
 
 void Backend::startKeyCapture() {
