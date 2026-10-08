@@ -531,7 +531,8 @@ void Backend::refreshTheme() {
         if (value == QLatin1String("rose-galaxy")) value = QStringLiteral("mauve");
         if (value == QLatin1String("white") || value == QLatin1String("white-sky")
             || value == QLatin1String("forest") || value == QLatin1String("one-half-gray")
-            || value == QLatin1String("red") || value == QLatin1String("mauve"))
+            || value == QLatin1String("red") || value == QLatin1String("mauve")
+            || value == QLatin1String("silver-dawn"))
             name = value;
     }
     if (name != m_themeName) {
@@ -544,7 +545,7 @@ void Backend::setThemeName(const QString &name) {
     static const QStringList names = {QStringLiteral("current"), QStringLiteral("white"),
         QStringLiteral("white-sky"), QStringLiteral("forest"),
         QStringLiteral("one-half-gray"), QStringLiteral("red"),
-        QStringLiteral("mauve")};
+        QStringLiteral("mauve"), QStringLiteral("silver-dawn")};
     if (!names.contains(name) || name == m_themeName) return;
     if (writeDockConfig(QStringLiteral("theme"), name)) refreshTheme();
 }

@@ -28,6 +28,10 @@ QtObject {
                 accent: "#B83252", text: "#542437", control: "#FAE9EE",
                 controlHover: "#F5DCE4", selected: "#EDBDCB", track: "#EECBD5"
             },
+            "silver-dawn": {
+                accent: "#6275A6", text: "#303B58", control: "#EDF0F8",
+                controlHover: "#DFE5F2", selected: "#C3CDE5", track: "#D5DDEF"
+            },
             mauve: {
                 accent: "#C45478", text: "#623746", control: "#FBECEF",
                 controlHover: "#F7DCE5", selected: "#EDBDCE", track: "#EBC2D0"
