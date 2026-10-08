@@ -21,6 +21,7 @@ class VisualizerBackend : public QObject {
     Q_PROPERTY(QVariantMap keyVisualizerSettings READ keyVisualizerSettings CONSTANT)
     Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
     Q_PROPERTY(bool keyCaptureAvailable READ keyCaptureAvailable NOTIFY keyCaptureAvailableChanged)
+    Q_PROPERTY(bool keyCaptureGrantPending READ keyCaptureGrantPending CONSTANT)
 public:
     QVariantMap keyVisualizerSettings() const {
         return {{QStringLiteral("fontSize"), QStringLiteral("md")},
@@ -34,6 +35,7 @@ public:
         emit themeChanged();
     }
     bool keyCaptureAvailable() const { return m_keyCaptureAvailable; }
+    bool keyCaptureGrantPending() const { return false; }
     void setKeyCaptureAvailable(bool available) {
         m_keyCaptureAvailable = available;
         emit keyCaptureAvailableChanged();
@@ -52,6 +54,26 @@ private:
 class KeyVisualizerTest : public QObject {
     Q_OBJECT
 private slots:
+    void offersKeyboardAccessOnlyWhenGlobalCaptureIsUnavailable() {
+        VisualizerBackend backend;
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        QQmlComponent component(&engine,
+            QUrl::fromLocalFile(QFINDTESTDATA("../components/KeyVisualizer.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto *button = object->findChild<QQuickItem *>(
+            QStringLiteral("key-capture-access-button"));
+        QVERIFY(button);
+        QVERIFY(!button->isVisible());
+        QTRY_VERIFY(button->isVisible());
+        QCOMPARE(object->property("implicitHeight").toReal(), 136.0);
+        backend.setKeyCaptureAvailable(true);
+        QVERIFY(!button->isVisible());
+        QCOMPARE(object->property("implicitHeight").toReal(), 78.0);
+    }
+
     void spacesOnlySpecialKeysAndShortcuts() {
         VisualizerBackend backend;
         QQmlEngine engine;
@@ -341,7 +363,7 @@ private slots:
         auto *repeater = object->findChild<QQuickItem *>(
             QStringLiteral("dock-component-launcher-repeater"));
         QVERIFY(repeater);
-        QCOMPARE(repeater->property("count").toInt(), 10);
+        QCOMPARE(repeater->property("count").toInt(), 11);
         const QString keyName = QStringLiteral("dock-component-launcher-key-visualizer");
         QQuickItem *keys = nullptr;
         QQuickItem *first = nullptr;

@@ -11,14 +11,17 @@ Item {
         : defaultPadding + (settings.padding === "lg" ? 12 : 0)
     readonly property int defaultHeight: settings.fontSize === "sm" ? 64
         : settings.fontSize === "lg" ? 96 : 78
+    readonly property int keyAreaHeight: settings.padding === "sm"
+        ? Math.ceil(measure.implicitHeight) + 8
+        : defaultHeight + (settings.padding === "lg" ? 24 : 0)
+    property bool showAccessPrompt: false
     property var history: []
     readonly property string displayText: formatHistory(false)
     readonly property string styledText: formatHistory(true)
     implicitWidth: settings.widthMode === "fixed" ? settings.maxWidth
-        : Math.max(settings.minWidth,
+        : Math.max(showAccessPrompt ? 300 : settings.minWidth,
             Math.min(settings.maxWidth, measure.implicitWidth + padding * 2))
-    implicitHeight: settings.padding === "sm" ? Math.ceil(measure.implicitHeight) + 8
-        : defaultHeight + (settings.padding === "lg" ? 24 : 0)
+    implicitHeight: keyAreaHeight + (showAccessPrompt ? 58 : 0)
     focus: true
 
     function symbolFor(key) {
@@ -169,6 +172,24 @@ Item {
         onTriggered: visualizer.history = []
     }
 
+    Timer {
+        id: accessPromptTimer
+        interval: 900
+        onTriggered: {
+            if (visualizer.visible && !backend.keyCaptureAvailable)
+                visualizer.showAccessPrompt = true
+        }
+    }
+
+    Connections {
+        target: backend
+        function onKeyCaptureAvailableChanged() {
+            visualizer.showAccessPrompt = false
+            if (!backend.keyCaptureAvailable && visualizer.visible)
+                accessPromptTimer.restart()
+        }
+    }
+
     Text {
         id: measure
         visible: false
@@ -185,7 +206,10 @@ Item {
 
         Text {
             objectName: "key-visualizer-display"
-            anchors.fill: parent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: visualizer.keyAreaHeight
             anchors.leftMargin: visualizer.padding
             anchors.rightMargin: visualizer.padding
             text: visualizer.styledText
@@ -201,12 +225,58 @@ Item {
             elide: Text.ElideLeft
             maximumLineCount: 1
         }
+
+        Text {
+            visible: visualizer.showAccessPrompt
+            anchors.left: parent.left
+            anchors.leftMargin: 14
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 17
+            text: "Keys everywhere: off"
+            color: Theme.text
+            font.pixelSize: 12
+        }
+
+        Rectangle {
+            objectName: "key-capture-access-button"
+            visible: visualizer.showAccessPrompt
+            anchors.right: parent.right
+            anchors.rightMargin: 12
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 9
+            width: 134
+            height: 32
+            radius: 10
+            color: Theme.accent
+
+            Text {
+                anchors.centerIn: parent
+                text: backend.keyCaptureGrantPending ? "Waiting..." : "Allow temporarily"
+                color: Theme.cardSurface
+                font.pixelSize: 11
+                font.weight: Font.Medium
+            }
+            MouseArea {
+                anchors.fill: parent
+                enabled: !backend.keyCaptureGrantPending
+                onClicked: backend.grantKeyCaptureAccess()
+            }
+        }
     }
 
     Component.onCompleted: {
-        if (visible) forceActiveFocus()
+        if (visible) {
+            forceActiveFocus()
+            accessPromptTimer.start()
+        }
     }
     onVisibleChanged: {
-        if (visible) forceActiveFocus()
+        if (visible) {
+            forceActiveFocus()
+            accessPromptTimer.restart()
+        } else {
+            accessPromptTimer.stop()
+            showAccessPrompt = false
+        }
     }
 }

@@ -62,6 +62,7 @@ class Backend : public QObject {
     Q_PROPERTY(QVariantMap dateTimeSettings READ dateTimeSettings NOTIFY dateTimeSettingsChanged)
     Q_PROPERTY(QString settingsSectionRequest READ settingsSectionRequest NOTIFY settingsSectionRequestChanged)
     Q_PROPERTY(bool keyCaptureAvailable READ keyCaptureAvailable NOTIFY keyCaptureAvailableChanged)
+    Q_PROPERTY(bool keyCaptureGrantPending READ keyCaptureGrantPending NOTIFY keyCaptureGrantPendingChanged)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -118,6 +119,7 @@ public:
     QVariantMap dateTimeSettings() const { return m_dateTimeSettings; }
     QString settingsSectionRequest() const { return m_settingsSectionRequest; }
     bool keyCaptureAvailable() const { return m_keyCaptureAvailable; }
+    bool keyCaptureGrantPending() const { return m_keyCaptureGrantPending; }
 
     Q_INVOKABLE void togglePlayback();
     Q_INVOKABLE void nextTrack();
@@ -166,6 +168,7 @@ public:
         bool showSeconds) const;
     Q_INVOKABLE void startKeyCapture();
     Q_INVOKABLE void stopKeyCapture();
+    Q_INVOKABLE void grantKeyCaptureAccess();
 
 signals:
     void systemChanged();
@@ -185,6 +188,7 @@ signals:
     void dateTimeSettingsChanged();
     void settingsSectionRequestChanged();
     void keyCaptureAvailableChanged();
+    void keyCaptureGrantPendingChanged();
     void globalKeyPressed(const QString &name, const QString &text,
         bool shift, bool ctrl, bool alt, bool super);
     void globalKeyReleased(const QString &name);
@@ -277,8 +281,10 @@ private:
     QFileSystemWatcher m_settingsSectionRequestWatcher;
     QString m_settingsSectionRequest;
     QProcess m_keyCapture;
+    QProcess m_keyCaptureGrant;
     QByteArray m_keyCaptureBuffer;
     bool m_keyCaptureAvailable = false;
+    bool m_keyCaptureGrantPending = false;
     bool m_keyCaptureRequested = false;
     bool m_keyCaptureTriedEvdev = false;
 };

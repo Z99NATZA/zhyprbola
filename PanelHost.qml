@@ -127,6 +127,7 @@ Window {
 
     MouseArea {
         anchors.fill: keyVisualizer
+        z: -1
         visible: host.panelName === "key-visualizer"
         onClicked: {
             host.requestActivate()

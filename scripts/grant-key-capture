@@ -19,5 +19,12 @@ if ((${#devices[@]} == 0)); then
     exit 1
 fi
 
-sudo setfacl -m "u:$(id -u):r" "${devices[@]}"
-printf 'Temporary read access granted to %s keyboard device(s). Reopen Key visualizer.\n' "${#devices[@]}"
+if ((EUID == 0)); then
+    [[ -n "${PKEXEC_UID:-}" ]] || { printf 'Missing requesting user.\n' >&2; exit 1; }
+    requester="$PKEXEC_UID"
+    setfacl -m "u:${requester}:r" "${devices[@]}"
+else
+    requester="$(id -u)"
+    sudo setfacl -m "u:${requester}:r" "${devices[@]}"
+fi
+printf 'Temporary read access granted to %s keyboard device(s).\n' "${#devices[@]}"

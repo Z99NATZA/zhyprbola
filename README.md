@@ -59,10 +59,13 @@ make run-panel
 # Key visualizer settings are under Settings > Keys. While its bubble is visible,
 # the panel shows keys typed in other applications only when GNOME grants
 # keyboard monitoring or keyboard-device read access is granted. On GNOME
-# Wayland, grant temporary read access to keyboard devices, then reopen it:
+# Wayland, use the "Allow temporarily" button in Key visualizer when prompted.
+# If the desktop cannot show the authorization dialog, grant temporary read
+# access from a terminal and reopen Key visualizer:
 ./scripts/grant-key-capture
-# This prompts for sudo, lasts until reboot/device reconnect, and allows other
-# programs running as your user to read those devices too. Do not use it on a
+# The button opens system authentication; the terminal command prompts for
+# sudo. Access lasts until reboot/device reconnect and allows other programs
+# running as your user to read those devices too. Do not use it on a
 # shared account. Minimize Key visualizer before entering passwords.
 
 # Edge spectrum is managed by the GNOME dock extension. Enable it and choose

@@ -345,6 +345,22 @@ Backend::Backend(QObject *parent) : QObject(parent) {
                 && m_keyCaptureRequested && !m_keyCaptureTriedEvdev)
                 startEvdevKeyCapture();
         });
+    connect(&m_keyCaptureGrant, &QProcess::finished, this,
+        [this](int exitCode, QProcess::ExitStatus status) {
+            m_keyCaptureGrantPending = false;
+            emit keyCaptureGrantPendingChanged();
+            if (status == QProcess::NormalExit && exitCode == 0
+                && m_keyCaptureRequested) {
+                stopKeyCapture();
+                startKeyCapture();
+            }
+        });
+    connect(&m_keyCaptureGrant, &QProcess::errorOccurred, this,
+        [this](QProcess::ProcessError error) {
+            if (error != QProcess::FailedToStart) return;
+            m_keyCaptureGrantPending = false;
+            emit keyCaptureGrantPendingChanged();
+        });
     QFile dockPositionFile(dockConfigPath(QStringLiteral("dock-position")));
     if (dockPositionFile.open(QIODevice::ReadOnly)) {
         const QString position = QString::fromUtf8(dockPositionFile.readAll()).trimmed();
@@ -753,6 +769,16 @@ void Backend::stopKeyCapture() {
     m_keyCaptureBuffer.clear();
 }
 
+void Backend::grantKeyCaptureAccess() {
+    if (m_keyCaptureAvailable || m_keyCaptureGrantPending) return;
+    const QString script = QDir(QCoreApplication::applicationDirPath())
+        .absoluteFilePath(QStringLiteral("../scripts/grant-key-capture"));
+    if (!QFileInfo(script).isExecutable()) return;
+    m_keyCaptureGrantPending = true;
+    emit keyCaptureGrantPendingChanged();
+    m_keyCaptureGrant.start(QStringLiteral("pkexec"), {script});
+}
+
 void Backend::readKeyCapture() {
     m_keyCaptureBuffer.append(m_keyCapture.readAllStandardOutput());
     if (m_keyCaptureBuffer.size() > 65536) m_keyCaptureBuffer.clear();
@@ -983,6 +1009,13 @@ void Backend::deleteTask(const QString &id) {
 
 Backend::~Backend() {
     stopKeyCapture();
+    if (m_keyCaptureGrant.state() != QProcess::NotRunning) {
+        m_keyCaptureGrant.terminate();
+        if (!m_keyCaptureGrant.waitForFinished(500)) {
+            m_keyCaptureGrant.kill();
+            m_keyCaptureGrant.waitForFinished(500);
+        }
+    }
     if (m_cava.state() != QProcess::NotRunning) {
         m_cava.terminate();
         if (!m_cava.waitForFinished(500)) {
