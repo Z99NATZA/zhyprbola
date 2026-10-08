@@ -63,9 +63,19 @@ Item {
     }
 
     function formatHistory(styled) {
+        const grouped = []
+        let previous = ""
+        for (const token of history) {
+            const shortcut = /^((?:(?:Ctrl|Alt|Super|Shift)\+)+)([a-z])$/i.exec(token)
+            if (shortcut && token === previous)
+                grouped[grouped.length - 1] += shortcut[2]
+            else
+                grouped.push(token)
+            previous = token
+        }
         let result = ""
         let previousSpecial = false
-        for (const token of history) {
+        for (const token of grouped) {
             const special = isSpecialKey(token) || /^(Ctrl|Alt|Super|Shift)\+/.test(token)
             if (result && (previousSpecial || special)) result += " "
             result += styled ? styledToken(token, Theme.accent.toString()) : token

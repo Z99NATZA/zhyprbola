@@ -102,11 +102,22 @@ private slots:
                  QStringLiteral("Super+a"), QStringLiteral("Ctrl+Alt+a")}) {
             check({"a", "b", key, "c", "d"}, QStringLiteral("ab ") + key + " cd");
             check({key}, key);
-            check({key, key}, key + " " + key);
+            check({key, key}, key.contains(QLatin1Char('+'))
+                ? key + key.right(1) : key + " " + key);
         }
         check({"h", "e", "l", "l", "o", QString::fromUtf8("␣"),
                   "w", "o", "r", "l", "d", "Ctrl+a", QString::fromUtf8("⌫")},
             QString::fromUtf8("hello ␣ world Ctrl+a ⌫"));
+        QVariantList repeatedShortcuts;
+        for (int i = 0; i < 13; ++i) repeatedShortcuts.append(QStringLiteral("Ctrl+k"));
+        check(repeatedShortcuts, QStringLiteral("Ctrl+kkkkkkkkkkkkk"));
+        repeatedShortcuts.append(QStringLiteral("Ctrl+x"));
+        repeatedShortcuts.append(QStringLiteral("Ctrl+k"));
+        check(repeatedShortcuts, QStringLiteral("Ctrl+kkkkkkkkkkkkk Ctrl+x Ctrl+k"));
+        object->setProperty("history", QVariantList{QStringLiteral("Ctrl+k"),
+            QStringLiteral("Ctrl+k")});
+        QCOMPARE(object->property("styledText").toString().count(
+            QStringLiteral("Ctrl+</font>")), 1);
         object->setProperty("history", QVariantList{QStringLiteral("helloworld123")});
         const qreal wordWidth = object->property("implicitWidth").toReal();
         QVERIFY(wordWidth > 180);
@@ -596,13 +607,13 @@ private slots:
             emit backend.globalKeyPressed(QStringLiteral("a"), QString(),
                 false, true, false, false);
         QCOMPARE(object->property("displayText").toString(),
-            QStringLiteral("AAA Ctrl+a Ctrl+a"));
+            QStringLiteral("AAA Ctrl+aa"));
         emit backend.globalKeyReleased(QStringLiteral("a"));
         emit backend.globalKeyReleased(QStringLiteral("Control_L"));
         emit backend.globalKeyPressed(QStringLiteral("a"), QStringLiteral("a"),
             false, false, false, false);
         QCOMPARE(object->property("displayText").toString(),
-            QStringLiteral("AAA Ctrl+a Ctrl+a a"));
+            QStringLiteral("AAA Ctrl+aa a"));
     }
 
     void rendersGlobalKeysWithoutWindowFocus() {
