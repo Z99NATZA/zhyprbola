@@ -4,7 +4,8 @@ Item {
     id: panel
 
     width: 660
-    height: 510
+    implicitHeight: Math.max(510, Math.ceil(76 + keyVisualizerColumn.height + 12))
+    height: implicitHeight
     property string section: "themes"
     signal closeRequested()
     readonly property int contentRowHeight: 46
@@ -431,10 +432,12 @@ Item {
         }
     }
 
-    Column {
+    Grid {
+        id: themeGrid
         x: panel.contentX
         y: 76
         width: panel.contentWidth
+        columns: 2
         spacing: panel.contentItemGap
         visible: panel.section === "themes"
 
@@ -443,7 +446,7 @@ Item {
 
             delegate: Rectangle {
                 required property var modelData
-                width: panel.contentWidth
+                width: (themeGrid.width - themeGrid.spacing) / themeGrid.columns
                 height: panel.contentRowHeight
                 radius: 11
                 color: backend.themeName === modelData.key
@@ -462,6 +465,8 @@ Item {
                 Text {
                     x: 47
                     anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - x - 36
+                    elide: Text.ElideRight
                     text: modelData.label
                     color: Theme.text
                     font.family: Qt.application.font.family

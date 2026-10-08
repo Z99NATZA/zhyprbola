@@ -32,7 +32,7 @@ Window {
         case "system-status": return 195
         case "music": return 254
         case "sound": return sound.error.length > 0 ? 214 : 184
-        case "settings": return 510
+        case "settings": return settingsPanel.implicitHeight
         case "todo": return 360
         case "calendar": return 314
         default: return 548
@@ -167,6 +167,7 @@ Window {
     }
 
     SettingsPanel {
+        id: settingsPanel
         anchors.centerIn: parent
         visible: host.panelName === "settings"
         onCloseRequested: host.showMinimized()
