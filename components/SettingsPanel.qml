@@ -528,6 +528,7 @@ Item {
     }
 
     component ScreenshotPositionChoice: Rectangle {
+        id: positionChoice
         property string label
         property bool chosen: false
         signal clicked()
@@ -537,9 +538,21 @@ Item {
         color: chosen ? Theme.selected : (choiceMouse.containsMouse ? Theme.controlHover : Theme.control)
         Text {
             anchors.centerIn: parent
-            text: parent.label
+            text: positionChoice.label
             color: Theme.text
             font.pixelSize: 13
+        }
+        Text {
+            objectName: "screenshot-position-check-" + positionChoice.label.toLowerCase()
+            anchors.right: parent.right
+            anchors.rightMargin: 9
+            anchors.verticalCenter: parent.verticalCenter
+            visible: positionChoice.chosen
+            text: "✓"
+            color: Theme.accent
+            font.family: Qt.application.font.family
+            font.pixelSize: 15
+            font.weight: Font.Bold
         }
         MouseArea {
             id: choiceMouse
@@ -1663,6 +1676,20 @@ Item {
                             === modelData.key ? Font.DemiBold : Font.Normal
                     }
 
+                    Text {
+                        objectName: "date-time-choice-check-"
+                            + choiceRow.title.toLowerCase() + "-" + modelData.key
+                        anchors.right: parent.right
+                        anchors.rightMargin: 9
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: choiceRow.selectedKey === modelData.key
+                        text: "✓"
+                        color: Theme.accent
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
+                    }
+
                     MouseArea {
                         id: choiceMouse
                         anchors.fill: parent
@@ -1789,6 +1816,19 @@ Item {
                                 font.family: Qt.application.font.family
                                 font.pixelSize: 11
                             }
+                        }
+
+                        Text {
+                            objectName: "date-time-date-format-check-" + modelData
+                            anchors.right: parent.right
+                            anchors.rightMargin: 11
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: backend.dateTimeSettings.dateFormat === modelData
+                            text: "✓"
+                            color: Theme.accent
+                            font.family: Qt.application.font.family
+                            font.pixelSize: 15
+                            font.weight: Font.Bold
                         }
 
                         MouseArea {
