@@ -149,20 +149,20 @@ Restore never overwrites an existing file.
 
 ## Commands
 
-```text
-Build, install, and enable the dock
-$ make dock
+```bash
+# Build, install, and enable the dock
+make dock
 
-Run panels directly while developing
-$ ./scripts/run-panel bluetooth
-$ ./scripts/run-panel wifi
-$ ./scripts/run-panel clock-weather
-$ ./scripts/run-panel key-visualizer
-$ ./scripts/run-panel system-status
-$ ./scripts/run-panel audio-spectrum
-$ ./scripts/run-panel sound
-$ ./scripts/run-panel tasks
-$ ./scripts/run-panel screenshots
+# Run panels directly while developing
+./scripts/run-panel bluetooth
+./scripts/run-panel wifi
+./scripts/run-panel clock-weather
+./scripts/run-panel key-visualizer
+./scripts/run-panel system-status
+./scripts/run-panel audio-spectrum
+./scripts/run-panel sound
+./scripts/run-panel tasks
+./scripts/run-panel screenshots
 ```
 
 ## Integrations
@@ -232,15 +232,15 @@ Closed windows and windows moved to another workspace are skipped during restore
 
 ### Popup Lifecycle
 
-```text
-Dock popups open only through explicit activation.
-Hover and keyboard focus do not switch the open popup.
+```bash
+# Dock popups open only through explicit activation.
+# Hover and keyboard focus do not switch the open popup.
 
-Sound, Brightness, and Battery remain Shell popups when opened from Settings,
-Quick, or overflow. They never spawn fallback QML windows.
+# Sound, Brightness, and Battery remain Shell popups when opened from Settings,
+# Quick, or overflow. They never spawn fallback QML windows.
 
-The standalone Sound panel remains available for development:
-$ ./scripts/run-panel sound
+# The standalone Sound panel remains available for development:
+./scripts/run-panel sound
 ```
 
 ### Brightness Fallback
@@ -258,29 +258,31 @@ Package udev rules normally provide this access.
 
 ### Key Capture
 
-```text
-Typed characters are grouped. Special keys and shortcuts receive spacing.
-Repeated letter shortcuts stay in one run.
+```bash
+# Typed characters are grouped. Special keys and shortcuts receive spacing.
+# Repeated letter shortcuts stay in one run.
 
-Held keys use GNOME's repeat delay and interval.
-Modifier keys are not displayed by themselves.
+# Held keys use GNOME's repeat delay and interval.
+# Modifier keys are not displayed by themselves.
 
-Evdev capture:
-- tracks held keys per device
-- merges events by timestamp
-- suppresses mirrored key-downs
-- reads Caps Lock and Num Lock LEDs
-- resyncs after dropped events or disconnects
-- stops when the visualizer is minimized
+# Evdev capture:
+# - tracks held keys per device
+# - merges events by timestamp
+# - suppresses mirrored key-downs
+# - reads Caps Lock and Num Lock LEDs
+# - resyncs after dropped events or disconnects
+# - stops when the visualizer is minimized
 
-GNOME 50 on Wayland may deny AT-SPI monitoring.
-Grant temporary read access, then reopen the visualizer:
-$ ./scripts/grant-key-capture
-Access ends after reboot or device reconnect.
+# GNOME 50 on Wayland may deny AT-SPI monitoring.
+# Grant temporary read access, then reopen the visualizer:
 
-Keyboard access is sensitive. Other processes running as the same user may read
-the granted devices, and typed secrets can appear in the bubble. Minimize the
-visualizer before entering passwords.
+./scripts/grant-key-capture
+
+# Access ends after reboot or device reconnect.
+
+# Keyboard access is sensitive. Other processes running as the same user may read
+# the granted devices, and typed secrets can appear in the bubble. Minimize the
+# visualizer before entering passwords.
 ```
 
 ### Screenshots Lifecycle
@@ -342,8 +344,8 @@ bedroom wallpaper.
 
 ### Weather Override
 
-```text
-$ ZHYPRBOLA_LATITUDE=13.7563 \
+```bash
+ZHYPRBOLA_LATITUDE=13.7563 \
 ZHYPRBOLA_LONGITUDE=100.5018 \
 ZHYPRBOLA_LOCATION=Bangkok \
 make dock
