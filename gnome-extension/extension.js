@@ -75,7 +75,7 @@ const THEMES = [
     {name: 'forest', wallpaper: '4.png', iconColor: '#477f6d'},
     {name: 'one-half-gray', wallpaper: '5.png', iconColor: '#68717d'},
     {name: 'red', wallpaper: '6.png', iconColor: '#b83252'},
-    {name: 'mauve', wallpaper: '7.png', iconColor: '#c45478'},
+    {name: 'mauve', wallpaper: '7.png', iconColor: '#be345f'},
     {name: 'silver-dawn', wallpaper: '8.png', iconColor: '#6275a6'},
 ];
 

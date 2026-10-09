@@ -190,13 +190,13 @@
 }
 
 .zhyprbola-quick-mauve .zhyprbola-quick-button {
-    background-color: #c45478;
+    background-color: #be345f;
 }
 
 .zhyprbola-quick-mauve .zhyprbola-quick-button:hover,
 .zhyprbola-quick-mauve .zhyprbola-quick-button:focus,
 .zhyprbola-quick-mauve .zhyprbola-quick-button:active {
-    background-color: #a74766;
+    background-color: #9f2c50;
 }
 
 .zhyprbola-quick-icon {
@@ -331,7 +331,7 @@
 .zhyprbola-input-source-mauve .zhyprbola-input-source-item:focus,
 .zhyprbola-input-source-mauve .zhyprbola-input-source-item:active,
 .zhyprbola-input-source-mauve .zhyprbola-input-source-item:selected {
-    background-color: #f7dce5 !important;
+    background-color: #f8d6e0 !important;
 }
 
 .zhyprbola-input-source-code {
@@ -364,7 +364,7 @@
 }
 
 .zhyprbola-dock-mauve {
-    background-color: rgba(196, 84, 120, 0.5);
+    background-color: rgba(190, 52, 95, 0.5);
 }
 
 .zhyprbola-power-menu.zhyprbola-power-current .popup-menu-item:hover {
@@ -392,7 +392,7 @@
 }
 
 .zhyprbola-power-menu.zhyprbola-power-mauve .popup-menu-item:hover {
-    background-color: rgba(196, 84, 120, 0.18) !important;
+    background-color: rgba(190, 52, 95, 0.18) !important;
 }
 
 .zhyprbola-quick-silver-dawn .zhyprbola-quick-button {

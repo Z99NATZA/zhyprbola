@@ -336,7 +336,7 @@ White Sky       -> wallpapers/3.png
 Forest Calm     -> wallpapers/4.png
 One Half Gray   -> wallpapers/5.png
 Red             -> wallpapers/6.png
-Mauve           -> wallpapers/7.png
+Sakura          -> wallpapers/7.png
 Silver Dawn     -> wallpapers/8.png
 
 Silver Dawn uses a silver-blue and lavender palette with the supplied morning

@@ -65,7 +65,7 @@ Item {
         {key: "forest", label: "Forest Calm", accent: "#477F6D"},
         {key: "one-half-gray", label: "One Half Gray", accent: "#68717D"},
         {key: "red", label: "Red", accent: "#B83252"},
-        {key: "mauve", label: "Mauve", accent: "#C45478"},
+        {key: "mauve", label: "Sakura", accent: "#BE345F"},
         {key: "silver-dawn", label: "Silver Dawn", accent: "#6275A6"}
     ]
     readonly property var positions: [
