@@ -313,7 +313,12 @@ One resident QML process is controlled through D-Bus.
 Hiding preserves its model, selection, clipboard owner, and thumbnail cache.
 
 The preview is transparent, borderless, and resizable.
-It closes with the browser. Its close icon stays 20 px from the image corner.
+Double-clicking an image opens its preview and hides the browser.
+The preview closes with Escape or its close icon; the browser stays hidden.
+Reopening or hiding the browser through the handle keeps the preview open.
+Each double-click opens a separate preview, including for the same image,
+and hides the browser again. Closing one preview leaves the others open.
+Its close icon stays 20 px from the image corner.
 
 Deletion has no confirmation.
 Undo data remains in .zhyprbola-trash until restored and is not purged automatically.

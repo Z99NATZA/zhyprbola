@@ -18,7 +18,9 @@ Window {
     function openPreview(index) {
         const row = images.itemAtIndex(index)
         if (!row) return
-        preview.imageUrl = row.imageUrl
+        const preview = previewComponent.createObject(host, {imageUrl: row.imageUrl})
+        if (!preview) return
+        screenshots.dismiss()
         preview.width = 660
         preview.height = 510
         preview.x = Math.round(Screen.virtualX + (Screen.width - preview.width) / 2)
@@ -33,7 +35,6 @@ Window {
     Shortcut { sequence: "Ctrl+Z"; onActivated: screenshots.undo() }
     Shortcut { sequence: "Escape"; onActivated: screenshots.dismiss() }
     onActiveChanged: { if (active) screenshots.refresh() }
-    onVisibleChanged: { if (!visible) preview.dismiss() }
     onClosing: function(close) {
         close.accepted = false
         screenshots.dismiss()
@@ -321,105 +322,109 @@ Window {
         }
     }
 
-    Window {
-        id: preview
-        objectName: "screenshotPreviewWindow"
-        property url imageUrl
-        visible: false
-        transientParent: host
-        modality: Qt.WindowModal
-        flags: Qt.FramelessWindowHint | Qt.Dialog
-        color: "transparent"
-        width: 660
-        height: 510
-        minimumWidth: 240
-        minimumHeight: 180
-        title: "Zhyprbola Screenshot Preview"
+    Component {
+        id: previewComponent
+        Window {
+            id: preview
+            objectName: "screenshotPreviewWindow"
+            property url imageUrl
+            visible: false
+            transientParent: null
+            modality: Qt.NonModal
+            flags: Qt.FramelessWindowHint | Qt.Dialog
+            color: "transparent"
+            width: 660
+            height: 510
+            minimumWidth: 240
+            minimumHeight: 180
+            title: "Zhyprbola Screenshot Preview"
 
-        function dismiss() {
-            visible = false
-            imageUrl = ""
-        }
-
-        onClosing: function(close) {
-            close.accepted = false
-            dismiss()
-        }
-
-        Shortcut { sequence: "Escape"; onActivated: preview.dismiss() }
-
-        Image {
-            id: fullImage
-            objectName: "screenshotPreviewImage"
-            anchors.fill: parent
-            source: preview.imageUrl
-            fillMode: Image.PreserveAspectFit
-            asynchronous: true
-            cache: false
-        }
-
-        Item {
-            id: previewClose
-            objectName: "screenshotPreviewCloseButton"
-            width: 32
-            height: 32
-            x: (fullImage.paintedWidth > 0
-                ? (preview.width + fullImage.paintedWidth) / 2 : preview.width) - width - 20
-            y: (fullImage.paintedHeight > 0
-                ? (preview.height - fullImage.paintedHeight) / 2 : 0) + 20
-
-            Text {
-                anchors.centerIn: parent
-                text: "×"
-                color: "white"
-                style: Text.Outline
-                styleColor: "#88000000"
-                font.pixelSize: 30
-                font.weight: Font.Bold
+            function dismiss() {
+                visible = false
+                imageUrl = ""
+                destroy()
             }
 
-            MouseArea {
+            onClosing: function(close) {
+                close.accepted = false
+                dismiss()
+            }
+
+            Shortcut { sequence: "Escape"; onActivated: preview.dismiss() }
+
+            Image {
+                id: fullImage
+                objectName: "screenshotPreviewImage"
                 anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: preview.dismiss()
+                source: preview.imageUrl
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+                cache: false
             }
-        }
 
-        Item {
-            objectName: "screenshotPreviewResizeHandle"
-            width: 28
-            height: 28
-            x: (fullImage.paintedWidth > 0
-                ? (preview.width + fullImage.paintedWidth) / 2 : preview.width) - width
-            y: (fullImage.paintedHeight > 0
-                ? (preview.height + fullImage.paintedHeight) / 2 : preview.height) - height
+            Item {
+                id: previewClose
+                objectName: "screenshotPreviewCloseButton"
+                width: 32
+                height: 32
+                x: (fullImage.paintedWidth > 0
+                    ? (preview.width + fullImage.paintedWidth) / 2 : preview.width) - width - 20
+                y: (fullImage.paintedHeight > 0
+                    ? (preview.height - fullImage.paintedHeight) / 2 : 0) + 20
 
-            Canvas {
-                anchors.centerIn: parent
-                width: 16
-                height: 16
-                onPaint: {
-                    const ctx = getContext("2d")
-                    ctx.reset()
-                    ctx.lineCap = "round"
-                    for (const stroke of [{color: "#88000000", width: 3},
-                            {color: "white", width: 1.5}]) {
-                        ctx.strokeStyle = stroke.color
-                        ctx.lineWidth = stroke.width
-                        ctx.beginPath()
-                        ctx.moveTo(3, 14)
-                        ctx.lineTo(14, 3)
-                        ctx.moveTo(9, 14)
-                        ctx.lineTo(14, 9)
-                        ctx.stroke()
-                    }
+                Text {
+                    anchors.centerIn: parent
+                    text: "×"
+                    color: "white"
+                    style: Text.Outline
+                    styleColor: "#88000000"
+                    font.pixelSize: 30
+                    font.weight: Font.Bold
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: preview.dismiss()
                 }
             }
 
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.SizeFDiagCursor
-                onPressed: preview.startSystemResize(Qt.RightEdge | Qt.BottomEdge)
+            Item {
+                objectName: "screenshotPreviewResizeHandle"
+                width: 28
+                height: 28
+                x: (fullImage.paintedWidth > 0
+                    ? (preview.width + fullImage.paintedWidth) / 2 : preview.width) - width
+                y: (fullImage.paintedHeight > 0
+                    ? (preview.height + fullImage.paintedHeight) / 2 : preview.height) - height
+
+                Canvas {
+                    anchors.centerIn: parent
+                    width: 16
+                    height: 16
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.reset()
+                        ctx.lineCap = "round"
+                        for (const stroke of [{color: "#88000000", width: 3},
+                                {color: "white", width: 1.5}]) {
+                            ctx.strokeStyle = stroke.color
+                            ctx.lineWidth = stroke.width
+                            ctx.beginPath()
+                            ctx.moveTo(3, 14)
+                            ctx.lineTo(14, 3)
+                            ctx.moveTo(9, 14)
+                            ctx.lineTo(14, 9)
+                            ctx.stroke()
+                        }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.SizeFDiagCursor
+                    onPressed: preview.startSystemResize(Qt.RightEdge | Qt.BottomEdge)
+                }
             }
         }
     }

@@ -8,6 +8,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlPropertyMap>
+#include <QPointer>
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QWheelEvent>
@@ -186,15 +187,19 @@ private slots:
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
         QVERIFY(window);
         QVERIFY(QTest::qWaitForWindowExposed(window));
-        auto *preview = window->findChild<QQuickWindow *>("screenshotPreviewWindow");
-        QVERIFY(preview);
-        QVERIFY(!preview->isVisible());
+        QVERIFY(!window->findChild<QQuickWindow *>("screenshotPreviewWindow"));
+        QSignalSpy dismissed(&model, &ScreenshotBackend::dismissRequested);
 
         QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(200, 95));
+        QPointer<QQuickWindow> preview = window->findChild<QQuickWindow *>("screenshotPreviewWindow");
+        QVERIFY(preview);
         QTRY_VERIFY(preview->isVisible());
         QCOMPARE(model.selectedPaths(), QStringList{path});
-        QCOMPARE(preview->transientParent(), window);
-        QCOMPARE(preview->modality(), Qt::WindowModal);
+        QVERIFY(!window->isVisible());
+        QVERIFY(!model.opened());
+        QCOMPARE(dismissed.count(), 1);
+        QVERIFY(!preview->transientParent());
+        QCOMPARE(preview->modality(), Qt::NonModal);
         QVERIFY(preview->flags() & Qt::FramelessWindowHint);
         QCOMPARE(preview->color().alpha(), 0);
         QCOMPARE(preview->size(), QSize(660, 510));
@@ -228,12 +233,43 @@ private slots:
         const QPoint closePoint = close->mapToScene(
             QPointF(close->width() / 2, close->height() / 2)).toPoint();
         QTest::mouseClick(preview, Qt::LeftButton, Qt::NoModifier, closePoint);
-        QTRY_VERIFY(!preview->isVisible());
-        QVERIFY(window->isVisible());
+        QTRY_VERIFY(preview.isNull());
+        QVERIFY(!window->isVisible());
+        model.Show();
+        QVERIFY(QTest::qWaitForWindowExposed(window));
         QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(200, 95));
+        preview = window->findChild<QQuickWindow *>("screenshotPreviewWindow");
+        QVERIFY(preview);
         QTRY_VERIFY(preview->isVisible());
+        model.Show();
+        QTRY_VERIFY(window->isVisible());
+        QVERIFY(preview->isVisible());
         model.Hide();
-        QTRY_VERIFY(!preview->isVisible());
+        QVERIFY(!window->isVisible());
+        QVERIFY(preview->isVisible());
+
+        // Reopening the same image creates another window without replacing the first.
+        model.Show();
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(200, 95));
+        auto previews = window->findChildren<QQuickWindow *>("screenshotPreviewWindow");
+        QCOMPARE(previews.size(), 2);
+        QPointer<QQuickWindow> second = previews[0] == preview ? previews[1] : previews[0];
+        QVERIFY(second != preview);
+        QTRY_VERIFY(second->isVisible());
+        QVERIFY(preview->isVisible());
+        QCOMPARE(preview->size(), QSize(660, 510));
+        QVERIFY(!window->isVisible());
+        QTest::keyClick(second, Qt::Key_Escape);
+        QTRY_VERIFY(second.isNull());
+        QVERIFY(preview->isVisible());
+        QCOMPARE(preview->findChild<QQuickItem *>("screenshotPreviewImage")
+            ->property("source").toUrl(), QUrl::fromLocalFile(path));
+        preview->requestActivate();
+        QVERIFY(QTest::qWaitForWindowActive(preview));
+        QTest::keyClick(preview, Qt::Key_Escape);
+        QTRY_VERIFY(preview.isNull());
+        QVERIFY(!window->isVisible());
     }
     void mouseSelectionAndKeyboardShortcuts() {
         QTemporaryDir dir;
