@@ -2,7 +2,8 @@
 
 ```text
 Flow: GNOME dock extension -> focused QML panels
-Panels: bluetooth, wifi, clock-weather, key-visualizer, system-status, audio-spectrum, sound
+Panels: bluetooth, wifi, clock-weather, key-visualizer, system-status, audio-spectrum
+Dock popups: sound, brightness, battery
 Theme: ~/.config/zhyprbola/theme
 Dock position: ~/.config/zhyprbola/dock-position
 Dock default: bottom

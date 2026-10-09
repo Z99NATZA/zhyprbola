@@ -92,6 +92,7 @@ function fixture(length = 400) {
         AppMenu: NativeAppMenu,
         SoundMenu: NativeAppMenu,
         BrightnessMenu: NativeAppMenu,
+        BatteryMenu: NativeAppMenu,
         PopupMenu: {PopupMenuManager: class {}},
         Extension: class {},
     });
@@ -784,6 +785,43 @@ test('Brightness opens from Settings on Components, toggles, and is destroyed wi
     assert.equal(menu.sourceActor, button);
     assert.equal(menu.isOpen, true);
     dock._openPanel('brightness', true);
+    assert.equal(menu.isOpen, false);
+    dock._destroyDock();
+    assert.equal(menu.destroyed, true);
+});
+
+test('Battery migrates to Quick and respects explicit saved placement', () => {
+    const {dock, context} = fixture();
+    assert.equal(dock._readDockComponents().quick.includes('battery'), true);
+    context.TextDecoder = TextDecoder;
+    for (const zone of ['visible', 'hidden', 'quick']) {
+        const saved = {visible: [], hidden: [], quick: []};
+        saved[zone] = ['battery'];
+        context.GLib.file_get_contents = () => [true,
+            new TextEncoder().encode(JSON.stringify(saved))];
+        const layout = dock._readDockComponents();
+        assert.equal(layout[zone].filter(name => name === 'battery').length, 1);
+        assert.equal(['visible', 'hidden', 'quick'].filter(key =>
+            layout[key].includes('battery')).length, 1);
+    }
+    context.GLib.file_get_contents = () => [true,
+        new TextEncoder().encode(JSON.stringify({visible: ['settings'], hidden: [], quick: ['wifi']}))];
+    const layout = dock._readDockComponents();
+    assert.equal(layout.visible.includes('battery'), false);
+    assert.equal(layout.quick.includes('battery'), true);
+});
+
+test('Battery opens from Settings on Components, toggles, and is destroyed with the dock', () => {
+    const {dock, group} = fixture();
+    dock._themeName = 'mauve';
+    dock._dockGroupsByName.set('zhyprbola', group);
+    const button = new Actor({_panelName: 'components'});
+    group.add_child(button);
+    dock._openPanel('battery', true);
+    const menu = dock._batteryMenu;
+    assert.equal(menu.sourceActor, button);
+    assert.equal(menu.isOpen, true);
+    dock._openPanel('battery', true);
     assert.equal(menu.isOpen, false);
     dock._destroyDock();
     assert.equal(menu.destroyed, true);

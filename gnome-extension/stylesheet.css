@@ -89,6 +89,7 @@
 .zhyprbola-input-source-menu .popup-menu-content,
 .zhyprbola-quick-menu .popup-menu-content,
 .zhyprbola-sound-menu .popup-menu-content,
+.zhyprbola-battery-menu .popup-menu-content,
 .zhyprbola-overflow-menu .popup-menu-content,
 .zhyprbola-power-menu .popup-menu-content {
     border: 0;
@@ -240,6 +241,36 @@
     -barlevel-height: 6px;
     -barlevel-border-width: 0;
     -slider-handle-radius: 6px;
+}
+
+.zhyprbola-battery-menu .popup-menu-content {
+    border-radius: 14px;
+    min-width: 0;
+    padding: 12px;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+}
+
+.zhyprbola-battery-row {
+    padding: 0;
+    spacing: 12px;
+}
+
+.zhyprbola-battery-icon {
+    icon-size: 28px;
+}
+
+.zhyprbola-battery-text {
+    min-width: 180px;
+    spacing: 2px;
+}
+
+.zhyprbola-battery-title {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.zhyprbola-battery-detail {
+    font-size: 12px;
 }
 
 .zhyprbola-input-source-menu .zhyprbola-input-source-item {

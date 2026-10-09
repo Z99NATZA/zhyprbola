@@ -374,7 +374,7 @@ private slots:
         auto *repeater = object->findChild<QQuickItem *>(
             QStringLiteral("dock-component-launcher-repeater"));
         QVERIFY(repeater);
-        QCOMPARE(repeater->property("count").toInt(), 11);
+        QCOMPARE(repeater->property("count").toInt(), 12);
         const QString keyName = QStringLiteral("dock-component-launcher-key-visualizer");
         QQuickItem *keys = nullptr;
         QQuickItem *first = nullptr;

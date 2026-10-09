@@ -13,6 +13,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Keyboard from 'resource:///org/gnome/shell/ui/status/keyboard.js';
 import {SoundMenu} from './soundMenu.js';
 import {BrightnessMenu} from './brightnessMenu.js';
+import {BatteryMenu} from './batteryMenu.js';
 import {ScreenshotEdge} from './screenshotEdge.js';
 
 const DockPosition = Object.freeze({
@@ -51,6 +52,7 @@ const DOCK_COMPONENTS = [
     ['music', 'Music Player'],
     ['sound', 'Sound'],
     ['brightness', 'Brightness'],
+    ['battery', 'Battery'],
     ['todo', 'Tasks'],
     ['calendar', 'Calendar'],
     ['input-source', 'Input Source'],
@@ -85,6 +87,7 @@ const PANEL_TITLES = Object.freeze({
     'audio-spectrum': 'Zhyprbola Audio Spectrum',
     music: 'Zhyprbola Music Player',
     sound: 'Zhyprbola Sound',
+    battery: 'Zhyprbola Battery',
     todo: 'Zhyprbola Tasks',
     calendar: 'Zhyprbola Calendar',
     settings: 'Zhyprbola Settings',
@@ -108,6 +111,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._appMenuApp = null;
         this._soundMenu = null;
         this._brightnessMenu = null;
+        this._batteryMenu = null;
         this._desktopWindows = new Map();
         this._layoutIdleId = 0;
         this._appRefreshId = 0;
@@ -1038,7 +1042,8 @@ export default class ZhyprbolaExtension extends Extension {
                 if (!visible.includes(name) && !hidden.includes(name) &&
                     !quick.includes(name) && name !== 'date-display'
                     && name !== 'time-display')
-                    (name === 'sound' || name === 'brightness' || name === 'key-visualizer'
+                    (name === 'sound' || name === 'brightness' || name === 'battery'
+                        || name === 'key-visualizer'
                         ? quick : visible).push(name);
             }
             for (const name of ['time-display', 'date-display']) {
@@ -1048,8 +1053,9 @@ export default class ZhyprbolaExtension extends Extension {
             return {visible, hidden, quick};
         } catch (_) {
             return {visible: defaults.filter(name =>
-                name !== 'sound' && name !== 'brightness' && name !== 'key-visualizer'),
-                hidden: [], quick: ['sound', 'brightness', 'key-visualizer']};
+                name !== 'sound' && name !== 'brightness' && name !== 'battery'
+                    && name !== 'key-visualizer'),
+                hidden: [], quick: ['sound', 'brightness', 'battery', 'key-visualizer']};
         }
     }
 
@@ -1394,6 +1400,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._soundMenu = null;
         this._brightnessMenu?.destroy();
         this._brightnessMenu = null;
+        this._batteryMenu?.destroy();
+        this._batteryMenu = null;
         this._appMenu?.destroy();
         this._appMenu = null;
         this._appMenuApp = null;
@@ -1477,6 +1485,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._soundMenu = null;
         this._brightnessMenu?.destroy();
         this._brightnessMenu = null;
+        this._batteryMenu?.destroy();
+        this._batteryMenu = null;
 
         this._appMenu?.destroy();
         this._appMenu = null;
@@ -1771,6 +1781,8 @@ export default class ZhyprbolaExtension extends Extension {
                 this._openSoundMenu(button);
             else if (panelName === 'brightness')
                 this._openBrightnessMenu(button);
+            else if (panelName === 'battery')
+                this._openBatteryMenu(button);
             else
                 this._openPanel(panelName);
         });
@@ -1877,6 +1889,8 @@ export default class ZhyprbolaExtension extends Extension {
             this._soundMenu = null;
             this._brightnessMenu?.destroy();
             this._brightnessMenu = null;
+            this._batteryMenu?.destroy();
+            this._batteryMenu = null;
             this._quickMenu?.destroy();
             this._quickMenu = null;
         }
@@ -2007,6 +2021,7 @@ export default class ZhyprbolaExtension extends Extension {
                 } else if (item.kind === 'panel')
                     item.name === 'sound' ? this._openSoundMenu(button)
                         : item.name === 'brightness' ? this._openBrightnessMenu(button)
+                            : item.name === 'battery' ? this._openBatteryMenu(button)
                             : this._openPanel(item.name);
                 else
                     item.window ? this._activateWindow(item.window) : this._activateApp(item.app);
@@ -2078,6 +2093,8 @@ export default class ZhyprbolaExtension extends Extension {
                                 this._openSoundMenu(button);
                             else if (name === 'brightness')
                                 this._openBrightnessMenu(button);
+                            else if (name === 'battery')
+                                this._openBatteryMenu(button);
                             else
                                 this._openPanel(name);
                         });
@@ -2143,6 +2160,27 @@ export default class ZhyprbolaExtension extends Extension {
         menu.open();
     }
 
+    _openBatteryMenu(button) {
+        if (this._batteryMenu?.sourceActor === button) {
+            this._batteryMenu.toggle();
+            return;
+        }
+        this._batteryMenu?.destroy();
+        const side = {
+            [DockPosition.LEFT]: St.Side.RIGHT,
+            [DockPosition.RIGHT]: St.Side.LEFT,
+            [DockPosition.TOP]: St.Side.BOTTOM,
+            [DockPosition.BOTTOM]: St.Side.TOP,
+        }[this._dockPosition];
+        const theme = THEMES.find(item => item.name === this._themeName) ?? THEMES[0];
+        const menu = new BatteryMenu(button, side, theme.iconColor);
+        Main.uiGroup.add_child(menu.actor);
+        menu.actor.hide();
+        this._menuManager.addMenu(menu);
+        this._batteryMenu = menu;
+        menu.open();
+    }
+
     _openPowerMenu(button) {
         if (this._powerMenu?.sourceActor === button) {
             this._powerMenu.toggle();
@@ -2198,13 +2236,15 @@ export default class ZhyprbolaExtension extends Extension {
             this._screenshotEdge?.toggle();
             return;
         }
-        if (panelName === 'sound' || panelName === 'brightness') {
+        if (panelName === 'sound' || panelName === 'brightness' || panelName === 'battery') {
             const buttons = this._dockGroupsByName.get('zhyprbola')?.get_children() ?? [];
             const source = buttons.find(button => button._panelName === panelName)
                 ?? buttons.find(button => button._panelName === 'components') ?? this._dock;
             if (source) {
                 if (panelName === 'brightness')
                     this._openBrightnessMenu(source);
+                else if (panelName === 'battery')
+                    this._openBatteryMenu(source);
                 else
                     this._openSoundMenu(source);
             }
