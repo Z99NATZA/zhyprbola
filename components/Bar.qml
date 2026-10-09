@@ -50,7 +50,7 @@ Item {
         // Style — same family as ClockWeather
         // --------------------------------------------------
 
-        property color surfaceColor: Theme.barSurface
+        property color surfaceColor: Theme.componentSurfaceFor("bar")
 
 
         property color textColor: Theme.text

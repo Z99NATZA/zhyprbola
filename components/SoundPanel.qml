@@ -8,7 +8,7 @@ Rectangle {
     width: 384
     height: sound.error.length > 0 ? 214 : 184
     radius: 18
-    color: Theme.panelSurface
+    color: Theme.componentSurfaceFor("sound")
     border.color: Theme.secondary
     signal closeRequested()
 

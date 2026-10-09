@@ -15,6 +15,11 @@ class ScreenshotBackend : public QAbstractListModel {
     Q_PROPERTY(QString edgeAlignment READ edgeAlignment NOTIFY positionChanged)
     Q_PROPERTY(bool opened READ opened NOTIFY openedChanged)
     Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
+    Q_PROPERTY(int componentOpacity READ componentOpacity NOTIFY componentOpacityChanged)
+    Q_PROPERTY(QStringList opacityEnabledComponents READ opacityEnabledComponents
+        NOTIFY componentOpacityChanged)
+    Q_PROPERTY(QStringList opacityDisabledComponents READ opacityDisabledComponents
+        NOTIFY componentOpacityChanged)
 public:
     explicit ScreenshotBackend(const QString &directory = {}, QObject *parent = nullptr);
     enum Roles { NameRole = Qt::UserRole + 1, PathRole, UrlRole, ModifiedRole };
@@ -28,6 +33,9 @@ public:
     QString edgeAlignment() const { return m_alignment; }
     bool opened() const { return m_opened; }
     QString themeName() const { return m_theme; }
+    int componentOpacity() const { return m_componentOpacity; }
+    QStringList opacityEnabledComponents() const { return m_opacityEnabledComponents; }
+    QStringList opacityDisabledComponents() const { return m_opacityDisabledComponents; }
     Q_INVOKABLE void dismiss();
     Q_INVOKABLE void setPosition(const QString &side, const QString &alignment);
     Q_INVOKABLE void refresh();
@@ -47,6 +55,7 @@ signals:
     void positionChanged();
     void openedChanged();
     void themeChanged();
+    void componentOpacityChanged();
     Q_SCRIPTABLE void dismissRequested();
 private:
     void setError(const QString &error);
@@ -59,6 +68,9 @@ private:
     QString m_alignment = QStringLiteral("center");
     QString m_settingsPath;
     QString m_theme = QStringLiteral("current");
+    int m_componentOpacity = 100;
+    QStringList m_opacityEnabledComponents;
+    QStringList m_opacityDisabledComponents;
     bool m_opened = true;
     QFileSystemWatcher m_watcher;
     QTimer m_refreshTimer;

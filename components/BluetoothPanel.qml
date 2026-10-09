@@ -8,7 +8,7 @@ Item {
     property string activeTab: "devices"
     property var pendingDeviceActions: ({})
     readonly property string family: Qt.application.font.family
-    readonly property color surfaceColor: Theme.panelSurface
+    readonly property color surfaceColor: Theme.componentSurfaceFor("bluetooth")
     readonly property color textColor: Theme.text
     readonly property color dimTextColor: Qt.alpha(textColor, 0.68)
     readonly property color accentColor: Theme.accent

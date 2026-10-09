@@ -28,7 +28,7 @@ Item {
         property color textColor: Theme.text
         property color dimColor: Qt.alpha(textColor, 0.68)
 
-        property color surfaceColor: Theme.cardSurface
+        property color surfaceColor: Theme.componentSurfaceFor("calendar")
 
 
         property color accentColor: Theme.accent

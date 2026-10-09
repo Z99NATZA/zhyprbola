@@ -5,7 +5,7 @@ Item {
 
     property bool opened: false
     readonly property string family: Qt.application.font.family
-    readonly property color surfaceColor: Theme.managerSurface
+    readonly property color surfaceColor: Theme.componentSurfaceFor("component-manager")
     readonly property color textColor: Theme.text
     readonly property color dimTextColor: Qt.alpha(textColor, 0.70)
     readonly property color accentColor: Theme.accent

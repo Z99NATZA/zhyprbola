@@ -119,6 +119,9 @@ private slots:
         ScreenshotBackend model(dir.path());
         QQmlPropertyMap theme;
         theme.insert("themeName", "current");
+        theme.insert("componentOpacity", 100);
+        theme.insert("opacityEnabledComponents", QStringList{});
+        theme.insert("opacityDisabledComponents", QStringList{});
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("screenshots", &model);
         engine.rootContext()->setContextProperty("backend", &theme);
@@ -172,6 +175,9 @@ private slots:
         ScreenshotBackend model(dir.path());
         QQmlPropertyMap theme;
         theme.insert("themeName", "current");
+        theme.insert("componentOpacity", 100);
+        theme.insert("opacityEnabledComponents", QStringList{});
+        theme.insert("opacityDisabledComponents", QStringList{});
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("screenshots", &model);
         engine.rootContext()->setContextProperty("backend", &theme);
@@ -239,6 +245,9 @@ private slots:
         ScreenshotBackend model(dir.path());
         QQmlPropertyMap theme;
         theme.insert("themeName", "current");
+        theme.insert("componentOpacity", 100);
+        theme.insert("opacityEnabledComponents", QStringList{});
+        theme.insert("opacityDisabledComponents", QStringList{});
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("screenshots", &model);
         engine.rootContext()->setContextProperty("backend", &theme);
@@ -296,6 +305,9 @@ private slots:
         ScreenshotBackend model(dir.path());
         QQmlPropertyMap theme;
         theme.insert("themeName", "current");
+        theme.insert("componentOpacity", 100);
+        theme.insert("opacityEnabledComponents", QStringList{});
+        theme.insert("opacityDisabledComponents", QStringList{});
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("screenshots", &model);
         engine.rootContext()->setContextProperty("backend", &theme);

@@ -205,7 +205,7 @@ Item {
         width: implicitWidth
         height: implicitHeight + 10
 
-        property color surfaceColor: Theme.cardSurface
+        property color surfaceColor: Theme.componentSurfaceFor("system-status")
         property real cornerRadius: 24
 
         Rectangle {

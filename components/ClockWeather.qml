@@ -90,7 +90,7 @@ Item {
 
         property color textColor: Theme.text
 
-        property color surfaceColor: Theme.cardSurface
+        property color surfaceColor: Theme.componentSurfaceFor("clock-weather")
 
 
         property color accentColor: Theme.clockAccent

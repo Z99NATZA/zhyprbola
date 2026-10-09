@@ -16,7 +16,7 @@ Item {
 
         property color textColor: Theme.text
         property color dimColor: Qt.alpha(textColor, 0.72)
-        property color surfaceColor: Theme.cardSurface
+        property color surfaceColor: Theme.componentSurfaceFor("todo")
         property color accentColor: Theme.accent
         property color checkedTextColor: Theme.checkedText
         property real cornerRadius: 26

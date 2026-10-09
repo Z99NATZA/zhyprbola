@@ -57,6 +57,16 @@ Sound, Brightness, Battery, and Key Visualizer start in Quick.
 Date and Time cannot move to Quick. Settings cannot leave Show.
 ```
 
+## Opacity
+
+```text
+Settings -> Opacity adjusts QML component surfaces from 0-100%.
+Drag items between Opacity and Default to choose which QML surfaces use that value.
+
+Settings can be moved between the lists. Screenshots follows the opacity value.
+Text, icons, controls, the dock, and Shell popups stay opaque.
+```
+
 ## Sound
 
 ```text
@@ -182,6 +192,8 @@ Weather:     Open-Meteo
 
 ```text
 Theme:               ~/.config/zhyprbola/theme
+Component opacity:   ~/.config/zhyprbola/component-opacity
+Opacity components:  ~/.config/zhyprbola/component-opacity-components
 Dock position:       ~/.config/zhyprbola/dock-position
 Dock opacity:        ~/.config/zhyprbola/dock-bg-opacity
 Enabled groups:      ~/.config/zhyprbola/dock-groups
@@ -194,6 +206,7 @@ Tasks:               ~/.config/zhyprbola/tasks.json
 Key visualizer:      ~/.config/zhyprbola/key-visualizer
 
 Dock opacity affects only the background, accepts 0-100, and defaults to 50.
+Component opacity accepts 0-100 and defaults to 100.
 Ungroup windows defaults to false.
 Pinned apps are desktop IDs stored one per line and appear only with Apps enabled.
 ```

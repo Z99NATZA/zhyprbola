@@ -46,6 +46,11 @@ class Backend : public QObject {
     Q_PROPERTY(bool playing READ playing NOTIFY musicChanged)
     Q_PROPERTY(QVariantList spectrum READ spectrum NOTIFY spectrumChanged)
     Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
+    Q_PROPERTY(int componentOpacity READ componentOpacity NOTIFY componentOpacityChanged)
+    Q_PROPERTY(QStringList opacityEnabledComponents READ opacityEnabledComponents
+        NOTIFY componentOpacityChanged)
+    Q_PROPERTY(QStringList opacityDisabledComponents READ opacityDisabledComponents
+        NOTIFY componentOpacityChanged)
     Q_PROPERTY(QString dockPosition READ dockPosition NOTIFY dockSettingsChanged)
     Q_PROPERTY(int dockBgOpacity READ dockBgOpacity NOTIFY dockSettingsChanged)
     Q_PROPERTY(QStringList dockGroups READ dockGroups NOTIFY dockSettingsChanged)
@@ -103,6 +108,9 @@ public:
     bool playing() const { return m_playing; }
     QVariantList spectrum() const { return m_spectrum; }
     QString themeName() const { return m_themeName; }
+    int componentOpacity() const { return m_componentOpacity; }
+    QStringList opacityEnabledComponents() const { return m_opacityEnabledComponents; }
+    QStringList opacityDisabledComponents() const { return m_opacityDisabledComponents; }
     QString dockPosition() const { return m_dockPosition; }
     int dockBgOpacity() const { return m_dockBgOpacity; }
     QStringList dockGroups() const { return m_dockGroups; }
@@ -143,6 +151,9 @@ public:
     Q_INVOKABLE void setComponentEnabled(const QString &key, bool enabled);
     Q_INVOKABLE void resetComponentSettings();
     Q_INVOKABLE void setThemeName(const QString &name);
+    Q_INVOKABLE void setComponentOpacity(int opacity);
+    Q_INVOKABLE void moveOpacityComponent(const QString &key, const QString &destination,
+        const QString &beforeKey);
     Q_INVOKABLE void setDockPosition(const QString &position);
     Q_INVOKABLE void setDockBgOpacity(int opacity);
     Q_INVOKABLE void setDockGroupEnabled(const QString &group, bool enabled);
@@ -181,6 +192,7 @@ signals:
     void wifiDisconnectionFinished(const QString &ssid, bool success);
     void bluetoothDevicesChanged();
     void themeChanged();
+    void componentOpacityChanged();
     void dockSettingsChanged();
     void edgeSpectrumSettingsChanged();
     void tasksChanged();
@@ -261,6 +273,9 @@ private:
     QVariantList m_spectrum;
     QFileSystemWatcher m_themeWatcher;
     QString m_themeName = QStringLiteral("current");
+    int m_componentOpacity = 100;
+    QStringList m_opacityEnabledComponents;
+    QStringList m_opacityDisabledComponents;
     QString m_dockPosition = QStringLiteral("bottom");
     int m_dockBgOpacity = 50;
     QStringList m_dockGroups = {QStringLiteral("zhyprbola"), QStringLiteral("running")};

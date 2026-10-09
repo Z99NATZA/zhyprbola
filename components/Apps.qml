@@ -39,7 +39,7 @@ Item {
 
         property color textColor: Theme.text
 
-        property color surfaceColor: Theme.cardSurface
+        property color surfaceColor: Theme.componentSurfaceFor("apps")
 
 
         property color accentColor: Theme.accent

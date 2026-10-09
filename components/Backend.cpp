@@ -270,6 +270,37 @@ QStringList dockComponentKeys() {
         QStringLiteral("key-visualizer")};
 }
 
+QStringList defaultOpacityEnabledComponents() {
+    return {QStringLiteral("settings"), QStringLiteral("bluetooth"),
+        QStringLiteral("wifi"), QStringLiteral("clock-weather"),
+        QStringLiteral("key-visualizer"), QStringLiteral("system-status"),
+        QStringLiteral("audio-spectrum"), QStringLiteral("music"),
+        QStringLiteral("todo"), QStringLiteral("calendar")};
+}
+
+QPair<QStringList, QStringList> validatedOpacityComponents(const QJsonObject &saved) {
+    const QStringList names = dockComponentKeys();
+    const QStringList defaults = defaultOpacityEnabledComponents();
+    QStringList enabled;
+    QStringList disabled;
+    const auto append = [&names, &enabled, &disabled](const QJsonValue &value,
+                            QStringList &target) {
+        if (!value.isArray()) return;
+        for (const QJsonValue &entry : value.toArray()) {
+            const QString name = entry.toString();
+            if (names.contains(name) && !enabled.contains(name) && !disabled.contains(name))
+                target.append(name);
+        }
+    };
+    append(saved.value(QStringLiteral("opacity")), enabled);
+    append(saved.value(QStringLiteral("default")), disabled);
+    for (const QString &name : names) {
+        if (enabled.contains(name) || disabled.contains(name)) continue;
+        (defaults.contains(name) ? enabled : disabled).append(name);
+    }
+    return {enabled, disabled};
+}
+
 QList<QByteArray> splitNetworkRow(const QByteArray &row) {
     QList<QByteArray> fields = row.split(':');
     if (fields.size() <= 4) return fields;
@@ -521,7 +552,12 @@ void Backend::refreshTheme() {
     QDir().mkpath(configRoot);
     const QString themeDir = QDir(configRoot).filePath(QStringLiteral("zhyprbola"));
     const QString themeFile = QDir(themeDir).filePath(QStringLiteral("theme"));
-    for (const QString &path : {configRoot, themeDir, themeFile}) {
+    const QString opacityFilePath = QDir(themeDir).filePath(
+        QStringLiteral("component-opacity"));
+    const QString opacityComponentsPath = QDir(themeDir).filePath(
+        QStringLiteral("component-opacity-components"));
+    for (const QString &path : {configRoot, themeDir, themeFile, opacityFilePath,
+             opacityComponentsPath}) {
         if (QFileInfo::exists(path) && !m_themeWatcher.files().contains(path)
             && !m_themeWatcher.directories().contains(path))
             m_themeWatcher.addPath(path);
@@ -542,6 +578,31 @@ void Backend::refreshTheme() {
         m_themeName = name;
         emit themeChanged();
     }
+
+    QFile opacityFile(opacityFilePath);
+    int opacity = 100;
+    if (opacityFile.open(QIODevice::ReadOnly)) {
+        bool valid = false;
+        const int saved = opacityFile.readAll().trimmed().toInt(&valid);
+        if (valid && saved >= 0 && saved <= 100) opacity = saved;
+    }
+    if (opacity != m_componentOpacity) {
+        m_componentOpacity = opacity;
+        emit componentOpacityChanged();
+    }
+
+    QFile opacityComponentsFile(opacityComponentsPath);
+    QJsonObject savedOpacityComponents;
+    if (opacityComponentsFile.open(QIODevice::ReadOnly))
+        savedOpacityComponents = QJsonDocument::fromJson(
+            opacityComponentsFile.readAll()).object();
+    const auto opacityComponents = validatedOpacityComponents(savedOpacityComponents);
+    if (opacityComponents.first != m_opacityEnabledComponents
+        || opacityComponents.second != m_opacityDisabledComponents) {
+        m_opacityEnabledComponents = opacityComponents.first;
+        m_opacityDisabledComponents = opacityComponents.second;
+        emit componentOpacityChanged();
+    }
 }
 
 void Backend::setThemeName(const QString &name) {
@@ -551,6 +612,41 @@ void Backend::setThemeName(const QString &name) {
         QStringLiteral("mauve"), QStringLiteral("silver-dawn")};
     if (!names.contains(name) || name == m_themeName) return;
     if (writeDockConfig(QStringLiteral("theme"), name)) refreshTheme();
+}
+
+void Backend::setComponentOpacity(int opacity) {
+    opacity = qBound(0, opacity, 100);
+    if (opacity == m_componentOpacity) return;
+    if (!writeDockConfig(QStringLiteral("component-opacity"), QString::number(opacity))) return;
+    m_componentOpacity = opacity;
+    emit componentOpacityChanged();
+}
+
+void Backend::moveOpacityComponent(const QString &key, const QString &destination,
+    const QString &beforeKey) {
+    if (!dockComponentKeys().contains(key) || beforeKey == key
+        || (destination != QLatin1String("opacity")
+            && destination != QLatin1String("default"))) return;
+
+    QStringList enabled = m_opacityEnabledComponents;
+    QStringList disabled = m_opacityDisabledComponents;
+    enabled.removeAll(key);
+    disabled.removeAll(key);
+    QStringList &target = destination == QLatin1String("opacity") ? enabled : disabled;
+    const int index = beforeKey.isEmpty() ? target.size() : target.indexOf(beforeKey);
+    if (index < 0) return;
+    target.insert(index, key);
+    if (enabled == m_opacityEnabledComponents && disabled == m_opacityDisabledComponents)
+        return;
+
+    const QJsonObject object{
+        {QStringLiteral("opacity"), QJsonArray::fromStringList(enabled)},
+        {QStringLiteral("default"), QJsonArray::fromStringList(disabled)}};
+    if (!writeDockConfig(QStringLiteral("component-opacity-components"),
+            QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact)))) return;
+    m_opacityEnabledComponents = enabled;
+    m_opacityDisabledComponents = disabled;
+    emit componentOpacityChanged();
 }
 
 void Backend::setDockPosition(const QString &position) {

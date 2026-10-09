@@ -17,7 +17,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: 26
-        color: Theme.cardSurface
+        color: Theme.componentSurfaceFor("audio-spectrum")
     }
 
     SpectrumBars {

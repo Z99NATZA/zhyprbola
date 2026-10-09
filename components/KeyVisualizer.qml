@@ -212,7 +212,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: Math.min(26, height / 3)
-        color: Theme.cardSurface
+        color: Theme.componentSurfaceFor("key-visualizer")
 
         Text {
             objectName: "key-visualizer-display"

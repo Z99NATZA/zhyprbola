@@ -20,6 +20,9 @@ class VisualizerBackend : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantMap keyVisualizerSettings READ keyVisualizerSettings CONSTANT)
     Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
+    Q_PROPERTY(int componentOpacity READ componentOpacity CONSTANT)
+    Q_PROPERTY(QStringList opacityEnabledComponents READ opacityEnabledComponents CONSTANT)
+    Q_PROPERTY(QStringList opacityDisabledComponents READ opacityDisabledComponents CONSTANT)
     Q_PROPERTY(bool keyCaptureAvailable READ keyCaptureAvailable NOTIFY keyCaptureAvailableChanged)
     Q_PROPERTY(bool keyCaptureGrantPending READ keyCaptureGrantPending CONSTANT)
 public:
@@ -30,6 +33,9 @@ public:
             {QStringLiteral("alignment"), QStringLiteral("center")}};
     }
     QString themeName() const { return m_themeName; }
+    int componentOpacity() const { return 100; }
+    QStringList opacityEnabledComponents() const { return {}; }
+    QStringList opacityDisabledComponents() const { return {}; }
     void setThemeName(const QString &name) {
         m_themeName = name;
         emit themeChanged();
@@ -393,6 +399,94 @@ private slots:
         const QPointF position = keys->mapToItem(box, QPointF(0, 0));
         QVERIFY(position.x() >= 0 && position.x() + keys->width() <= box->width());
         QVERIFY(position.y() >= 0 && position.y() + keys->height() < box->height());
+    }
+
+    void persistsComponentOpacityAndShowsRange() {
+        QTemporaryDir config;
+        QVERIFY(config.isValid());
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+        const auto restoreConfig = qScopeGuard([previous] {
+            if (previous.isNull()) qunsetenv("XDG_CONFIG_HOME");
+            else qputenv("XDG_CONFIG_HOME", previous);
+        });
+
+        Backend backend;
+        Backend observer;
+        QCOMPARE(backend.componentOpacity(), 100);
+        backend.setComponentOpacity(35);
+        QCOMPARE(backend.componentOpacity(), 35);
+        QTRY_COMPARE(observer.componentOpacity(), 35);
+
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(
+            QFINDTESTDATA("../components/SettingsPanel.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        object->setProperty("section", QStringLiteral("opacity"));
+        auto *settings = qobject_cast<QQuickItem *>(object.data());
+        QVERIFY(settings);
+        QQuickWindow window;
+        window.resize(660, 510);
+        settings->setParentItem(window.contentItem());
+        window.show();
+        QTRY_VERIFY(window.isExposed());
+
+        auto *surface = object->findChild<QQuickItem *>(QStringLiteral("settings-surface"));
+        auto *box = object->findChild<QQuickItem *>(QStringLiteral("component-opacity-box"));
+        auto *range = object->findChild<QQuickItem *>(QStringLiteral("component-opacity-range"));
+        auto *supported = object->findChild<QQuickItem *>(
+            QStringLiteral("opacity-supported-zone"));
+        auto *opaque = object->findChild<QQuickItem *>(QStringLiteral("opacity-opaque-zone"));
+        auto *supportedRepeater = object->findChild<QQuickItem *>(
+            QStringLiteral("opacity-supported-repeater"));
+        auto *opaqueRepeater = object->findChild<QQuickItem *>(
+            QStringLiteral("opacity-opaque-repeater"));
+        QVERIFY(surface);
+        QVERIFY(box);
+        QVERIFY(range);
+        QVERIFY(supported);
+        QVERIFY(opaque);
+        QVERIFY(supportedRepeater);
+        QVERIFY(opaqueRepeater);
+        QCOMPARE(supportedRepeater->property("count").toInt(), 10);
+        QCOMPARE(opaqueRepeater->property("count").toInt(), 8);
+        QCOMPARE(surface->property("color").value<QColor>().alpha(), 89);
+        QCOMPARE(box->property("color").value<QColor>().alpha(), 89);
+        QCOMPARE(supported->property("color").value<QColor>().alpha(), 89);
+        QCOMPARE(opaque->property("color").value<QColor>().alpha(), 255);
+
+        QQuickItem *settingsTile = nullptr;
+        for (int index = 0; index < supportedRepeater->property("count").toInt(); ++index) {
+            QQuickItem *tile = nullptr;
+            QVERIFY(QMetaObject::invokeMethod(supportedRepeater, "itemAt",
+                Q_RETURN_ARG(QQuickItem *, tile), Q_ARG(int, index)));
+            if (tile && tile->objectName() == QLatin1String("opacity-supported-settings"))
+                settingsTile = tile;
+        }
+        QVERIFY(settingsTile);
+        const QPoint source = settingsTile->mapToScene(
+            QPointF(settingsTile->width() / 2, settingsTile->height() / 2)).toPoint();
+        const QPoint destination = opaque->mapToScene(QPointF(30, 70)).toPoint();
+        QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, source);
+        QTest::mouseMove(&window, source + QPoint(8, 0), 10);
+        QTest::mouseMove(&window, destination, 10);
+        QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, destination);
+        QVERIFY(!backend.opacityEnabledComponents().contains(QStringLiteral("settings")));
+        QVERIFY(backend.opacityDisabledComponents().contains(QStringLiteral("settings")));
+        QTRY_COMPARE(surface->property("color").value<QColor>().alpha(), 255);
+        QTRY_COMPARE(supportedRepeater->property("count").toInt(), 9);
+        QTRY_COMPARE(opaqueRepeater->property("count").toInt(), 9);
+
+        Backend reloaded;
+        QCOMPARE(reloaded.componentOpacity(), 35);
+        QVERIFY(reloaded.opacityDisabledComponents().contains(QStringLiteral("settings")));
+        backend.setComponentOpacity(-20);
+        QCOMPARE(backend.componentOpacity(), 0);
+        backend.setComponentOpacity(120);
+        QCOMPARE(backend.componentOpacity(), 100);
     }
 
     void opensKeyVisualizerFromSettings() {

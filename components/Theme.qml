@@ -46,6 +46,13 @@ QtObject {
     readonly property color mutedText: Qt.alpha(text, 0.68)
 
     readonly property color cardSurface: "#FAFCFD"
+    readonly property real componentOpacity: Math.max(0, Math.min(100,
+        backend.componentOpacity)) / 100
+    readonly property color componentSurface: Qt.alpha(cardSurface, componentOpacity)
+    function componentSurfaceFor(componentKey) {
+        return backend.opacityDisabledComponents.includes(componentKey)
+            ? cardSurface : componentSurface
+    }
     readonly property color panelSurface: cardSurface
     readonly property color managerSurface: cardSurface
     readonly property color barSurface: cardSurface

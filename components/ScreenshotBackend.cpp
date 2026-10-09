@@ -16,6 +16,45 @@
 #include <QUuid>
 #include <QUrl>
 
+namespace {
+QStringList opacityComponentKeys() {
+    return {QStringLiteral("date-display"), QStringLiteral("time-display"),
+        QStringLiteral("settings"), QStringLiteral("bluetooth"), QStringLiteral("wifi"),
+        QStringLiteral("clock-weather"), QStringLiteral("system-status"),
+        QStringLiteral("audio-spectrum"), QStringLiteral("music"), QStringLiteral("sound"),
+        QStringLiteral("brightness"), QStringLiteral("battery"), QStringLiteral("todo"),
+        QStringLiteral("calendar"), QStringLiteral("input-source"), QStringLiteral("power"),
+        QStringLiteral("components"), QStringLiteral("key-visualizer")};
+}
+
+QPair<QStringList, QStringList> validatedOpacityComponents(const QJsonObject &saved) {
+    const QStringList names = opacityComponentKeys();
+    const QStringList defaults = {QStringLiteral("settings"), QStringLiteral("bluetooth"),
+        QStringLiteral("wifi"), QStringLiteral("clock-weather"),
+        QStringLiteral("key-visualizer"), QStringLiteral("system-status"),
+        QStringLiteral("audio-spectrum"), QStringLiteral("music"), QStringLiteral("todo"),
+        QStringLiteral("calendar")};
+    QStringList enabled;
+    QStringList disabled;
+    const auto append = [&names, &enabled, &disabled](const QJsonValue &value,
+                            QStringList &target) {
+        if (!value.isArray()) return;
+        for (const QJsonValue &entry : value.toArray()) {
+            const QString name = entry.toString();
+            if (names.contains(name) && !enabled.contains(name) && !disabled.contains(name))
+                target.append(name);
+        }
+    };
+    append(saved.value(QStringLiteral("opacity")), enabled);
+    append(saved.value(QStringLiteral("default")), disabled);
+    for (const QString &name : names) {
+        if (enabled.contains(name) || disabled.contains(name)) continue;
+        (defaults.contains(name) ? enabled : disabled).append(name);
+    }
+    return {enabled, disabled};
+}
+}
+
 ScreenshotBackend::ScreenshotBackend(const QString &directory, QObject *parent)
     : QAbstractListModel(parent), m_directory(directory.isEmpty()
           ? QDir(QStandardPaths::writableLocation(QStandardPaths::PicturesLocation))
@@ -62,13 +101,38 @@ void ScreenshotBackend::setError(const QString &error) {
 }
 
 void ScreenshotBackend::refresh() {
-    QFile theme(QDir(QFileInfo(m_settingsPath).absolutePath()).filePath(QStringLiteral("theme")));
+    const QDir configDir(QFileInfo(m_settingsPath).absolutePath());
+    QFile theme(configDir.filePath(QStringLiteral("theme")));
     if (theme.open(QIODevice::ReadOnly)) {
         const QString name = QString::fromUtf8(theme.readAll()).trimmed();
         if (!name.isEmpty() && name != m_theme) {
             m_theme = name;
             emit themeChanged();
         }
+    }
+    QFile opacityFile(configDir.filePath(QStringLiteral("component-opacity")));
+    int opacity = 100;
+    if (opacityFile.open(QIODevice::ReadOnly)) {
+        bool valid = false;
+        const int saved = opacityFile.readAll().trimmed().toInt(&valid);
+        if (valid && saved >= 0 && saved <= 100) opacity = saved;
+    }
+    if (opacity != m_componentOpacity) {
+        m_componentOpacity = opacity;
+        emit componentOpacityChanged();
+    }
+    QFile opacityComponentsFile(configDir.filePath(
+        QStringLiteral("component-opacity-components")));
+    QJsonObject savedOpacityComponents;
+    if (opacityComponentsFile.open(QIODevice::ReadOnly))
+        savedOpacityComponents = QJsonDocument::fromJson(
+            opacityComponentsFile.readAll()).object();
+    const auto opacityComponents = validatedOpacityComponents(savedOpacityComponents);
+    if (opacityComponents.first != m_opacityEnabledComponents
+        || opacityComponents.second != m_opacityDisabledComponents) {
+        m_opacityEnabledComponents = opacityComponents.first;
+        m_opacityDisabledComponents = opacityComponents.second;
+        emit componentOpacityChanged();
     }
     QFile settings(m_settingsPath);
     if (settings.open(QIODevice::ReadOnly)) {

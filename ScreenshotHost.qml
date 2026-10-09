@@ -46,7 +46,7 @@ Window {
         bottomLeftRadius: screenshots.edgeSide === "left" ? 0 : 18
         topRightRadius: screenshots.edgeSide === "right" ? 0 : 18
         bottomRightRadius: screenshots.edgeSide === "right" ? 0 : 18
-        color: Components.Theme.panelSurface
+        color: Components.Theme.componentSurfaceFor("screenshots")
 
         Text {
             x: 18; y: 16

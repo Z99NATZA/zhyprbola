@@ -27,6 +27,7 @@ Item {
 
     readonly property var sections: [
         {key: "components", label: "Components"},
+        {key: "opacity", label: "Opacity"},
         {key: "date-time", label: "Date & Time"},
         {key: "screenshots", label: "Screenshots"},
         {key: "dock", label: "Dock"},
@@ -94,6 +95,14 @@ Item {
     property var componentPreviewQuick: []
     property real dragStartX: 0
     property real dragStartY: 0
+    property string draggedOpacityComponent: ""
+    property bool draggingOpacityComponent: false
+    property string opacityDropZone: ""
+    property string opacityBeforeKey: ""
+    property var opacityPreviewEnabled: []
+    property var opacityPreviewDefault: []
+    property real opacityDragStartX: 0
+    property real opacityDragStartY: 0
 
     function dockRegionLabel(groupName) {
         const order = groupPreviewOrder.length > 0
@@ -262,6 +271,84 @@ Item {
             backend.moveDockComponent(key, destination, beforeKey)
     }
 
+    function beginOpacityDrag(key, point) {
+        draggedOpacityComponent = key
+        opacityDragStartX = point.x
+        opacityDragStartY = point.y
+        opacityPreviewEnabled = backend.opacityEnabledComponents.slice()
+        opacityPreviewDefault = backend.opacityDisabledComponents.slice()
+    }
+
+    function updateOpacityDrag(point) {
+        if (!draggedOpacityComponent)
+            return
+        if (!draggingOpacityComponent) {
+            const dx = point.x - opacityDragStartX
+            const dy = point.y - opacityDragStartY
+            if (dx * dx + dy * dy < 36)
+                return
+            draggingOpacityComponent = true
+        }
+
+        floatingOpacityComponent.x = point.x - floatingOpacityComponent.width / 2
+        floatingOpacityComponent.y = point.y - floatingOpacityComponent.height / 2
+        let destination = null
+        let localPoint = null
+        for (const zone of [opacityEnabledZone, opacityDefaultZone]) {
+            const local = zone.mapFromItem(panel, point.x, point.y)
+            if (local.x >= 0 && local.x < zone.width
+                && local.y >= 0 && local.y < zone.height) {
+                destination = zone
+                localPoint = local
+                break
+            }
+        }
+        opacityEnabledZone.dropHovered = destination === opacityEnabledZone
+        opacityDefaultZone.dropHovered = destination === opacityDefaultZone
+        opacityDropZone = destination ? destination.zoneKey : ""
+        opacityBeforeKey = ""
+
+        const enabled = backend.opacityEnabledComponents.slice()
+            .filter(key => key !== draggedOpacityComponent)
+        const defaults = backend.opacityDisabledComponents.slice()
+            .filter(key => key !== draggedOpacityComponent)
+        if (destination) {
+            const target = destination.zoneKey === "opacity" ? enabled : defaults
+            const row = Math.max(0, Math.floor((localPoint.y - 45 + 18.5) / 37))
+            const column = Math.max(0, Math.floor((localPoint.x - 12 + 18.5) / 37))
+            const position = Math.max(0, Math.min(target.length, row * 9 + column))
+            opacityBeforeKey = target[position] || ""
+            target.splice(position, 0, draggedOpacityComponent)
+        } else if (backend.opacityEnabledComponents.includes(draggedOpacityComponent)) {
+            enabled.splice(backend.opacityEnabledComponents.indexOf(draggedOpacityComponent),
+                0, draggedOpacityComponent)
+        } else {
+            defaults.splice(backend.opacityDisabledComponents.indexOf(draggedOpacityComponent),
+                0, draggedOpacityComponent)
+        }
+        if (enabled.join(',') !== opacityPreviewEnabled.join(','))
+            opacityPreviewEnabled = enabled
+        if (defaults.join(',') !== opacityPreviewDefault.join(','))
+            opacityPreviewDefault = defaults
+    }
+
+    function finishOpacityDrag() {
+        const key = draggedOpacityComponent
+        const destination = opacityDropZone
+        const beforeKey = opacityBeforeKey
+        const commit = draggingOpacityComponent && destination !== ""
+        draggedOpacityComponent = ""
+        draggingOpacityComponent = false
+        opacityDropZone = ""
+        opacityBeforeKey = ""
+        opacityPreviewEnabled = []
+        opacityPreviewDefault = []
+        opacityEnabledZone.dropHovered = false
+        opacityDefaultZone.dropHovered = false
+        if (commit)
+            backend.moveOpacityComponent(key, destination, beforeKey)
+    }
+
     component DashedBorder: Item {
         id: border
         property color lineColor: "#CFD7DC"
@@ -325,9 +412,10 @@ Item {
     }
 
     Rectangle {
+        objectName: "settings-surface"
         anchors.fill: parent
         radius: 22
-        color: Theme.panelSurface
+        color: Theme.componentSurfaceFor("settings")
     }
 
     Rectangle {
@@ -396,6 +484,7 @@ Item {
         y: 29
         text: panel.section === "screenshots" ? "Screenshots"
             : panel.section === "themes" ? "Themes"
+            : panel.section === "opacity" ? "Opacity"
             : (panel.section === "dock" ? "Dock"
             : (panel.section === "components" ? "Components"
             : (panel.section === "spectrum" ? "Edge spectrum"
@@ -891,6 +980,220 @@ Item {
         }
     }
 
+    component ComponentOpacityBox: Rectangle {
+        id: componentOpacityBox
+        objectName: "component-opacity-box"
+        width: panel.contentWidth
+        height: 72
+        radius: 12
+        color: Qt.alpha(Theme.control, Theme.componentOpacity)
+
+        Text {
+            x: 14
+            y: 10
+            text: "Component Background Opacity"
+            color: Theme.text
+            font.family: Qt.application.font.family
+            font.pixelSize: 14
+            font.weight: Font.DemiBold
+        }
+
+        Text {
+            anchors.right: parent.right
+            anchors.rightMargin: 14
+            y: 11
+            text: backend.componentOpacity + "%"
+            color: Theme.text
+            font.family: Qt.application.font.family
+            font.pixelSize: 13
+        }
+
+        Rectangle {
+            id: componentOpacityTrack
+            objectName: "component-opacity-track"
+            x: 22
+            y: 48
+            width: parent.width - 44
+            height: 6
+            radius: 3
+            color: Theme.track
+
+            Rectangle {
+                width: parent.width * backend.componentOpacity / 100
+                height: parent.height
+                radius: parent.radius
+                color: Theme.accent
+            }
+        }
+
+        Rectangle {
+            objectName: "component-opacity-handle"
+            x: componentOpacityTrack.x - 8
+                + componentOpacityTrack.width * backend.componentOpacity / 100
+            y: componentOpacityTrack.y - 5
+            width: 16
+            height: 16
+            radius: 8
+            color: Theme.accent
+        }
+
+        MouseArea {
+            id: componentOpacityMouse
+            objectName: "component-opacity-range"
+            x: 14
+            y: 36
+            width: parent.width - 28
+            height: 34
+            cursorShape: Qt.PointingHandCursor
+
+            function setFromPointer(pointerX) {
+                const fraction = (pointerX
+                    - (componentOpacityTrack.x - componentOpacityMouse.x))
+                    / componentOpacityTrack.width
+                backend.setComponentOpacity(Math.round(
+                    Math.max(0, Math.min(1, fraction)) * 100))
+            }
+
+            onPressed: function(mouse) { setFromPointer(mouse.x) }
+            onPositionChanged: function(mouse) {
+                if (pressed) setFromPointer(mouse.x)
+            }
+        }
+    }
+
+    component OpacitySupportZone: Rectangle {
+        id: supportZone
+        required property string label
+        required property var items
+        required property bool supportsOpacity
+        required property string zoneKey
+        property bool dropHovered: false
+        readonly property int rowCount: Math.max(1, Math.ceil(items.length / 9))
+        readonly property var displayOrder: panel.draggingOpacityComponent
+            ? (supportsOpacity ? panel.opacityPreviewEnabled
+                : panel.opacityPreviewDefault) : items
+        objectName: supportsOpacity ? "opacity-supported-zone" : "opacity-opaque-zone"
+
+        width: panel.contentWidth
+        height: Math.max(136, 55 + rowCount * 37)
+        radius: 12
+        color: dropHovered ? Theme.selected : supportsOpacity
+            ? Qt.alpha(Theme.control, Theme.componentOpacity) : Theme.control
+        border.width: dropHovered ? 2 : 0
+        border.color: Theme.accent
+
+        Text {
+            x: 13
+            y: 12
+            text: supportZone.label
+            color: Theme.text
+            font.family: Qt.application.font.family
+            font.pixelSize: 14
+            font.weight: Font.DemiBold
+        }
+
+        Text {
+            anchors.right: parent.right
+            anchors.rightMargin: 13
+            y: 13
+            text: supportZone.items.length
+            color: Theme.mutedText
+            font.family: Qt.application.font.family
+            font.pixelSize: 12
+        }
+
+        Item {
+            id: opacityComponentRow
+            x: 12
+            y: 45
+            width: parent.width - 24
+            height: parent.height - y
+
+            Rectangle {
+                width: 34
+                height: 34
+                radius: 9
+                x: (supportZone.displayOrder.indexOf(panel.draggedOpacityComponent) % 9) * 37
+                y: Math.floor(supportZone.displayOrder.indexOf(
+                    panel.draggedOpacityComponent) / 9) * 37
+                visible: panel.draggingOpacityComponent
+                    && supportZone.displayOrder.includes(panel.draggedOpacityComponent)
+                color: Theme.selected
+                border.width: 2
+                border.color: Theme.accent
+            }
+
+            Repeater {
+                objectName: supportZone.supportsOpacity
+                    ? "opacity-supported-repeater" : "opacity-opaque-repeater"
+                model: supportZone.items
+
+                delegate: Rectangle {
+                    id: opacityTile
+                    required property string modelData
+                    required property int index
+                    readonly property string componentKey: modelData
+                    objectName: "opacity-" + (supportZone.supportsOpacity
+                        ? "supported-" : "opaque-") + componentKey
+                    x: {
+                        const position = supportZone.displayOrder.indexOf(componentKey)
+                        return ((position < 0 ? index : position) % 9) * 37
+                    }
+                    y: {
+                        const position = supportZone.displayOrder.indexOf(componentKey)
+                        return Math.floor((position < 0 ? index : position) / 9) * 37
+                    }
+                    width: 34
+                    height: 34
+                    radius: 9
+                    color: supportZone.supportsOpacity ? Theme.accent : Theme.mutedText
+                    opacity: panel.draggingOpacityComponent
+                        && panel.draggedOpacityComponent === componentKey ? 0 : 1
+
+                    Behavior on x {
+                        enabled: panel.draggingOpacityComponent
+                        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on y {
+                        enabled: panel.draggingOpacityComponent
+                        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                    }
+
+                    Image {
+                        anchors.centerIn: parent
+                        width: 20
+                        height: 20
+                        source: Qt.resolvedUrl("../gnome-extension/icons/"
+                            + opacityTile.componentKey + ".svg")
+                        asynchronous: true
+                        sourceSize: Qt.size(width, height)
+                        fillMode: Image.PreserveAspectFit
+                    }
+
+                    MouseArea {
+                        id: opacityDragArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        preventStealing: true
+                        cursorShape: panel.draggingOpacityComponent
+                            ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                        onPressed: function(mouse) {
+                            panel.beginOpacityDrag(opacityTile.componentKey,
+                                opacityDragArea.mapToItem(panel, mouse.x, mouse.y))
+                        }
+                        onPositionChanged: function(mouse) {
+                            if (pressed)
+                                panel.updateOpacityDrag(
+                                    opacityDragArea.mapToItem(panel, mouse.x, mouse.y))
+                        }
+                        onReleased: panel.finishOpacityDrag()
+                        onCanceled: panel.finishOpacityDrag()
+                    }
+                }
+            }
+        }
+    }
+
     component DockComponentZone: Rectangle {
         id: zone
         required property string zoneKey
@@ -1150,6 +1453,33 @@ Item {
         }
     }
 
+    Column {
+        objectName: "opacity-settings"
+        x: panel.contentX
+        y: 76
+        width: panel.contentWidth
+        spacing: panel.contentSectionGap
+        visible: panel.section === "opacity"
+
+        ComponentOpacityBox { }
+
+        OpacitySupportZone {
+            id: opacityEnabledZone
+            label: "Opacity"
+            items: backend.opacityEnabledComponents
+            supportsOpacity: true
+            zoneKey: "opacity"
+        }
+
+        OpacitySupportZone {
+            id: opacityDefaultZone
+            label: "Default"
+            items: backend.opacityDisabledComponents
+            supportsOpacity: false
+            zoneKey: "default"
+        }
+    }
+
     Rectangle {
         id: floatingGroup
         objectName: "dock-group-drag-overlay"
@@ -1221,6 +1551,27 @@ Item {
             source: panel.draggedComponent
                 ? Qt.resolvedUrl("../gnome-extension/icons/"
                     + panel.draggedComponent + ".svg") : ""
+            fillMode: Image.PreserveAspectFit
+        }
+    }
+
+    Rectangle {
+        id: floatingOpacityComponent
+        objectName: "opacity-component-drag-overlay"
+        z: 100
+        width: 34
+        height: 34
+        radius: 9
+        visible: panel.draggingOpacityComponent
+        color: Theme.accent
+
+        Image {
+            anchors.centerIn: parent
+            width: 20
+            height: 20
+            source: panel.draggedOpacityComponent
+                ? Qt.resolvedUrl("../gnome-extension/icons/"
+                    + panel.draggedOpacityComponent + ".svg") : ""
             fillMode: Image.PreserveAspectFit
         }
     }
