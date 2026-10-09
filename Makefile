@@ -1,4 +1,4 @@
-.PHONY: run run-panel dock dock-enable check build
+.PHONY: run run-panel dock dock-enable dock-disable dock-remove check build
 
 QMLLINT := $(shell command -v qmllint || command -v /usr/lib/qt6/bin/qmllint)
 
@@ -22,6 +22,12 @@ dock: build
 
 dock-enable:
 	./scripts/enable-dock
+
+dock-disable:
+	gnome-extensions disable zhyprbola@znnn.local
+
+dock-remove:
+	gnome-extensions uninstall zhyprbola@znnn.local
 
 check:
 	@for file in Main.qml PanelHost.qml EdgeSpectrum.qml ScreenshotHost.qml components/*.qml; do $(QMLLINT) "$$file" || exit 1; done

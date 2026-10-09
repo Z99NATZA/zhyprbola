@@ -42,6 +42,24 @@ make dock
 # log out and back in. Some sessions or machines may need that after each update.
 ```
 
+## Manage the dock
+
+Run these commands from the project directory:
+
+```bash
+# Disable the dock while keeping the extension installed
+make dock-disable
+
+# Enable the installed dock again
+make dock-enable
+
+# Uninstall the local GNOME extension
+make dock-remove
+```
+
+Removing the dock keeps the project files and settings in `~/.config/zhyprbola`.
+Run `make dock` to build, reinstall, and enable it again.
+
 ## Development
 
 ```bash
