@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.zhyprbola"
+          path="/org/gnome/shell/extensions/zhyprbola/">
+    <key name="zhyprbola-toggle-desktop" type="as">
+      <default>['&lt;Super&gt;0']</default>
+      <summary>Toggle desktop windows</summary>
+      <description>Hide or restore windows tracked by the Zhyprbola dock.</description>
+    </key>
+  </schema>
+</schemalist>

@@ -1,6 +1,7 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
+import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import Pango from 'gi://Pango';
@@ -25,6 +26,7 @@ const DockPosition = Object.freeze({
 
 const DEFAULT_DOCK_POSITION = DockPosition.BOTTOM;
 const SHOW_DESKTOP_SIZE = 10;
+const SHOW_DESKTOP_KEYBINDING = 'zhyprbola-toggle-desktop';
 
 const DOCK_CONFIG = Object.freeze({
     iconSize: 16,
@@ -107,6 +109,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockRebuildPending = false;
         this._dock = null;
         this._showDesktopButton = null;
+        this._showDesktopKeybindingRegistered = false;
+        this._keybindingSettings = null;
         this._appMenu = null;
         this._appMenuApp = null;
         this._soundMenu = null;
@@ -189,6 +193,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._publishedInputSource = null;
 
         this._createDock();
+        this._registerShowDesktopKeybinding();
         this._screenshotEdge = new ScreenshotEdge(() => Gio.Subprocess.new(
             ['bash', GLib.build_filenamev([this.path, 'panel-command.sh']), 'screenshots', '--resident'],
             Gio.SubprocessFlags.NONE),
@@ -246,6 +251,7 @@ export default class ZhyprbolaExtension extends Extension {
 
     disable() {
         this._disabling = true;
+        this._unregisterShowDesktopKeybinding();
         this._screenshotEdge?.destroy();
         this._screenshotEdge = null;
         global.display.disconnectObject(this);
@@ -309,6 +315,26 @@ export default class ZhyprbolaExtension extends Extension {
         this._nextWindowOrderFallbackId = 0;
         this._lastFocusedWindow = null;
         this._windowBeforeSettings = null;
+    }
+
+    _registerShowDesktopKeybinding() {
+        this._keybindingSettings = this.getSettings();
+        Main.wm.addKeybinding(
+            SHOW_DESKTOP_KEYBINDING,
+            this._keybindingSettings,
+            Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
+            Shell.ActionMode.NORMAL,
+            () => this._toggleDesktop());
+        this._showDesktopKeybindingRegistered = true;
+    }
+
+    _unregisterShowDesktopKeybinding() {
+        if (!this._showDesktopKeybindingRegistered)
+            return;
+
+        Main.wm.removeKeybinding(SHOW_DESKTOP_KEYBINDING);
+        this._showDesktopKeybindingRegistered = false;
+        this._keybindingSettings = null;
     }
 
     _createDock() {

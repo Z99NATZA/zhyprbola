@@ -72,6 +72,7 @@ class NativeAppMenu {
 
 function fixture(length = 400) {
     const idles = new Map();
+    const keybindings = new Map();
     let nextId = 0;
     const context = vm.createContext({
         St: {Widget: Actor, Icon: Actor, Button: Actor,
@@ -87,8 +88,15 @@ function fixture(length = 400) {
         DND: {makeDraggable: actor => (actor.draggable = new Actor())},
         GLib: {PRIORITY_DEFAULT_IDLE: 0, SOURCE_REMOVE: false,
             idle_add: (_, callback) => { idles.set(++nextId, callback); return nextId; }},
+        Meta: {KeyBindingFlags: {IGNORE_AUTOREPEAT: 1}},
+        Shell: {ActionMode: {NORMAL: 1}},
         Main: {layoutManager: {primaryMonitor: {x: 0, y: 0, width: length + 8, height: 900},
-            removeChrome() {}}, uiGroup: new Actor()},
+            removeChrome() {}}, uiGroup: new Actor(), wm: {
+            addKeybinding(name, settings, flags, modes, callback) {
+                keybindings.set(name, {settings, flags, modes, callback});
+            },
+            removeKeybinding(name) { keybindings.delete(name); },
+        }},
         AppMenu: NativeAppMenu,
         SoundMenu: NativeAppMenu,
         BrightnessMenu: NativeAppMenu,
@@ -111,6 +119,7 @@ function fixture(length = 400) {
         _dockItems: new Map([['running', []]]), _dockRenderState: new Map(),
         _runningOrder: new Map(), _nextRunningOrder: 0,
         _showDesktopButton: new Actor(), _panelIcons: new Map(),
+        _showDesktopKeybindingRegistered: false, _keybindingSettings: null,
         _menuManager: {menus: [], addMenu(menu) { this.menus.push(menu); }},
         _layoutEdgeSpectrum() {},
     });
@@ -127,7 +136,7 @@ function fixture(length = 400) {
         dock._queueLayout();
         flush();
     };
-    return {dock, group, render, flush, idles, context};
+    return {dock, group, render, flush, idles, keybindings, context};
 }
 
 function item(id, label = id) {
@@ -286,6 +295,26 @@ function desktopFixture() {
     return {dock, display, windows, workspace, otherWorkspace, addWindow,
         switchWorkspace(value) { activeWorkspace = value; }};
 }
+
+test('show desktop shortcut registers, invokes the toggle, and unregisters', () => {
+    const {dock, keybindings} = fixture();
+    const settings = {};
+    let toggleCalls = 0;
+    dock.getSettings = () => settings;
+    dock._toggleDesktop = () => toggleCalls++;
+
+    dock._registerShowDesktopKeybinding();
+    const binding = keybindings.get('zhyprbola-toggle-desktop');
+    assert.equal(binding.settings, settings);
+    assert.equal(binding.flags, 1);
+    assert.equal(binding.modes, 1);
+    binding.callback();
+    assert.equal(toggleCalls, 1);
+
+    dock._unregisterShowDesktopKeybinding();
+    assert.equal(keybindings.has('zhyprbola-toggle-desktop'), false);
+    assert.equal(dock._keybindingSettings, null);
+});
 
 test('show desktop hides on the first click and restores only its own windows', () => {
     const {dock, display, addWindow} = desktopFixture();

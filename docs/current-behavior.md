@@ -224,6 +224,7 @@ Pin to Dash is omitted because Zhyprbola owns its launcher configuration.
 ```text
 The first activation hides visible, minimizable windows on the current workspace.
 The next activation restores only windows hidden by Zhyprbola.
+The dock button and Super+0 invoke the same toggle action.
 
 Zhyprbola panels and previously minimized windows are ignored.
 Hide history is stored per workspace and survives partial manual restores.

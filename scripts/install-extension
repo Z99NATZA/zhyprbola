@@ -14,6 +14,7 @@ printf '#!/usr/bin/env bash\nexec %q/scripts/run-panel "$@"\n' "$ROOT_DIR" > "$P
 chmod +x "$PACK_DIR/panel-command.sh"
 
 gnome-extensions pack "$ROOT_DIR/gnome-extension" \
+  --schema="$ROOT_DIR/gnome-extension/schemas/org.gnome.shell.extensions.zhyprbola.gschema.xml" \
   --extra-source="$PACK_DIR/panel-command.sh" \
   --extra-source="$ROOT_DIR/gnome-extension/soundMenu.js" \
   --extra-source="$ROOT_DIR/gnome-extension/brightnessMenu.js" \
