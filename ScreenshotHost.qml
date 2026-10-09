@@ -21,12 +21,6 @@ Window {
         const preview = previewComponent.createObject(host, {imageUrl: row.imageUrl})
         if (!preview) return
         screenshots.dismiss()
-        preview.width = 660
-        preview.height = 510
-        preview.x = Math.round(Screen.virtualX + (Screen.width - preview.width) / 2)
-        preview.y = Math.round(Screen.virtualY + (Screen.height - preview.height) / 2)
-        preview.visible = true
-        preview.requestActivate()
     }
 
     Shortcut { sequence: "Ctrl+C"; onActivated: screenshots.copyPaths() }
@@ -328,6 +322,9 @@ Window {
             id: preview
             objectName: "screenshotPreviewWindow"
             property url imageUrl
+            property bool controlsVisible: false
+            property bool initialized: false
+            property real imageAspect: 1
             visible: false
             transientParent: null
             modality: Qt.NonModal
@@ -338,6 +335,29 @@ Window {
             minimumWidth: 240
             minimumHeight: 180
             title: "Zhyprbola Screenshot Preview"
+
+            function showImage() {
+                if (initialized || fullImage.status !== Image.Ready) return
+                initialized = true
+                const imageWidth = fullImage.sourceSize.width
+                const imageHeight = fullImage.sourceSize.height
+                imageAspect = imageWidth / imageHeight
+                const scale = Math.min(1, 660 / imageWidth, 510 / imageHeight,
+                    Screen.width * 0.85 / imageWidth, Screen.height * 0.85 / imageHeight)
+                minimumWidth = Math.max(1, Math.round(Math.min(imageWidth, 240, 180 * imageAspect)))
+                minimumHeight = Math.max(1, Math.round(Math.min(imageHeight, 180, 240 / imageAspect)))
+                resizeTo(imageWidth * scale)
+                x = Math.round(Screen.virtualX + (Screen.width - width) / 2)
+                y = Math.round(Screen.virtualY + (Screen.height - height) / 2)
+                visible = true
+                requestActivate()
+            }
+
+            function resizeTo(imageWidth) {
+                const nextWidth = Math.max(minimumWidth, imageWidth, minimumHeight * imageAspect)
+                width = Math.round(nextWidth)
+                height = Math.max(minimumHeight, Math.round(nextWidth / imageAspect))
+            }
 
             function dismiss() {
                 visible = false
@@ -352,6 +372,24 @@ Window {
 
             Shortcut { sequence: "Escape"; onActivated: preview.dismiss() }
 
+            HoverHandler {
+                parent: preview.contentItem
+                onHoveredChanged: {
+                    if (hovered) {
+                        hideControls.stop()
+                        preview.controlsVisible = true
+                    } else {
+                        hideControls.restart()
+                    }
+                }
+            }
+
+            Timer {
+                id: hideControls
+                interval: 100
+                onTriggered: preview.controlsVisible = false
+            }
+
             Image {
                 id: fullImage
                 objectName: "screenshotPreviewImage"
@@ -360,17 +398,25 @@ Window {
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
                 cache: false
+                onStatusChanged: preview.showImage()
+            }
+
+            MouseArea {
+                objectName: "screenshotPreviewMoveArea"
+                anchors.fill: parent
+                cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                onPressed: preview.startSystemMove()
             }
 
             Item {
                 id: previewClose
                 objectName: "screenshotPreviewCloseButton"
+                visible: preview.controlsVisible
                 width: 32
                 height: 32
-                x: (fullImage.paintedWidth > 0
-                    ? (preview.width + fullImage.paintedWidth) / 2 : preview.width) - width - 20
-                y: (fullImage.paintedHeight > 0
-                    ? (preview.height - fullImage.paintedHeight) / 2 : 0) + 20
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 20
 
                 Text {
                     anchors.centerIn: parent
@@ -391,12 +437,11 @@ Window {
 
             Item {
                 objectName: "screenshotPreviewResizeHandle"
+                visible: preview.controlsVisible
                 width: 28
                 height: 28
-                x: (fullImage.paintedWidth > 0
-                    ? (preview.width + fullImage.paintedWidth) / 2 : preview.width) - width
-                y: (fullImage.paintedHeight > 0
-                    ? (preview.height + fullImage.paintedHeight) / 2 : preview.height) - height
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
 
                 Canvas {
                     anchors.centerIn: parent
@@ -421,9 +466,25 @@ Window {
                 }
 
                 MouseArea {
+                    id: resizeArea
+                    objectName: "screenshotPreviewResizeArea"
                     anchors.fill: parent
                     cursorShape: Qt.SizeFDiagCursor
-                    onPressed: preview.startSystemResize(Qt.RightEdge | Qt.BottomEdge)
+                    preventStealing: true
+                    property point startPointer
+                    property real startWidth: 0
+                    onPressed: function(mouse) {
+                        startPointer = mapToGlobal(mouse.x, mouse.y)
+                        startWidth = preview.width
+                    }
+                    onPositionChanged: function(mouse) {
+                        if (!pressed) return
+                        const point = mapToGlobal(mouse.x, mouse.y)
+                        const ratio = preview.imageAspect
+                        const deltaWidth = ((point.x - startPointer.x) * ratio * ratio
+                            + (point.y - startPointer.y) * ratio) / (ratio * ratio + 1)
+                        preview.resizeTo(startWidth + deltaWidth)
+                    }
                 }
             }
         }

@@ -162,12 +162,19 @@ private slots:
         QTRY_VERIFY(scrollbar->isVisible());
         QCOMPARE(list->width(), width);
     }
+    void doubleClickOpensResizableTransparentPreview_data() {
+        QTest::addColumn<QSize>("imageSize");
+        QTest::newRow("landscape") << QSize(1600, 900);
+        QTest::newRow("portrait") << QSize(900, 1600);
+        QTest::newRow("square") << QSize(600, 600);
+    }
     void doubleClickOpensResizableTransparentPreview() {
+        QFETCH(QSize, imageSize);
         QTemporaryDir dir;
         const QString path = dir.filePath(QStringLiteral("preview.png"));
         const QString sample = qEnvironmentVariable("ZHYPRBOLA_PREVIEW_TEST_IMAGE");
         if (sample.isEmpty()) {
-            QImage screenshot(600, 564, QImage::Format_RGB32);
+            QImage screenshot(imageSize, QImage::Format_RGB32);
             screenshot.fill(Qt::red);
             QVERIFY(screenshot.save(path));
         } else {
@@ -202,7 +209,15 @@ private slots:
         QCOMPARE(preview->modality(), Qt::NonModal);
         QVERIFY(preview->flags() & Qt::FramelessWindowHint);
         QCOMPARE(preview->color().alpha(), 0);
-        QCOMPARE(preview->size(), QSize(660, 510));
+        const QSize originalSize = QImage(path).size();
+        const qreal aspect = qreal(originalSize.width()) / originalSize.height();
+        const auto checkAspect = [aspect](QQuickWindow *target) {
+            QVERIFY(qAbs(target->width() - target->height() * aspect) <= qMax(1.0, aspect));
+        };
+        checkAspect(preview);
+        QVERIFY(preview->width() <= 660);
+        QVERIFY(preview->height() <= 510);
+        const QSize initialSize = preview->size();
 
         auto *image = preview->findChild<QQuickItem *>("screenshotPreviewImage");
         auto *close = preview->findChild<QQuickItem *>("screenshotPreviewCloseButton");
@@ -210,28 +225,57 @@ private slots:
         QVERIFY(image);
         QVERIFY(close);
         QVERIFY(resize);
+        QVERIFY(QTest::qWaitForWindowExposed(preview));
+        QTest::mouseMove(preview, QPoint(preview->width() / 2, preview->height() / 2));
+        QTRY_VERIFY(close->isVisible());
+        QVERIFY(resize->isVisible());
+        QEvent leave(QEvent::Leave);
+        QCoreApplication::sendEvent(preview, &leave);
+        QTest::qWait(30);
+        QVERIFY(close->isVisible());
+        QVERIFY(resize->isVisible());
+        QTest::mouseMove(preview, QPoint(preview->width() / 3, preview->height() / 3));
+        QTest::qWait(120);
+        QVERIFY(close->isVisible());
+        QVERIFY(resize->isVisible());
+        QCoreApplication::sendEvent(preview, &leave);
+        QTest::qWait(150);
+        QVERIFY(!close->isVisible());
+        QVERIFY(!resize->isVisible());
+        QTest::mouseMove(preview, QPoint(preview->width() / 2, preview->height() / 2));
+        QTRY_VERIFY(close->isVisible());
+        QVERIFY(resize->isVisible());
         QCOMPARE(image->property("source").toUrl(), QUrl::fromLocalFile(path));
         QTRY_VERIFY(image->property("paintedWidth").toReal() > 0);
         QCOMPARE(image->size(), preview->size());
         const QString previewCapture = qEnvironmentVariable("ZHYPRBOLA_PREVIEW_TEST_SCREENSHOT");
         if (!previewCapture.isEmpty())
             QVERIFY(preview->grabWindow().save(previewCapture));
-        const auto checkCloseOffset = [preview, image, close] {
-            const qreal paintedWidth = image->property("paintedWidth").toReal();
-            const qreal paintedHeight = image->property("paintedHeight").toReal();
-            const qreal right = (preview->width() + paintedWidth) / 2;
-            const qreal top = (preview->height() - paintedHeight) / 2;
-            QCOMPARE(right - close->x() - close->width(), 20.0);
-            QCOMPARE(close->y() - top, 20.0);
+        const auto checkCloseOffset = [preview, close, resize] {
+            QCOMPARE(preview->width() - close->x() - close->width(), 20.0);
+            QCOMPARE(close->y(), 20.0);
+            QCOMPARE(resize->x() + resize->width(), qreal(preview->width()));
+            QCOMPARE(resize->y() + resize->height(), qreal(preview->height()));
         };
         checkCloseOffset();
-        preview->resize(760, 590);
-        QTRY_COMPARE(preview->size(), QSize(760, 590));
+        const QPoint resizePoint = resize->mapToScene(
+            QPointF(resize->width() / 2, resize->height() / 2)).toPoint();
+        QTest::mouseMove(preview, resizePoint);
+        QTest::mousePress(preview, Qt::LeftButton, Qt::NoModifier, resizePoint);
+        QTest::mouseMove(preview, resizePoint + QPoint(80, 60));
+        QTest::mouseRelease(preview, Qt::LeftButton, Qt::NoModifier, resizePoint + QPoint(80, 60));
+        QTRY_VERIFY(preview->width() > initialSize.width());
+        QTRY_VERIFY(preview->height() > initialSize.height());
+        checkAspect(preview);
         QTRY_COMPARE(image->size(), QSizeF(preview->size()));
+        QVERIFY(qAbs(image->property("paintedWidth").toReal() - preview->width()) <= 1);
+        QVERIFY(qAbs(image->property("paintedHeight").toReal() - preview->height()) <= 1);
         checkCloseOffset();
 
         const QPoint closePoint = close->mapToScene(
             QPointF(close->width() / 2, close->height() / 2)).toPoint();
+        QTest::mouseMove(preview, closePoint);
+        QTRY_VERIFY(close->isVisible());
         QTest::mouseClick(preview, Qt::LeftButton, Qt::NoModifier, closePoint);
         QTRY_VERIFY(preview.isNull());
         QVERIFY(!window->isVisible());
@@ -258,7 +302,7 @@ private slots:
         QVERIFY(second != preview);
         QTRY_VERIFY(second->isVisible());
         QVERIFY(preview->isVisible());
-        QCOMPARE(preview->size(), QSize(660, 510));
+        QCOMPARE(preview->size(), initialSize);
         QVERIFY(!window->isVisible());
         QTest::keyClick(second, Qt::Key_Escape);
         QTRY_VERIFY(second.isNull());

@@ -313,12 +313,18 @@ One resident QML process is controlled through D-Bus.
 Hiding preserves its model, selection, clipboard owner, and thumbnail cache.
 
 The preview is transparent, borderless, and resizable.
+Its initial window fits the image aspect ratio within 660 x 510 px and
+85% of the screen, without upscaling the original image.
+Dragging the image moves the window. The resize handle is at the window's
+bottom-right corner and preserves the image aspect ratio while dragging.
 Double-clicking an image opens its preview and hides the browser.
 The preview closes with Escape or its close icon; the browser stays hidden.
 Reopening or hiding the browser through the handle keeps the preview open.
 Each double-click opens a separate preview, including for the same image,
 and hides the browser again. Closing one preview leaves the others open.
 Its close icon stays 20 px from the image corner.
+Close and resize icons appear while hovering over the preview and hide
+100 ms after the pointer leaves. Returning before then cancels the hide.
 
 Deletion has no confirmation.
 Undo data remains in .zhyprbola-trash until restored and is not purged automatically.
