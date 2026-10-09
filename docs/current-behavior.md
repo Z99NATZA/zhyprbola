@@ -157,8 +157,11 @@ order and keep their page content and heading mappings in sync.
 ## Wallpapers
 
 ```text
-Files: gnome-extension/wallpapers/1.png ... 6.png
-Themes: 1. Purple -> 1.png, 2. White Mist -> 2.png, etc.
+Files: gnome-extension/wallpapers/1.png ... 8.png
+Themes: Purple -> 1.png, White Mist -> 2.png, White Sky -> 3.png,
+        Forest Calm -> 4.png, One Half Gray -> 5.png, Red -> 6.png,
+        Mauve -> 7.png, Silver Dawn -> 8.png
+Silver Dawn: silver-blue/lavender palette with the supplied morning bedroom wallpaper.
 ```
 
 ## Weather

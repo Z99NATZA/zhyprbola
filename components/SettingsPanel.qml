@@ -4,7 +4,8 @@ Item {
     id: panel
 
     width: 660
-    height: 510
+    implicitHeight: Math.max(510, Math.ceil(76 + keyVisualizerColumn.height + 12))
+    height: implicitHeight
     property string section: "themes"
     signal closeRequested()
     readonly property int contentRowHeight: 46
@@ -64,7 +65,8 @@ Item {
         {key: "forest", label: "Forest Calm", accent: "#477F6D"},
         {key: "one-half-gray", label: "One Half Gray", accent: "#68717D"},
         {key: "red", label: "Red", accent: "#B83252"},
-        {key: "mauve", label: "Mauve", accent: "#C45478"}
+        {key: "mauve", label: "Mauve", accent: "#C45478"},
+        {key: "silver-dawn", label: "Silver Dawn", accent: "#6275A6"}
     ]
     readonly property var positions: [
         {key: "left", label: "Left"},
@@ -430,10 +432,12 @@ Item {
         }
     }
 
-    Column {
+    Grid {
+        id: themeGrid
         x: panel.contentX
         y: 76
         width: panel.contentWidth
+        columns: 2
         spacing: panel.contentItemGap
         visible: panel.section === "themes"
 
@@ -442,7 +446,7 @@ Item {
 
             delegate: Rectangle {
                 required property var modelData
-                width: panel.contentWidth
+                width: (themeGrid.width - themeGrid.spacing) / themeGrid.columns
                 height: panel.contentRowHeight
                 radius: 11
                 color: backend.themeName === modelData.key
@@ -461,6 +465,8 @@ Item {
                 Text {
                     x: 47
                     anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - x - 36
+                    elide: Text.ElideRight
                     text: modelData.label
                     color: Theme.text
                     font.family: Qt.application.font.family

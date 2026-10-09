@@ -363,3 +363,28 @@
 .zhyprbola-power-menu.zhyprbola-power-mauve .popup-menu-item:hover {
     background-color: rgba(196, 84, 120, 0.18) !important;
 }
+
+.zhyprbola-quick-silver-dawn .zhyprbola-quick-button {
+    background-color: #6275a6;
+}
+
+.zhyprbola-quick-silver-dawn .zhyprbola-quick-button:hover,
+.zhyprbola-quick-silver-dawn .zhyprbola-quick-button:focus,
+.zhyprbola-quick-silver-dawn .zhyprbola-quick-button:active {
+    background-color: #53638d;
+}
+
+.zhyprbola-input-source-silver-dawn .zhyprbola-input-source-item:hover,
+.zhyprbola-input-source-silver-dawn .zhyprbola-input-source-item:focus,
+.zhyprbola-input-source-silver-dawn .zhyprbola-input-source-item:active,
+.zhyprbola-input-source-silver-dawn .zhyprbola-input-source-item:selected {
+    background-color: #dfe5f2 !important;
+}
+
+.zhyprbola-dock-silver-dawn {
+    background-color: rgba(98, 117, 166, 0.5);
+}
+
+.zhyprbola-power-menu.zhyprbola-power-silver-dawn .popup-menu-item:hover {
+    background-color: rgba(98, 117, 166, 0.18) !important;
+}

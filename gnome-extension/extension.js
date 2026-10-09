@@ -72,6 +72,7 @@ const THEMES = [
     {name: 'one-half-gray', wallpaper: '5.png', iconColor: '#68717d'},
     {name: 'red', wallpaper: '6.png', iconColor: '#b83252'},
     {name: 'mauve', wallpaper: '7.png', iconColor: '#c45478'},
+    {name: 'silver-dawn', wallpaper: '8.png', iconColor: '#6275a6'},
 ];
 
 const PANEL_TITLES = Object.freeze({
@@ -1425,6 +1426,11 @@ export default class ZhyprbolaExtension extends Extension {
             this._dock.add_style_class_name('zhyprbola-dock-mauve');
         } else {
             this._dock.remove_style_class_name('zhyprbola-dock-mauve');
+        }
+        if (this._themeName === 'silver-dawn') {
+            this._dock.add_style_class_name('zhyprbola-dock-silver-dawn');
+        } else {
+            this._dock.remove_style_class_name('zhyprbola-dock-silver-dawn');
         }
         this._applyDockBackground();
         for (const [name, icon] of this._panelIcons)
