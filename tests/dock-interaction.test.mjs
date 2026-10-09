@@ -147,6 +147,58 @@ function item(id, label = id) {
     return {kind: 'app', app, window, label, running: true};
 }
 
+test('first-open Settings is placed beside region 3 on every dock side', () => {
+    const {dock, context} = fixture();
+    context.Main.layoutManager.primaryMonitor = {index: 1, x: 1200, y: 100, width: 1920, height: 1080};
+    context.Main.layoutManager.getWorkAreaForMonitor = index => {
+        assert.equal(index, 1);
+        return {x: 1200, y: 140, width: 1920, height: 1040};
+    };
+    const geometry = rect => ({
+        get_transformed_position: () => [rect.x, rect.y],
+        get_transformed_size: () => [rect.width, rect.height],
+    });
+    const cases = [
+        ['bottom', {x: 1200, y: 1145, width: 1920, height: 35},
+            {x: 2480, y: 1149, width: 640, height: 27}, [2788, 853]],
+        ['top', {x: 1200, y: 140, width: 1920, height: 35},
+            {x: 2480, y: 144, width: 640, height: 27}, [2788, 187]],
+        ['left', {x: 1200, y: 100, width: 35, height: 1080},
+            {x: 1204, y: 824, width: 27, height: 352}, [1247, 888]],
+        ['right', {x: 3085, y: 100, width: 35, height: 1080},
+            {x: 3089, y: 824, width: 27, height: 352}, [2753, 888]],
+    ];
+    for (const [side, dockRect, regionRect, expected] of cases) {
+        dock._dockPosition = side;
+        dock._dock = geometry(dockRect);
+        // Follow the third region even when the component region is reordered.
+        dock._dockGroupOrder = ['zhyprbola', 'apps', 'running'];
+        dock._dockRegions = new Map([['running', geometry(regionRect)]]);
+        let position;
+        dock._moveSettingsNearDock({move_frame: (user, x, y) => {
+            assert.equal(user, true);
+            position = [x, y];
+        }}, {width: 320, height: 280});
+        assert.deepEqual(position, expected, side);
+    }
+
+    let position;
+    dock._moveSettingsNearDock({move_frame: (_user, x, y) => { position = [x, y]; }},
+        {width: 660, height: 720});
+    assert.deepEqual(position, [2413, 448], 'large Settings stays inside the work area');
+});
+
+test('reopening an existing Settings window preserves its position', () => {
+    const {dock, context} = fixture();
+    const window = {get_title: () => 'Zhyprbola Settings'};
+    context.global = {display: {list_all_windows: () => [window]}};
+    let activated;
+    dock._activateWindow = target => { activated = target; };
+    dock._placeSettingsOnFirstOpen = () => assert.fail('existing Settings must not be repositioned');
+    dock._openPanel('settings');
+    assert.equal(activated, window);
+});
+
 test('focus and title changes keep the same clickable button and update its indicator', () => {
     const {dock, group, render} = fixture();
     const original = item(1);

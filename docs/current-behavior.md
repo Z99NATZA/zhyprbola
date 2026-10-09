@@ -63,7 +63,10 @@ Date and Time cannot move to Quick. Settings cannot leave Show.
 Settings -> Opacity adjusts QML component surfaces from 0-100%.
 Drag items between Opacity and Default to choose which QML surfaces use that value.
 
-Settings can be moved between the lists. Screenshots follows the opacity value.
+Settings and Screenshots can be moved between the lists.
+Screenshots appears only in the Opacity lists and defaults to using opacity.
+Its setting affects the browser background and preview images.
+Preview close and resize controls remain opaque.
 Text, icons, controls, the dock, and Shell popups stay opaque.
 ```
 
@@ -335,6 +338,11 @@ Disabling the extension stops only the browser and its handle.
 ### Settings Layout
 
 ```text
+New Settings windows open beside the trailing end of dock region 3 in the
+current region order, with a 12 px gap and 12 px work-area margin.
+With the default bottom dock, Settings opens above its right-hand end.
+Reopening an existing Settings window preserves its position.
+
 Content row:          46 px
 Gap within a group:    8 px
 Gap between groups:   16 px

@@ -275,11 +275,17 @@ QStringList defaultOpacityEnabledComponents() {
         QStringLiteral("wifi"), QStringLiteral("clock-weather"),
         QStringLiteral("key-visualizer"), QStringLiteral("system-status"),
         QStringLiteral("audio-spectrum"), QStringLiteral("music"),
-        QStringLiteral("todo"), QStringLiteral("calendar")};
+        QStringLiteral("todo"), QStringLiteral("calendar"), QStringLiteral("screenshots")};
+}
+
+QStringList opacityComponentKeys() {
+    QStringList keys = dockComponentKeys();
+    keys.append(QStringLiteral("screenshots"));
+    return keys;
 }
 
 QPair<QStringList, QStringList> validatedOpacityComponents(const QJsonObject &saved) {
-    const QStringList names = dockComponentKeys();
+    const QStringList names = opacityComponentKeys();
     const QStringList defaults = defaultOpacityEnabledComponents();
     QStringList enabled;
     QStringList disabled;
@@ -624,7 +630,7 @@ void Backend::setComponentOpacity(int opacity) {
 
 void Backend::moveOpacityComponent(const QString &key, const QString &destination,
     const QString &beforeKey) {
-    if (!dockComponentKeys().contains(key) || beforeKey == key
+    if (!opacityComponentKeys().contains(key) || beforeKey == key
         || (destination != QLatin1String("opacity")
             && destination != QLatin1String("default"))) return;
 

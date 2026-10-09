@@ -2355,33 +2355,36 @@ export default class ZhyprbolaExtension extends Extension {
 
         const gap = 12;
         const margin = 12;
-        const dockX = this._dock.get_x();
-        const dockY = this._dock.get_y();
-        const dockWidth = this._dock.get_width();
-        const dockHeight = this._dock.get_height();
+        const regionName = this._dockGroupOrder[2] ?? 'zhyprbola';
+        const region = this._dockRegions?.get(regionName) ?? this._dock;
+        const [regionX, regionY] = region.get_transformed_position();
+        const [regionWidth, regionHeight] = region.get_transformed_size();
+        const [dockX, dockY] = this._dock.get_transformed_position();
+        const [dockWidth, dockHeight] = this._dock.get_transformed_size();
+        const area = Main.layoutManager.getWorkAreaForMonitor(monitor.index);
         let x = dockX + dockWidth + gap;
-        let y = dockY + Math.round((dockHeight - frame.height) / 2);
+        let y = regionY + regionHeight - frame.height;
 
         switch (this._dockPosition) {
         case DockPosition.RIGHT:
             x = dockX - frame.width - gap;
             break;
         case DockPosition.TOP:
-            x = dockX + Math.round((dockWidth - frame.width) / 2);
+            x = regionX + regionWidth - frame.width;
             y = dockY + dockHeight + gap;
             break;
         case DockPosition.BOTTOM:
-            x = dockX + Math.round((dockWidth - frame.width) / 2);
+            x = regionX + regionWidth - frame.width;
             y = dockY - frame.height - gap;
             break;
         default:
             break;
         }
 
-        x = Math.max(monitor.x + margin,
-            Math.min(x, monitor.x + monitor.width - frame.width - margin));
-        y = Math.max(monitor.y + margin,
-            Math.min(y, monitor.y + monitor.height - frame.height - margin));
+        x = Math.max(area.x + margin,
+            Math.min(x, area.x + area.width - frame.width - margin));
+        y = Math.max(area.y + margin,
+            Math.min(y, area.y + area.height - frame.height - margin));
         window.move_frame(true, x, y);
     }
 

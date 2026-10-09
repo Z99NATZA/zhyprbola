@@ -35,6 +35,7 @@ Window {
     }
 
     Rectangle {
+        objectName: "screenshotSurface"
         anchors.fill: parent
         radius: 18
         topLeftRadius: screenshots.edgeSide === "left" ? 0 : 18
@@ -395,6 +396,8 @@ Window {
                 objectName: "screenshotPreviewImage"
                 anchors.fill: parent
                 source: preview.imageUrl
+                opacity: screenshots.opacityDisabledComponents.includes("screenshots")
+                    ? 1 : screenshots.componentOpacity / 100
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
                 cache: false

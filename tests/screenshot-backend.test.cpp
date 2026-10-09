@@ -9,6 +9,7 @@
 #include <QQmlContext>
 #include <QQmlPropertyMap>
 #include <QPointer>
+#include <QSaveFile>
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QWheelEvent>
@@ -114,6 +115,63 @@ private slots:
         reopened.setPosition("invalid", "invalid");
         QCOMPARE(reopened.edgeSide(), QString("right"));
         model.setPosition(side, alignment);
+    }
+    void screenshotsOpacityCanBeDisabledAndRestored() {
+        QTemporaryDir config;
+        QTemporaryDir images;
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        QStandardPaths::setTestModeEnabled(false);
+        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+        const auto restoreConfig = qScopeGuard([previous] {
+            if (previous.isNull()) qunsetenv("XDG_CONFIG_HOME");
+            else qputenv("XDG_CONFIG_HOME", previous);
+            QStandardPaths::setTestModeEnabled(true);
+        });
+        QImage sample(600, 600, QImage::Format_RGB32);
+        sample.fill(Qt::red);
+        QVERIFY(sample.save(images.filePath("sample.png")));
+        ScreenshotBackend model(images.path());
+        QVERIFY(model.opacityEnabledComponents().contains(QStringLiteral("screenshots")));
+        const auto saveSetting = [&config](const QString &name, const QByteArray &data) {
+            QSaveFile file(config.filePath("zhyprbola/" + name));
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QCOMPARE(file.write(data), data.size());
+            QVERIFY(file.commit());
+        };
+        saveSetting("component-opacity", "35");
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("screenshots", &model);
+        engine.rootContext()->setContextProperty("backend", &model);
+        engine.load(QUrl::fromLocalFile(QFINDTESTDATA("../ScreenshotHost.qml")));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto *surface = engine.rootObjects().first()->findChild<QQuickItem *>("screenshotSurface");
+        QVERIFY(surface);
+        QTRY_COMPARE(surface->property("color").value<QColor>().alpha(), 89);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(200, 95));
+        auto *preview = window->findChild<QQuickWindow *>("screenshotPreviewWindow");
+        QVERIFY(preview);
+        QTRY_VERIFY(preview->isVisible());
+        auto *image = preview->findChild<QQuickItem *>("screenshotPreviewImage");
+        QVERIFY(image);
+        QCOMPARE(image->opacity(), 0.35);
+        saveSetting("component-opacity-components",
+            R"({"opacity":[],"default":["screenshots"]})");
+        QTRY_COMPARE(surface->property("color").value<QColor>().alpha(), 255);
+        QCOMPARE(image->opacity(), 1.0);
+        ScreenshotBackend reloaded(images.path());
+        QVERIFY(reloaded.opacityDisabledComponents().contains(QStringLiteral("screenshots")));
+        saveSetting("component-opacity-components",
+            R"({"opacity":["screenshots"],"default":[]})");
+        QTRY_COMPARE(surface->property("color").value<QColor>().alpha(), 89);
+        QCOMPARE(image->opacity(), 0.35);
+        auto *close = preview->findChild<QQuickItem *>("screenshotPreviewCloseButton");
+        auto *resize = preview->findChild<QQuickItem *>("screenshotPreviewResizeHandle");
+        QVERIFY(close);
+        QVERIFY(resize);
+        QCOMPARE(close->opacity(), 1.0);
+        QCOMPARE(resize->opacity(), 1.0);
     }
     void scrollbarOnlyAppearsOnOverflowAndKeepsReservedWidth() {
         QTemporaryDir dir;

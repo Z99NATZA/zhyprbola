@@ -451,7 +451,7 @@ private slots:
         QVERIFY(opaque);
         QVERIFY(supportedRepeater);
         QVERIFY(opaqueRepeater);
-        QCOMPARE(supportedRepeater->property("count").toInt(), 10);
+        QCOMPARE(supportedRepeater->property("count").toInt(), 11);
         QCOMPARE(opaqueRepeater->property("count").toInt(), 8);
         QCOMPARE(surface->property("color").value<QColor>().alpha(), 89);
         QCOMPARE(box->property("color").value<QColor>().alpha(), 89);
@@ -459,14 +459,27 @@ private slots:
         QCOMPARE(opaque->property("color").value<QColor>().alpha(), 255);
 
         QQuickItem *settingsTile = nullptr;
+        QQuickItem *screenshotsTile = nullptr;
         for (int index = 0; index < supportedRepeater->property("count").toInt(); ++index) {
             QQuickItem *tile = nullptr;
             QVERIFY(QMetaObject::invokeMethod(supportedRepeater, "itemAt",
                 Q_RETURN_ARG(QQuickItem *, tile), Q_ARG(int, index)));
             if (tile && tile->objectName() == QLatin1String("opacity-supported-settings"))
                 settingsTile = tile;
+            if (tile && tile->objectName() == QLatin1String("opacity-supported-screenshots"))
+                screenshotsTile = tile;
         }
         QVERIFY(settingsTile);
+        QVERIFY(screenshotsTile);
+        QVERIFY(!backend.dockVisibleComponents().contains(QStringLiteral("screenshots")));
+        QVERIFY(!backend.dockHiddenComponents().contains(QStringLiteral("screenshots")));
+        QVERIFY(!backend.dockQuickComponents().contains(QStringLiteral("screenshots")));
+        QQuickItem *screenshotsIcon = nullptr;
+        for (auto *child : screenshotsTile->childItems()) {
+            if (child->property("source").isValid()) screenshotsIcon = child;
+        }
+        QVERIFY(screenshotsIcon);
+        QTRY_COMPARE(screenshotsIcon->property("status").toInt(), 1);
         const QPoint source = settingsTile->mapToScene(
             QPointF(settingsTile->width() / 2, settingsTile->height() / 2)).toPoint();
         const QPoint destination = opaque->mapToScene(QPointF(30, 70)).toPoint();
@@ -477,12 +490,17 @@ private slots:
         QVERIFY(!backend.opacityEnabledComponents().contains(QStringLiteral("settings")));
         QVERIFY(backend.opacityDisabledComponents().contains(QStringLiteral("settings")));
         QTRY_COMPARE(surface->property("color").value<QColor>().alpha(), 255);
-        QTRY_COMPARE(supportedRepeater->property("count").toInt(), 9);
+        QTRY_COMPARE(supportedRepeater->property("count").toInt(), 10);
         QTRY_COMPARE(opaqueRepeater->property("count").toInt(), 9);
 
+        backend.moveOpacityComponent(QStringLiteral("screenshots"), QStringLiteral("default"), {});
+        QTRY_VERIFY(observer.opacityDisabledComponents().contains(QStringLiteral("screenshots")));
         Backend reloaded;
         QCOMPARE(reloaded.componentOpacity(), 35);
         QVERIFY(reloaded.opacityDisabledComponents().contains(QStringLiteral("settings")));
+        QVERIFY(reloaded.opacityDisabledComponents().contains(QStringLiteral("screenshots")));
+        backend.moveOpacityComponent(QStringLiteral("screenshots"), QStringLiteral("opacity"), {});
+        QTRY_VERIFY(observer.opacityEnabledComponents().contains(QStringLiteral("screenshots")));
         backend.setComponentOpacity(-20);
         QCOMPARE(backend.componentOpacity(), 0);
         backend.setComponentOpacity(120);

@@ -24,7 +24,8 @@ QStringList opacityComponentKeys() {
         QStringLiteral("audio-spectrum"), QStringLiteral("music"), QStringLiteral("sound"),
         QStringLiteral("brightness"), QStringLiteral("battery"), QStringLiteral("todo"),
         QStringLiteral("calendar"), QStringLiteral("input-source"), QStringLiteral("power"),
-        QStringLiteral("components"), QStringLiteral("key-visualizer")};
+        QStringLiteral("components"), QStringLiteral("key-visualizer"),
+        QStringLiteral("screenshots")};
 }
 
 QPair<QStringList, QStringList> validatedOpacityComponents(const QJsonObject &saved) {
@@ -33,7 +34,7 @@ QPair<QStringList, QStringList> validatedOpacityComponents(const QJsonObject &sa
         QStringLiteral("wifi"), QStringLiteral("clock-weather"),
         QStringLiteral("key-visualizer"), QStringLiteral("system-status"),
         QStringLiteral("audio-spectrum"), QStringLiteral("music"), QStringLiteral("todo"),
-        QStringLiteral("calendar")};
+        QStringLiteral("calendar"), QStringLiteral("screenshots")};
     QStringList enabled;
     QStringList disabled;
     const auto append = [&names, &enabled, &disabled](const QJsonValue &value,
