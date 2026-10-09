@@ -1,13 +1,13 @@
-```text
-Current Behavior
-==========
+# Current Behavior
 
+```text
 Zhyprbola combines a GNOME Shell dock with focused Qt/QML panels.
 The dock owns Shell behavior and lightweight popups; QML handles richer views.
+```
 
-Overview
-==========
+## Overview
 
+```text
 GNOME dock extension
   |
   +-- Shell popups: sound, brightness, battery
@@ -20,10 +20,11 @@ GNOME dock extension
 
 Default dock position: bottom
 Supported positions: left, right, top, bottom
+```
 
-Dock
-==========
+## Dock
 
+```text
 The dock contains Apps, Running, and Zhyprbola regions.
 
 Apps:
@@ -41,10 +42,11 @@ Zhyprbola:
 - always keeps Settings in Show
 
 Region order is configurable. Disabled regions keep their position.
+```
 
-Components
-==========
+## Components
 
+```text
 Settings -> Components organizes components into three locations:
 
 Show:    visible directly on the dock
@@ -53,29 +55,32 @@ Quick:   available from the Components popup
 
 Sound, Brightness, Battery, and Key Visualizer start in Quick.
 Date and Time cannot move to Quick. Settings cannot leave Show.
+```
 
-Sound
-==========
+## Sound
 
+```text
 Sound opens a Shell popup with separate microphone and speaker rows.
 Each row has a 0-100% slider and an independent mute button.
 
 Values follow GNOME mixer changes immediately.
 Unavailable devices leave their controls disabled.
+```
 
-Brightness
-==========
+## Brightness
 
+```text
 Brightness opens a Shell popup with one slider.
 
 Preferred backend: GNOME brightness manager
 Fallback backend:  ddcutil for DDC/CI displays
 
 Unavailable displays show a dimmed, disabled control.
+```
 
-Battery
-==========
+## Battery
 
+```text
 Battery opens a Shell popup backed by UPower.
 
 It shows:
@@ -84,23 +89,26 @@ It shows:
 - time remaining or time until full
 
 Systems without a battery show an unavailable state.
+```
 
-Input Source
-==========
+## Input Source
 
+```text
 Input Source shows the current language code, such as en or th.
 Activating it opens a compact language switcher.
+```
 
-Date and Time
-==========
+## Date and Time
 
+```text
 Date and Time appear as dock labels.
 Activating either opens Settings directly to Date & Time.
 This also works from the dock overflow menu.
+```
 
-Key Visualizer
-==========
+## Key Visualizer
 
+```text
 Key Visualizer opens a floating bubble and clears recent keys after five seconds.
 
 Settings control:
@@ -111,16 +119,18 @@ Settings control:
 
 It supports English and Thai input through GNOME AT-SPI or readable Linux input
 devices. Without either permission, it captures keys only while focused.
+```
 
-Tasks
-==========
+## Tasks
 
+```text
 Tasks is a local checklist with add, edit, toggle, delete, and drag-to-reorder.
 Items remain until explicitly deleted and do not expire when the date changes.
+```
 
-Screenshots
-==========
+## Screenshots
 
+```text
 The Screenshots browser opens from a handle on the primary monitor edge.
 It watches Pictures/Screenshots and lists thumbnails newest first.
 
@@ -135,14 +145,15 @@ Selection:
 Double-click opens a resizable image preview.
 Delete moves files to .zhyprbola-trash. Ctrl+Z restores the latest deletion.
 Restore never overwrites an existing file.
+```
 
-Commands
-==========
+## Commands
 
-# build, install, and enable the dock
+```text
+Build, install, and enable the dock
 $ make dock
 
-# run panels directly while developing
+Run panels directly while developing
 $ ./scripts/run-panel bluetooth
 $ ./scripts/run-panel wifi
 $ ./scripts/run-panel clock-weather
@@ -152,10 +163,11 @@ $ ./scripts/run-panel audio-spectrum
 $ ./scripts/run-panel sound
 $ ./scripts/run-panel tasks
 $ ./scripts/run-panel screenshots
+```
 
-Integrations
-==========
+## Integrations
 
+```text
 Wi-Fi:       nmcli / NetworkManager
 Bluetooth:   bluetoothctl / BlueZ
 Media:       MPRIS, optional playerctl
@@ -164,10 +176,11 @@ Brightness:  GNOME brightness manager, optional ddcutil
 Battery:     UPower
 Spectrum:    cava
 Weather:     Open-Meteo
+```
 
-Configuration
-==========
+## Configuration
 
+```text
 Theme:               ~/.config/zhyprbola/theme
 Dock position:       ~/.config/zhyprbola/dock-position
 Dock opacity:        ~/.config/zhyprbola/dock-bg-opacity
@@ -183,16 +196,18 @@ Key visualizer:      ~/.config/zhyprbola/key-visualizer
 Dock opacity affects only the background, accepts 0-100, and defaults to 50.
 Ungroup windows defaults to false.
 Pinned apps are desktop IDs stored one per line and appear only with Apps enabled.
+```
 
-Detailed Notes
-==========
+## Detailed Notes
 
+```text
 The following sections cover behavior needed when changing lifecycle, input,
 fallback, or layout code.
+```
 
-Running Windows
-==========
+### Running Windows
 
+```text
 Running apps remain visible even when the same app exists in Apps.
 
 In ungrouped mode, dragged order survives focus changes, title changes, and
@@ -202,20 +217,22 @@ New windows append to the saved order.
 Right-click, the keyboard menu key, or Shift+F10 opens GNOME's app menu.
 Supported actions include open windows, New Window, desktop actions, and Quit.
 Pin to Dash is omitted because Zhyprbola owns its launcher configuration.
+```
 
-Show Desktop
-==========
+### Show Desktop
 
+```text
 The first activation hides visible, minimizable windows on the current workspace.
 The next activation restores only windows hidden by Zhyprbola.
 
 Zhyprbola panels and previously minimized windows are ignored.
 Hide history is stored per workspace and survives partial manual restores.
 Closed windows and windows moved to another workspace are skipped during restore.
+```
 
-Popup Lifecycle
-==========
+### Popup Lifecycle
 
+```text
 Dock popups open only through explicit activation.
 Hover and keyboard focus do not switch the open popup.
 
@@ -224,10 +241,11 @@ Quick, or overflow. They never spawn fallback QML windows.
 
 The standalone Sound panel remains available for development:
 $ ./scripts/run-panel sound
+```
 
-Brightness Fallback
-==========
+### Brightness Fallback
 
+```text
 The DDC fallback uses the first detected DDC/CI display and its reported maximum.
 Commands run asynchronously and combine rapid slider changes.
 
@@ -236,10 +254,11 @@ Monitor changes trigger display rediscovery.
 
 DDC/CI requires ddcutil and access to the display's I2C device.
 Package udev rules normally provide this access.
+```
 
-Key Capture
-==========
+### Key Capture
 
+```text
 Typed characters are grouped. Special keys and shortcuts receive spacing.
 Repeated letter shortcuts stay in one run.
 
@@ -262,10 +281,11 @@ Access ends after reboot or device reconnect.
 Keyboard access is sensitive. Other processes running as the same user may read
 the granted devices, and typed secrets can appear in the bubble. Minimize the
 visualizer before entering passwords.
+```
 
-Screenshots Lifecycle
-==========
+### Screenshots Lifecycle
 
+```text
 Settings -> Screenshots selects Left or Right and Top, Center, or Bottom.
 The vertical positions are centered at 1/6, 1/2, and 5/6 of screen height.
 The 5 x 100 px handle stays visible in fullscreen.
@@ -283,10 +303,11 @@ Deletion has no confirmation.
 Undo data remains in .zhyprbola-trash until restored and is not purged automatically.
 A rapid reopen cancels an older collapse.
 Disabling the extension stops only the browser and its handle.
+```
 
-Settings Layout
-==========
+### Settings Layout
 
+```text
 Content row:          46 px
 Gap within a group:    8 px
 Gap between groups:   16 px
@@ -301,10 +322,11 @@ Holding starts repeat after 400 ms and accelerates to 25 steps per second.
 
 Keep SettingsPanel sidebar sections alphabetized by displayed English label.
 Keep page content and heading mappings synchronized with the sidebar.
+```
 
-Wallpapers
-==========
+### Wallpapers
 
+```text
 Purple          -> wallpapers/1.png
 White Mist      -> wallpapers/2.png
 White Sky       -> wallpapers/3.png
@@ -316,10 +338,11 @@ Silver Dawn     -> wallpapers/8.png
 
 Silver Dawn uses a silver-blue and lavender palette with the supplied morning
 bedroom wallpaper.
+```
 
-Weather Override
-==========
+### Weather Override
 
+```text
 $ ZHYPRBOLA_LATITUDE=13.7563 \
 ZHYPRBOLA_LONGITUDE=100.5018 \
 ZHYPRBOLA_LOCATION=Bangkok \
