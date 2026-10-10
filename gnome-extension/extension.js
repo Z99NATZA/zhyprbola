@@ -105,6 +105,10 @@ class ClickOnlyPopupMenuManager extends PopupMenu.PopupMenuManager {
 export default class ZhyprbolaExtension extends Extension {
     enable() {
         this._disabling = false;
+        this._connectionNames = {wifi: '', bluetooth: ''};
+        this._connectionLengths = {};
+        this._connectionCancellable = new Gio.Cancellable();
+        this._connectionRefreshPending = false;
         this._dockInteractions = new Set();
         this._dockRebuildPending = false;
         this._dock = null;
@@ -193,6 +197,11 @@ export default class ZhyprbolaExtension extends Extension {
         this._publishedInputSource = null;
 
         this._createDock();
+        this._refreshConnections();
+        this._connectionTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 5, () => {
+            this._refreshConnections();
+            return GLib.SOURCE_CONTINUE;
+        });
         this._registerShowDesktopKeybinding();
         this._screenshotEdge = new ScreenshotEdge(() => Gio.Subprocess.new(
             ['bash', GLib.build_filenamev([this.path, 'panel-command.sh']), 'screenshots', '--resident'],
@@ -251,6 +260,11 @@ export default class ZhyprbolaExtension extends Extension {
 
     disable() {
         this._disabling = true;
+        this._connectionCancellable?.cancel();
+        if (this._connectionTimerId) {
+            GLib.source_remove(this._connectionTimerId);
+            this._connectionTimerId = 0;
+        }
         this._unregisterShowDesktopKeybinding();
         this._screenshotEdge?.destroy();
         this._screenshotEdge = null;
@@ -1781,6 +1795,91 @@ export default class ZhyprbolaExtension extends Extension {
         menu.open();
     }
 
+    _connectionName(name) {
+        return this._connectionNames?.[name] ?? '';
+    }
+
+    _parseConnectionName(name, output) {
+        const lines = output.replace(/\x1b\[[0-9;]*m/g, '').split('\n');
+        if (name === 'wifi') {
+            const active = lines.find(line => line.startsWith('yes:'));
+            return active ? active.slice(4).replace(/\\([\\:])/g, '$1') : '';
+        }
+        const device = lines.find(line => /^Device [\dA-Fa-f:]{17} /u.test(line));
+        return device ? device.slice(25) : '';
+    }
+
+    async _refreshConnections() {
+        if (this._connectionRefreshPending || this._disabling)
+            return;
+        this._connectionRefreshPending = true;
+        const cancellable = this._connectionCancellable;
+        const commands = {
+            wifi: ['nmcli', '--wait', '3', '--terse', '--escape', 'yes',
+                '--fields', 'ACTIVE,SSID', 'device', 'wifi', 'list', '--rescan', 'no'],
+            bluetooth: ['bluetoothctl', '--timeout', '3', 'devices', 'Connected'],
+        };
+        await Promise.all(Object.entries(commands).map(([name, argv]) =>
+            new Promise(resolve => {
+                const update = value => {
+                    if (!cancellable.is_cancelled() && this._connectionNames[name] !== value) {
+                        this._connectionNames[name] = value;
+                        delete this._connectionLengths[name];
+                        this._queueLayout();
+                    }
+                    resolve();
+                };
+                try {
+                    const launcher = new Gio.SubprocessLauncher({flags:
+                        Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE});
+                    launcher.setenv('LC_ALL', 'C', true);
+                    const process = launcher.spawnv(argv);
+                    const cancelId = cancellable.connect(() => process.force_exit());
+                    process.communicate_utf8_async(null, cancellable, (source, result) => {
+                        cancellable.disconnect(cancelId);
+                        try {
+                            const [, output] = source.communicate_utf8_finish(result);
+                            update(source.get_successful() ? this._parseConnectionName(name, output) : '');
+                        } catch (_) {
+                            update('');
+                        }
+                    });
+                } catch (_) {
+                    update('');
+                }
+            })));
+        if (this._connectionCancellable === cancellable)
+            this._connectionRefreshPending = false;
+    }
+
+    _dockItemLength(item) {
+        if (item.kind === 'date-time')
+            return this._dateTimeItemLength(item.name);
+        const name = this._connectionName(item.name);
+        if (!name)
+            return DOCK_CONFIG.buttonSize;
+        this._connectionLengths ??= {};
+        if (!this._connectionLengths[item.name]) {
+            const label = this._connectionLabel(name);
+            // Measure with the dock's theme and font, just like the visible label.
+            this._dock.add_child(label);
+            this._connectionLengths[item.name] = Math.max(DOCK_CONFIG.buttonSize,
+                Math.ceil(label.get_preferred_width(-1)[1]) + DOCK_CONFIG.iconSize + 16);
+            label.destroy();
+        }
+        return this._connectionLengths[item.name];
+    }
+
+    _connectionLabel(name) {
+        const characters = Array.from(name);
+        return new St.Label({
+            text: characters.slice(0, 12).join('') + (characters.length > 12 ? '...' : ''),
+            style_class: 'zhyprbola-dock-connection-label',
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+    }
+
     _createPanelButton({iconName, accessibleName, panelName}) {
         const icon = new St.Icon({
             gicon: this._panelGicon(iconName),
@@ -1797,6 +1896,40 @@ export default class ZhyprbolaExtension extends Extension {
             accessible_name: accessibleName,
         });
         button._panelName = panelName;
+        const name = this._connectionName(panelName);
+        if (name) {
+            const vertical = [DockPosition.LEFT, DockPosition.RIGHT].includes(this._dockPosition);
+            const length = this._dockItemLength({name: panelName});
+            const label = this._connectionLabel(name);
+            label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+            const content = new St.BoxLayout({
+                style_class: 'zhyprbola-dock-connection-row',
+                vertical: false,
+                width: length,
+                height: DOCK_CONFIG.buttonSize,
+            });
+            let child = content;
+            if (vertical) {
+                content.set_pivot_point(0.5, 0.5);
+                content.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, -90);
+                content.set_position((DOCK_CONFIG.buttonSize - length) / 2,
+                    (length - DOCK_CONFIG.buttonSize) / 2);
+                child = new St.Widget({layout_manager: new Clutter.FixedLayout(),
+                    width: DOCK_CONFIG.buttonSize, height: length});
+                child.add_child(content);
+            }
+            button.set_child(child);
+            icon.set_size(DOCK_CONFIG.iconSize, DOCK_CONFIG.iconSize);
+            icon.y_align = Clutter.ActorAlign.CENTER;
+            icon.y_expand = false;
+            label.y_align = Clutter.ActorAlign.CENTER;
+            label.y_expand = false;
+            content.add_child(icon);
+            content.add_child(label);
+            button.accessible_name = `${accessibleName}: ${name}`;
+            button.set_size(vertical ? DOCK_CONFIG.buttonSize : length,
+                vertical ? length : DOCK_CONFIG.buttonSize);
+        }
 
         button.connect('clicked', () => {
             if (panelName === 'power')
@@ -1894,7 +2027,7 @@ export default class ZhyprbolaExtension extends Extension {
         const items = this._dockItems.get(name) ?? [];
         const state = `${length}:${items.length}:${vertical}:${slot}:` +
             JSON.stringify(items.map(item => item.kind === 'app'
-                ? this._itemOrderKey(item) : item.name));
+                ? this._itemOrderKey(item) : [item.name, this._connectionName(item.name)]));
         const appButtons = new Map(group.get_children()
             .filter(child => child._delegate?.groupName === name)
             .map(child => [child._delegate.key, child]));
@@ -1934,8 +2067,7 @@ export default class ZhyprbolaExtension extends Extension {
             this._powerMenu = null;
             this._panelIcons.clear();
         }
-        const itemLengths = items.map(item => item.kind === 'date-time'
-            ? this._dateTimeItemLength(item.name) : DOCK_CONFIG.buttonSize);
+        const itemLengths = items.map(item => this._dockItemLength(item));
         const preferred = itemLengths.reduce((sum, size) => sum + size, 0) +
             Math.max(0, items.length - 1) * DOCK_CONFIG.groupSpacing;
         const overflow = preferred > length;
@@ -2420,15 +2552,14 @@ export default class ZhyprbolaExtension extends Extension {
         const regionCount = this._dockGroupOrder.length;
         const dateTimeIndex = this._dockGroupOrder.indexOf('zhyprbola');
         const hasDateTime = this._dockComponents.visible.some(name =>
-            name === 'date-display' || name === 'time-display');
+            name === 'date-display' || name === 'time-display' || this._connectionName(name));
         let regionLengths = Array.from({length: regionCount}, (_, index) =>
             Math.floor(available * (index + 1) / regionCount) -
             Math.floor(available * index / regionCount));
         if (hasDateTime && regionCount > 1 && dateTimeIndex >= 0) {
             const items = this._dockItems.get('zhyprbola') ?? [];
             const desired = items.reduce((sum, item) => sum +
-                (item.kind === 'date-time' ? this._dateTimeItemLength(item.name)
-                    : DOCK_CONFIG.buttonSize), 0)
+                this._dockItemLength(item), 0)
                 + Math.max(0, items.length - 1) * DOCK_CONFIG.groupSpacing
                 + (dateTimeIndex === regionCount - 1 ? SHOW_DESKTOP_SIZE : 0);
             const target = Math.min(Math.floor(available * 0.68),

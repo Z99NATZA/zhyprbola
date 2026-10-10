@@ -86,6 +86,19 @@
     text-align: center;
 }
 
+.zhyprbola-dock-connection-row {
+    spacing: 4px;
+    padding: 0 6px;
+}
+
+.zhyprbola-dock-connection-label {
+    color: #ffffff;
+    font-family: sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    text-align: left;
+}
+
 .zhyprbola-input-source-menu .popup-menu-content,
 .zhyprbola-quick-menu .popup-menu-content,
 .zhyprbola-sound-menu .popup-menu-content,

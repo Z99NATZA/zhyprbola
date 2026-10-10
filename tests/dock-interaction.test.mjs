@@ -48,6 +48,14 @@ class Actor {
         this.destroyed = true;
     }
     set_size(width, height) { this.live(); Object.assign(this, {width, height}); }
+    set_child(child) {
+        for (const previous of this.children)
+            previous.parent = null;
+        this.children = [];
+        this.add_child(child);
+    }
+    get_preferred_width() { return [0, Array.from(this.text ?? '').length * 8]; }
+    get_preferred_height() { return [14, 14]; }
     set_position(x, y) { this.live(); Object.assign(this, {x, y}); }
     set_style() { this.live(); }
     set_pivot_point(x, y) { Object.assign(this, {pivotX: x, pivotY: y}); }
@@ -75,7 +83,7 @@ function fixture(length = 400) {
     const keybindings = new Map();
     let nextId = 0;
     const context = vm.createContext({
-        St: {Widget: Actor, Icon: Actor, Button: Actor,
+        St: {Widget: Actor, BoxLayout: Actor, Icon: Actor, Button: Actor,
             Label: class extends Actor {
                 constructor(props) { super(props); this.clutter_text = {}; }
             }, ButtonMask: {ONE: 1},
@@ -84,7 +92,7 @@ function fixture(length = 400) {
         Clutter: {FixedLayout: class {}, AnimationMode: {EASE_OUT_QUAD: 0},
             RotateAxis: {Z_AXIS: 2}, ActorAlign: {CENTER: 0},
             ClickGesture: Actor, BUTTON_SECONDARY: 3},
-        Pango: {EllipsizeMode: {END: 3}},
+        Pango: {EllipsizeMode: {NONE: 0, END: 3}},
         DND: {makeDraggable: actor => (actor.draggable = new Actor())},
         GLib: {PRIORITY_DEFAULT_IDLE: 0, SOURCE_REMOVE: false,
             idle_add: (_, callback) => { idles.set(++nextId, callback); return nextId; }},
@@ -906,4 +914,76 @@ test('Battery opens from Settings on Components, toggles, and is destroyed with 
     assert.equal(menu.isOpen, false);
     dock._destroyDock();
     assert.equal(menu.destroyed, true);
+});
+
+test('connection names use the active SSID and connected Bluetooth device', () => {
+    const {dock} = fixture();
+    assert.equal(dock._parseConnectionName('wifi', 'no:Other\nyes:Home\\:WiFi\\\\Lab\n'),
+        'Home:WiFi\\Lab');
+    assert.equal(dock._parseConnectionName('wifi', 'no:Other\n'), '');
+    assert.equal(dock._parseConnectionName('bluetooth',
+        '\x1b[0;94mDevice AA:BB:CC:DD:EE:FF My Headphones\x1b[0m\n'), 'My Headphones');
+    assert.equal(dock._parseConnectionName('bluetooth', 'No default controller available\n'), '');
+});
+
+test('connected dock buttons show an icon followed by 12 Unicode characters and dots on every side', () => {
+    for (const side of ['bottom', 'top', 'left', 'right']) {
+        const {dock} = fixture();
+        dock._dockPosition = side;
+        dock._panelGicon = name => name;
+        dock._connectionNames = {wifi: 'WiFi😀123456789-long', bluetooth: 'Headphones123456'};
+        for (const name of ['wifi', 'bluetooth']) {
+            const button = dock._createPanelButton({iconName: name,
+                accessibleName: name, panelName: name});
+            const vertical = side === 'left' || side === 'right';
+            const child = button.children[0];
+            const content = vertical ? child.children[0] : child;
+            const [icon, label] = content.children;
+            assert.equal(icon.gicon, name);
+            assert.equal(content.vertical, false);
+            assert.equal(content.style_class, 'zhyprbola-dock-connection-row');
+            assert.equal(icon.y_align, 0);
+            assert.equal(label.y_align, 0);
+            assert.equal(icon.y_expand, false);
+            assert.equal(label.y_expand, false);
+            assert.equal(label.style_class, 'zhyprbola-dock-connection-label');
+            assert.equal(label.text, Array.from(dock._connectionNames[name]).slice(0, 12).join('') + '...');
+            assert.equal(label.clutter_text.ellipsize, 0);
+            assert.equal(vertical ? button.width : button.height, 27);
+            assert.equal(vertical ? button.height : button.width, 152);
+            assert.equal(dock._panelIcons.get(name), icon);
+            if (vertical)
+                assert.equal(content.angle, -90);
+        }
+    }
+});
+
+test('short and exactly 12-character connection names do not gain dots', () => {
+    const {dock} = fixture();
+    for (const name of ['Home', '123456789012', '😀12345678901'])
+        assert.equal(dock._connectionLabel(name).text, name);
+});
+
+test('connection changes rerender dock labels and restore icons after disconnect', () => {
+    const {dock, group} = fixture(800);
+    dock._panelGicon = name => name;
+    dock._connectionNames = {wifi: '', bluetooth: ''};
+    dock._dateTimeLabels = new Map();
+    dock._dockGroupsByName.set('zhyprbola', group);
+    dock._dockItems.set('zhyprbola', ['wifi', 'bluetooth'].map(name =>
+        ({kind: 'panel', name, label: name})));
+    const render = () => dock._renderDockRegion('zhyprbola', 400, false, 0);
+    render();
+    assert.equal(group.children[0].children[0].gicon, 'wifi');
+    dock._connectionNames.wifi = 'Home';
+    render();
+    assert.equal(group.children[0].children[0].children[1].text, 'Home');
+    dock._connectionNames.wifi = 'Work';
+    render();
+    assert.equal(group.children[0].children[0].children[1].text, 'Work');
+    dock._connectionNames.wifi = '';
+    render();
+    assert.equal(group.children[0].children[0].gicon, 'wifi');
+    assert.equal(group.children[1].children[0].gicon, 'bluetooth');
+    assert.equal(group.width, 58);
 });
