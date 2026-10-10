@@ -5,6 +5,8 @@ Item {
 
     property bool opened: false
     property bool standalone: false
+    readonly property var operation: backend.connectionActions.wifi || ({})
+    readonly property bool operationBusy: Boolean(operation.busy)
     property string activeTab: "networks"
     property string connectingSsid: ""
     property string disconnectingSsid: ""
@@ -12,7 +14,7 @@ Item {
     property string passwordError: ""
     property string failedSsid: ""
     property string failureMessage: ""
-    readonly property bool actionBusy: connectingSsid.length > 0 || disconnectingSsid.length > 0
+    readonly property bool actionBusy: operationBusy || connectingSsid.length > 0 || disconnectingSsid.length > 0
     readonly property string family: Qt.application.font.family
     readonly property color surfaceColor: Theme.componentSurfaceFor("wifi")
     readonly property color textColor: Theme.text
@@ -70,7 +72,7 @@ Item {
     z: 110
 
     onOpenedChanged: {
-        if (opened)
+        if (opened && backend.wifiEnabled)
             backend.scanWifiNetworks()
     }
 
@@ -256,7 +258,7 @@ Item {
                     }
                 }
 
-                PowerButton {
+                RadioPowerButton {
                     id: powerButton
                     anchors {
                         right: parent.right
@@ -265,6 +267,8 @@ Item {
                     }
 
                     checked: backend.wifiEnabled
+                    busy: panelRoot.operationBusy && panelRoot.operation.action.startsWith("power-")
+                    enabled: !panelRoot.operationBusy && !panelRoot.actionBusy
                     onClicked: backend.setWifiEnabled(!backend.wifiEnabled)
                 }
             }
@@ -291,7 +295,7 @@ Item {
 
             Item {
                 width: parent.width
-                height: 224
+                height: 178
 
                 Item {
                     anchors.fill: parent
@@ -323,7 +327,9 @@ Item {
                     Text {
                         anchors.centerIn: parent
                         visible: backend.wifiNetworks.length === 0
-                        text: backend.wifiEnabled ? "No networks found" : "Wi-Fi is off"
+                        text: panelRoot.operationBusy && panelRoot.operation.action === "scan"
+                            ? "Looking for networks…"
+                            : backend.wifiEnabled ? "No networks found" : "Wi-Fi is off"
                         color: panelRoot.dimTextColor
                         font {
                             family: panelRoot.family
@@ -359,6 +365,19 @@ Item {
                 }
             }
 
+            Text {
+                width: parent.width
+                height: 32
+                text: panelRoot.operation.message || ""
+                color: panelRoot.operation.success === false ? panelRoot.accentColor : panelRoot.dimTextColor
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
+                verticalAlignment: Text.AlignVCenter
+                font.family: panelRoot.family
+                font.pixelSize: 11
+            }
+
             Row {
                 width: parent.width
                 height: 36
@@ -367,12 +386,18 @@ Item {
                 TextButton {
                     width: (parent.width - parent.spacing) / 2
                     label: "Refresh"
+                    objectName: "scanButton"
+                    busy: panelRoot.operationBusy && panelRoot.operation.action === "scan"
+                    enabled: !panelRoot.operationBusy && backend.wifiEnabled && !panelRoot.actionBusy
                     onClicked: backend.scanWifiNetworks()
                 }
 
                 TextButton {
                     width: (parent.width - parent.spacing) / 2
                     label: "Settings"
+                    objectName: "settingsButton"
+                    busy: panelRoot.operationBusy && panelRoot.operation.action === "settings"
+                    enabled: !panelRoot.operationBusy
                     onClicked: backend.openWifiSettings()
                 }
             }
@@ -751,6 +776,8 @@ Item {
         id: button
 
         property string label: ""
+        property bool busy: false
+        opacity: enabled || busy ? 1 : 0.5
         signal clicked()
 
         height: 36
@@ -767,14 +794,20 @@ Item {
             }
         }
 
-        Text {
+        Row {
             anchors.centerIn: parent
-            text: button.label
-            color: panelRoot.textColor
-            font {
-                family: panelRoot.family
-                pixelSize: 13
-                weight: Font.DemiBold
+            spacing: 6
+            ActivitySpinner {
+                anchors.verticalCenter: parent.verticalCenter
+                running: button.busy
+                ink: panelRoot.textColor
+            }
+            Text {
+                text: button.busy ? (button.label === "Refresh" ? "Scanning…" : "Opening…") : button.label
+                color: panelRoot.textColor
+                font.family: panelRoot.family
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
             }
         }
 
@@ -783,6 +816,7 @@ Item {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
+            enabled: !button.busy
             onClicked: button.clicked()
         }
     }
@@ -818,42 +852,6 @@ Item {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: button.clicked()
-        }
-    }
-
-    component PowerButton: Item {
-        id: control
-
-        property bool checked: false
-        signal clicked()
-
-        width: 56
-        height: 56
-
-        Rectangle {
-            anchors.fill: parent
-            radius: width / 2
-            color: powerMouse.containsMouse ? Theme.heroControlHover : Theme.heroControl
-
-            Behavior on color {
-                ColorAnimation { duration: 160 }
-            }
-        }
-
-        FlatIcon {
-            anchors.centerIn: parent
-            width: 22
-            height: 22
-            name: "power"
-            ink: Theme.heroText
-        }
-
-        MouseArea {
-            id: powerMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: control.clicked()
         }
     }
 

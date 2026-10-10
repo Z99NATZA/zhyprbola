@@ -12,6 +12,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QSettings>
 #include <QSaveFile>
@@ -1452,6 +1453,86 @@ void Backend::launchApp(const QString &name) {
     QProcess::startDetached(command.first(), command.mid(1));
 }
 
+void Backend::setConnectionAction(const QString &radio, const QString &action, bool busy,
+    const QString &message, bool success) {
+    m_connectionActions.insert(radio, QVariantMap{{QStringLiteral("action"), action},
+        {QStringLiteral("busy"), busy}, {QStringLiteral("message"), message},
+        {QStringLiteral("success"), success}});
+    emit connectionActionsChanged();
+}
+
+void Backend::runConnectionCommand(const QString &radio, const QString &action,
+    const QString &program, const QStringList &arguments, int expectedPower) {
+    if (m_connectionActions.value(radio).toMap().value(QStringLiteral("busy")).toBool()) return;
+    const QString pending = action == QLatin1String("scan") ? QStringLiteral("Scanning…")
+        : expectedPower == 1 ? QStringLiteral("Turning on…") : QStringLiteral("Turning off…");
+    setConnectionAction(radio, action, true, pending);
+    auto *process = new QProcess(this);
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+    process->setProcessEnvironment(environment);
+    auto *timeout = new QTimer(process);
+    timeout->setSingleShot(true);
+    connect(timeout, &QTimer::timeout, process, [process]() {
+        process->setProperty("timedOut", true);
+        process->kill();
+    });
+    const auto finish = [this, process, timeout, radio, action, expectedPower](bool success) {
+        if (process->property("actionFinished").toBool()) return;
+        process->setProperty("actionFinished", true);
+        timeout->stop();
+        const QString output = QString::fromUtf8(process->readAllStandardError()) +
+            QString::fromUtf8(process->readAllStandardOutput());
+        const bool timedOut = process->property("timedOut").toBool();
+        success = success && !timedOut && !output.contains(QRegularExpression(
+            QStringLiteral("Failed|No default controller|not available|NotReady|NotAuthorized"),
+            QRegularExpression::CaseInsensitiveOption));
+        refreshSystem();
+        if (radio == QLatin1String("wifi")) refreshWifiNetworks();
+        if (expectedPower >= 0) {
+            const bool powered = radio == QLatin1String("wifi") ? m_wifiEnabled : m_bluetoothEnabled;
+            success = success && powered == (expectedPower == 1);
+        }
+        QString message;
+        if (success) {
+            message = action == QLatin1String("scan")
+                ? QStringLiteral("Scan complete · %1 %2").arg(radio == QLatin1String("wifi")
+                    ? m_wifiNetworks.size() : m_bluetoothDevices.size())
+                    .arg(radio == QLatin1String("wifi") ? QStringLiteral("networks") : QStringLiteral("devices"))
+                : expectedPower == 1 ? QStringLiteral("Radio is on") : QStringLiteral("Radio is off");
+        } else {
+            const auto lines = output.trimmed().split('\n', Qt::SkipEmptyParts);
+            const QString detail = lines.isEmpty() ? QString() : lines.last().trimmed().left(120);
+            message = timedOut ? QStringLiteral("Action timed out. Try again.")
+                : action == QLatin1String("scan") ? QStringLiteral("Could not scan")
+                : expectedPower == 1 ? QStringLiteral("Could not turn on") : QStringLiteral("Could not turn off");
+            if (!timedOut && !detail.isEmpty()) message += QStringLiteral(": ") + detail;
+        }
+        setConnectionAction(radio, action, false, message, success);
+        process->deleteLater();
+    };
+    connect(process, &QProcess::finished, this, [finish](int code, QProcess::ExitStatus status) {
+        finish(code == 0 && status == QProcess::NormalExit);
+    });
+    connect(process, &QProcess::errorOccurred, this, [finish](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart) finish(false);
+    });
+    process->start(program, arguments);
+    timeout->start(20000);
+}
+
+void Backend::launchConnectionSettings(const QString &radio, const QStringList &command) {
+    if (m_connectionActions.value(radio).toMap().value(QStringLiteral("busy")).toBool()) return;
+    setConnectionAction(radio, QStringLiteral("settings"), true, QStringLiteral("Opening settings…"));
+    QTimer::singleShot(0, this, [this, radio, command]() {
+        const bool success = !command.isEmpty() && QProcess::startDetached(command.first(), command.mid(1));
+        setConnectionAction(radio, QStringLiteral("settings"), false,
+            success ? QStringLiteral("Settings opened")
+                : command.isEmpty() ? QStringLiteral("No settings application is installed")
+                : QStringLiteral("Could not open settings"), success);
+    });
+}
+
 void Backend::openWifiSettings() {
     QStringList command;
     if (!QStandardPaths::findExecutable(QStringLiteral("gnome-control-center")).isEmpty()) {
@@ -1459,7 +1540,7 @@ void Backend::openWifiSettings() {
     } else if (!QStandardPaths::findExecutable(QStringLiteral("nm-connection-editor")).isEmpty()) {
         command = {QStringLiteral("nm-connection-editor")};
     }
-    if (!command.isEmpty()) QProcess::startDetached(command.first(), command.mid(1));
+    launchConnectionSettings(QStringLiteral("wifi"), command);
 }
 
 void Backend::refreshStatus() {
@@ -1468,12 +1549,10 @@ void Backend::refreshStatus() {
 }
 
 void Backend::setWifiEnabled(bool enabled) {
-    if (QStandardPaths::findExecutable(QStringLiteral("nmcli")).isEmpty()) return;
-
-    QProcess::startDetached(QStringLiteral("nmcli"),
+    runConnectionCommand(QStringLiteral("wifi"),
+        enabled ? QStringLiteral("power-on") : QStringLiteral("power-off"), QStringLiteral("nmcli"),
         {QStringLiteral("radio"), QStringLiteral("wifi"),
-         enabled ? QStringLiteral("on") : QStringLiteral("off")});
-    QTimer::singleShot(800, this, &Backend::refreshSystem);
+         enabled ? QStringLiteral("on") : QStringLiteral("off")}, enabled ? 1 : 0);
 }
 
 void Backend::refreshWifiNetworks() {
@@ -1558,16 +1637,9 @@ void Backend::refreshWifiNetworks() {
 }
 
 void Backend::scanWifiNetworks() {
-    if (QStandardPaths::findExecutable(QStringLiteral("nmcli")).isEmpty()) return;
-
-    refreshSystem();
-    refreshWifiNetworks();
-    QProcess::startDetached(QStringLiteral("nmcli"),
-        {QStringLiteral("dev"), QStringLiteral("wifi"), QStringLiteral("rescan")});
-    QTimer::singleShot(1400, this, [this]() {
-        refreshSystem();
-        refreshWifiNetworks();
-    });
+    runConnectionCommand(QStringLiteral("wifi"), QStringLiteral("scan"), QStringLiteral("nmcli"),
+        {QStringLiteral("--wait"), QStringLiteral("10"), QStringLiteral("dev"),
+         QStringLiteral("wifi"), QStringLiteral("rescan")});
 }
 
 void Backend::connectWifiNetwork(const QString &ssid, bool secure, bool saved,
@@ -1720,25 +1792,18 @@ void Backend::openBluetoothSettings() {
     } else if (!QStandardPaths::findExecutable(QStringLiteral("blueman-manager")).isEmpty()) {
         command = {QStringLiteral("blueman-manager")};
     }
-    if (!command.isEmpty()) QProcess::startDetached(command.first(), command.mid(1));
+    launchConnectionSettings(QStringLiteral("bluetooth"), command);
 }
 
 void Backend::setBluetoothEnabled(bool enabled) {
-    if (QStandardPaths::findExecutable(QStringLiteral("bluetoothctl")).isEmpty()) return;
-
-    QProcess::startDetached(QStringLiteral("bluetoothctl"),
-        {QStringLiteral("power"), enabled ? QStringLiteral("on") : QStringLiteral("off")});
-    QTimer::singleShot(900, this, &Backend::refreshSystem);
+    runConnectionCommand(QStringLiteral("bluetooth"),
+        enabled ? QStringLiteral("power-on") : QStringLiteral("power-off"), QStringLiteral("bluetoothctl"),
+        {QStringLiteral("power"), enabled ? QStringLiteral("on") : QStringLiteral("off")}, enabled ? 1 : 0);
 }
 
 void Backend::scanBluetoothDevices() {
-    if (QStandardPaths::findExecutable(QStringLiteral("bluetoothctl")).isEmpty()) return;
-
-    refreshBluetoothDevices();
-    QProcess::startDetached(QStringLiteral("bluetoothctl"),
+    runConnectionCommand(QStringLiteral("bluetooth"), QStringLiteral("scan"), QStringLiteral("bluetoothctl"),
         {QStringLiteral("--timeout"), QStringLiteral("5"), QStringLiteral("scan"), QStringLiteral("on")});
-    QTimer::singleShot(1400, this, &Backend::refreshBluetoothDevices);
-    QTimer::singleShot(5400, this, &Backend::refreshSystem);
 }
 
 void Backend::connectBluetoothDevice(const QString &address) {

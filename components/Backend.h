@@ -31,6 +31,7 @@ class Backend : public QObject {
     Q_PROPERTY(QString bluetoothDeviceName READ bluetoothDeviceName NOTIFY systemChanged)
     Q_PROPERTY(QString bluetoothStatusText READ bluetoothStatusText NOTIFY systemChanged)
     Q_PROPERTY(QVariantList bluetoothDevices READ bluetoothDevices NOTIFY bluetoothDevicesChanged)
+    Q_PROPERTY(QVariantMap connectionActions READ connectionActions NOTIFY connectionActionsChanged)
     Q_PROPERTY(QString userName READ userName CONSTANT)
     Q_PROPERTY(bool weatherAvailable READ weatherAvailable NOTIFY weatherChanged)
     Q_PROPERTY(int temperature READ temperature NOTIFY weatherChanged)
@@ -93,6 +94,7 @@ public:
     QString bluetoothDeviceName() const { return m_bluetoothDeviceName; }
     QString bluetoothStatusText() const { return m_bluetoothStatusText; }
     QVariantList bluetoothDevices() const { return m_bluetoothDevices; }
+    QVariantMap connectionActions() const { return m_connectionActions; }
     QString userName() const { return m_userName; }
     bool weatherAvailable() const { return m_weatherAvailable; }
     int temperature() const { return m_temperature; }
@@ -191,6 +193,7 @@ signals:
     void wifiConnectionFinished(const QString &ssid, bool success, bool needsPassword);
     void wifiDisconnectionFinished(const QString &ssid, bool success);
     void bluetoothDevicesChanged();
+    void connectionActionsChanged();
     void themeChanged();
     void componentOpacityChanged();
     void dockSettingsChanged();
@@ -206,6 +209,11 @@ signals:
     void globalKeyReleased(const QString &name);
 
 private:
+    void setConnectionAction(const QString &radio, const QString &action, bool busy,
+        const QString &message, bool success = true);
+    void runConnectionCommand(const QString &radio, const QString &action,
+        const QString &program, const QStringList &arguments, int expectedPower = -1);
+    void launchConnectionSettings(const QString &radio, const QStringList &command);
     void refreshSystem();
     void refreshWeather();
     void refreshMusic();
@@ -253,6 +261,7 @@ private:
     QString m_bluetoothDeviceName = QStringLiteral("Bluetooth off");
     QString m_bluetoothStatusText = QStringLiteral("Bluetooth unavailable");
     QVariantList m_bluetoothDevices;
+    QVariantMap m_connectionActions;
     QString m_userName;
     bool m_weatherAvailable = false;
     int m_temperature = 0;

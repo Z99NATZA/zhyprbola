@@ -5,6 +5,8 @@ Item {
 
     property bool opened: false
     property bool standalone: false
+    readonly property var operation: backend.connectionActions.bluetooth || ({})
+    readonly property bool operationBusy: Boolean(operation.busy)
     property string activeTab: "devices"
     property var pendingDeviceActions: ({})
     readonly property string family: Qt.application.font.family
@@ -17,7 +19,7 @@ Item {
     signal closeRequested()
 
     function runDeviceAction(address, connect) {
-        if (!address || pendingDeviceActions[address])
+        if (!address || pendingDeviceActions[address] || operationBusy || !backend.bluetoothEnabled)
             return
 
         const actions = Object.assign({}, pendingDeviceActions)
@@ -53,7 +55,7 @@ Item {
     z: 111
 
     onOpenedChanged: {
-        if (opened)
+        if (opened && backend.bluetoothEnabled)
             backend.scanBluetoothDevices()
     }
 
@@ -215,7 +217,7 @@ Item {
                     }
                 }
 
-                PowerButton {
+                RadioPowerButton {
                     id: powerButton
                     anchors {
                         right: parent.right
@@ -224,6 +226,8 @@ Item {
                     }
 
                     checked: backend.bluetoothEnabled
+                    busy: panelRoot.operationBusy && panelRoot.operation.action.startsWith("power-")
+                    enabled: !panelRoot.operationBusy && Object.keys(panelRoot.pendingDeviceActions).length === 0
                     onClicked: backend.setBluetoothEnabled(!backend.bluetoothEnabled)
                 }
             }
@@ -250,7 +254,7 @@ Item {
 
             Item {
                 width: parent.width
-                height: 204
+                height: 158
 
                 Item {
                     anchors.fill: parent
@@ -282,7 +286,9 @@ Item {
                     Text {
                         anchors.centerIn: parent
                         visible: backend.bluetoothDevices.length === 0
-                        text: backend.bluetoothEnabled ? "No devices found" : "Bluetooth is off"
+                        text: panelRoot.operationBusy && panelRoot.operation.action === "scan"
+                            ? "Looking for devices…"
+                            : backend.bluetoothEnabled ? "No devices found" : "Bluetooth is off"
                         color: panelRoot.dimTextColor
                         font {
                             family: panelRoot.family
@@ -293,7 +299,7 @@ Item {
 
                 Column {
                     width: parent.width
-                    spacing: 8
+                    spacing: 4
                     visible: panelRoot.activeTab === "details"
 
                     InfoRow {
@@ -318,6 +324,19 @@ Item {
                 }
             }
 
+            Text {
+                width: parent.width
+                height: 32
+                text: panelRoot.operation.message || ""
+                color: panelRoot.operation.success === false ? panelRoot.accentColor : panelRoot.dimTextColor
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
+                verticalAlignment: Text.AlignVCenter
+                font.family: panelRoot.family
+                font.pixelSize: 11
+            }
+
             Row {
                 width: parent.width
                 height: 36
@@ -326,12 +345,18 @@ Item {
                 TextButton {
                     width: (parent.width - parent.spacing) / 2
                     label: "Refresh"
-                    onClicked: backend.refreshStatus()
+                    objectName: "scanButton"
+                    busy: panelRoot.operationBusy && panelRoot.operation.action === "scan"
+                    enabled: !panelRoot.operationBusy && backend.bluetoothEnabled && Object.keys(panelRoot.pendingDeviceActions).length === 0
+                    onClicked: backend.scanBluetoothDevices()
                 }
 
                 TextButton {
                     width: (parent.width - parent.spacing) / 2
                     label: "Settings"
+                    objectName: "settingsButton"
+                    busy: panelRoot.operationBusy && panelRoot.operation.action === "settings"
+                    enabled: !panelRoot.operationBusy
                     onClicked: backend.openBluetoothSettings()
                 }
             }
@@ -437,7 +462,7 @@ Item {
             MouseArea {
                 id: actionMouse
                 anchors.fill: parent
-                enabled: !row.pendingAction && backend.bluetoothEnabled
+                enabled: !row.pendingAction && !panelRoot.operationBusy && backend.bluetoothEnabled
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: panelRoot.runDeviceAction(row.address, !row.connected)
@@ -452,7 +477,7 @@ Item {
         property string value: ""
 
         width: parent.width
-        height: 40
+        height: 36
         radius: 9
         color: Theme.control
 
@@ -554,6 +579,8 @@ Item {
         id: button
 
         property string label: ""
+        property bool busy: false
+        opacity: enabled || busy ? 1 : 0.5
         signal clicked()
 
         height: 36
@@ -570,14 +597,20 @@ Item {
             }
         }
 
-        Text {
+        Row {
             anchors.centerIn: parent
-            text: button.label
-            color: panelRoot.textColor
-            font {
-                family: panelRoot.family
-                pixelSize: 13
-                weight: Font.DemiBold
+            spacing: 6
+            ActivitySpinner {
+                anchors.verticalCenter: parent.verticalCenter
+                running: button.busy
+                ink: panelRoot.textColor
+            }
+            Text {
+                text: button.busy ? (button.label === "Refresh" ? "Scanning…" : "Opening…") : button.label
+                color: panelRoot.textColor
+                font.family: panelRoot.family
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
             }
         }
 
@@ -586,6 +619,7 @@ Item {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
+            enabled: !button.busy
             onClicked: button.clicked()
         }
     }
@@ -621,38 +655,6 @@ Item {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: button.clicked()
-        }
-    }
-
-    component PowerButton: Item {
-        id: control
-
-        property bool checked: false
-        signal clicked()
-
-        width: 56
-        height: 56
-
-        Rectangle {
-            anchors.fill: parent
-            radius: width / 2
-            color: powerMouse.containsMouse ? Theme.heroControlHover : Theme.heroControl
-        }
-
-        FlatIcon {
-            anchors.centerIn: parent
-            width: 22
-            height: 22
-            name: "power"
-            ink: Theme.heroText
-        }
-
-        MouseArea {
-            id: powerMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: control.clicked()
         }
     }
 
