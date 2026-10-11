@@ -2,7 +2,7 @@
 
 ![Zhyprbola](assets/zhyprbola-logo.png)
 
-![ZhyprbolaPreview01](assets/zhyprbola-preview-01.png)
+![ZhyprbolaPreview02](assets/zhyprbola-preview-02.png)
 
 ## Stack
 
