@@ -95,6 +95,11 @@ make run-panel
 make check
 ```
 
+## Documentation
+
+- [Documentation](docs/README.md)
+- [v0.1.0](docs/release/v0.1.0.md)
+
 ## LICENSE
 
 MIT [LICENSE](LICENSE)

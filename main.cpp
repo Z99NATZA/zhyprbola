@@ -24,10 +24,12 @@ int main(int argc, char *argv[]) {
     QGuiApplication app(argc, argv);
     app.setOrganizationName(QStringLiteral("zhyprbola"));
     app.setApplicationName(QStringLiteral("Zhyprbola Desktop"));
+    app.setApplicationVersion(QStringLiteral(ZHYPRBOLA_VERSION));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Zhyprbola desktop and panel host"));
     parser.addHelpOption();
+    parser.addVersionOption();
     QCommandLineOption panelOption(QStringLiteral("panel"),
         QStringLiteral("Open a focused panel host for the named panel."),
         QStringLiteral("name"));

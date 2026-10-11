@@ -6,6 +6,7 @@
 - [Architecture](architecture.md): ownership and communication between layers.
 - [Runtime Notes](runtime-notes.md): lifecycle, input, fallback, and layout details.
 - [Zhyprbola Origin](zhyprbola-origin.md): original project notes in Thai.
+- [v0.1.0](release/v0.1.0.md): first release features in Thai and English.
 
 ## Updating
 
