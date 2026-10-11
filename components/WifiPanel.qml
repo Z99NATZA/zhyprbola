@@ -268,6 +268,7 @@ Item {
 
                     checked: backend.wifiEnabled
                     busy: panelRoot.operationBusy && panelRoot.operation.action.startsWith("power-")
+                    pendingChecked: panelRoot.operation.action === "power-on"
                     enabled: !panelRoot.operationBusy && !panelRoot.actionBusy
                     onClicked: backend.setWifiEnabled(!backend.wifiEnabled)
                 }

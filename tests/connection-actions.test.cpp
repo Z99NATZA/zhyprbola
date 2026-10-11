@@ -170,6 +170,14 @@ esac
             QObject *settings = panel->findChild<QObject *>("settingsButton");
             QVERIFY(power && scan && settings);
             QVERIFY(power->property("checked").toBool());
+            QObject *orb = panel->findChild<QObject *>("bluetoothOrb");
+            if (radio == QLatin1String("bluetooth")) {
+                QVERIFY(orb);
+                QVERIFY(orb->property("animating").toBool());
+                const double phase = orb->property("phase").toDouble();
+                QTest::qWait(80);
+                QVERIFY(orb->property("phase").toDouble() != phase);
+            }
             const auto capture = [&](const QString &suffix) {
                 const QString previews = qEnvironmentVariable("CONNECTION_ACTION_PREVIEW_DIR");
                 if (!previews.isEmpty()) {
@@ -180,20 +188,31 @@ esac
                     QVERIFY(image.save(QDir(previews).filePath(radio + "-" + suffix + ".png")));
                 }
             };
-            if (radio == QLatin1String("bluetooth")) backend.setBluetoothEnabled(false);
-            else backend.setWifiEnabled(false);
+            auto *powerItem = qobject_cast<QQuickItem *>(power);
+            QVERIFY(powerItem);
+            const QPoint powerCenter = powerItem->mapToScene(
+                QPointF(powerItem->width() / 2, powerItem->height() / 2)).toPoint();
+            QSignalSpy powerClicks(power, SIGNAL(clicked()));
+            QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, powerCenter);
             QVERIFY(power->property("busy").toBool());
+            QVERIFY(!power->property("pendingChecked").toBool());
             QVERIFY(!power->property("enabled").toBool());
             QVERIFY(!scan->property("enabled").toBool());
             QVERIFY(!settings->property("enabled").toBool());
+            QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, powerCenter);
+            QCOMPARE(powerClicks.count(), 1);
+            QCOMPARE(state(backend, radio).value("action").toString(), QStringLiteral("power-off"));
+            if (orb) QVERIFY(orb->property("working").toBool());
             capture("power-pending");
             QTRY_VERIFY(!state(backend, radio).value("busy").toBool());
             QVERIFY(!power->property("checked").toBool());
+            if (orb) QVERIFY(!orb->property("animating").toBool());
             QVERIFY(power->property("enabled").toBool());
             QVERIFY(!scan->property("enabled").toBool());
             capture("off");
             if (radio == QLatin1String("bluetooth")) backend.setBluetoothEnabled(true);
             else backend.setWifiEnabled(true);
+            QVERIFY(power->property("pendingChecked").toBool());
             QTRY_VERIFY(!state(backend, radio).value("busy").toBool());
             QVERIFY(power->property("checked").toBool());
             QVERIFY(scan->property("enabled").toBool());
@@ -205,6 +224,13 @@ esac
             capture("on");
             item->setProperty("activeTab", QStringLiteral("details"));
             capture("details");
+            item->setProperty("opened", false);
+            if (orb) {
+                QVERIFY(!orb->property("animating").toBool());
+                const double phase = orb->property("phase").toDouble();
+                QTest::qWait(80);
+                QCOMPARE(orb->property("phase").toDouble(), phase);
+            }
             item->setParentItem(nullptr);
         }
     }
