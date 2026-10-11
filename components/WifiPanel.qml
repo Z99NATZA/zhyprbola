@@ -7,6 +7,7 @@ Item {
     property bool standalone: false
     readonly property var operation: backend.connectionActions.wifi || ({})
     readonly property bool operationBusy: Boolean(operation.busy)
+    readonly property bool powerBusy: operationBusy && String(operation.action || "").startsWith("power-")
     property string activeTab: "networks"
     property string connectingSsid: ""
     property string disconnectingSsid: ""
@@ -196,17 +197,22 @@ Item {
                 radius: 14
                 color: Theme.heroSurface
 
-                SignalOrb {
+                RadioOrb {
                     id: signalOrb
+                    objectName: "wifiOrb"
+                    iconName: "wifi"
+                    animationEnabled: panelRoot.opened
                     anchors {
                         left: parent.left
                         verticalCenter: parent.verticalCenter
                         leftMargin: 18
                     }
 
-                    strength: backend.wifiSignalStrength
                     powered: backend.wifiEnabled
                     connected: backend.wifiConnected
+                    working: panelRoot.powerBusy
+                        || (panelRoot.operationBusy && panelRoot.operation.action === "scan")
+                        || panelRoot.connectingSsid.length > 0 || panelRoot.disconnectingSsid.length > 0
                 }
 
                 Column {
@@ -222,7 +228,7 @@ Item {
 
                     Text {
                         width: parent.width
-                        text: backend.wifiSsid
+                        text: panelRoot.connectingSsid || panelRoot.disconnectingSsid || backend.wifiSsid
                         color: Theme.heroText
                         elide: Text.ElideRight
                         font {
@@ -234,7 +240,10 @@ Item {
 
                     Text {
                         width: parent.width
-                        text: backend.wifiStatusText
+                        text: panelRoot.powerBusy
+                            ? (panelRoot.operation.action === "power-on" ? "Turning on…" : "Turning off…")
+                            : panelRoot.connectingSsid ? "Connecting…"
+                            : panelRoot.disconnectingSsid ? "Disconnecting…" : backend.wifiStatusText
                         color: Theme.heroMutedText
                         elide: Text.ElideRight
                         font {
@@ -267,40 +276,77 @@ Item {
                     }
 
                     checked: backend.wifiEnabled
-                    busy: panelRoot.operationBusy && panelRoot.operation.action.startsWith("power-")
+                    busy: panelRoot.powerBusy
                     pendingChecked: panelRoot.operation.action === "power-on"
                     enabled: !panelRoot.operationBusy && !panelRoot.actionBusy
                     onClicked: backend.setWifiEnabled(!backend.wifiEnabled)
                 }
             }
 
-            Row {
+            Item {
+                id: tabs
                 width: parent.width
                 height: 34
-                spacing: 8
+                readonly property real tabWidth: (width - 8) / 2
 
-                TabButton {
-                    width: (parent.width - parent.spacing) / 2
-                    label: "Networks"
-                    active: panelRoot.activeTab === "networks"
-                    onClicked: panelRoot.activeTab = "networks"
+                Repeater {
+                    model: 2
+                    Rectangle {
+                        required property int index
+                        x: index * (tabs.tabWidth + 8)
+                        width: tabs.tabWidth
+                        height: tabs.height
+                        radius: 9
+                        color: Theme.control
+                    }
                 }
 
-                TabButton {
-                    width: (parent.width - parent.spacing) / 2
-                    label: "Details"
-                    active: panelRoot.activeTab === "details"
-                    onClicked: panelRoot.activeTab = "details"
+                Rectangle {
+                    objectName: "wifiTabIndicator"
+                    x: panelRoot.activeTab === "networks" ? 0 : parent.tabWidth + 8
+                    width: parent.tabWidth
+                    height: parent.height
+                    radius: 9
+                    color: panelRoot.accentColor
+                    Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                }
+
+                Row {
+                    anchors.fill: parent
+                    spacing: 8
+
+                    TabButton {
+                        width: (parent.width - parent.spacing) / 2
+                        label: "Networks"
+                        active: panelRoot.activeTab === "networks"
+                        onClicked: panelRoot.activeTab = "networks"
+                    }
+
+                    TabButton {
+                        width: (parent.width - parent.spacing) / 2
+                        label: "Details"
+                        active: panelRoot.activeTab === "details"
+                        onClicked: panelRoot.activeTab = "details"
+                    }
                 }
             }
 
             Item {
                 width: parent.width
                 height: 178
+                clip: true
 
                 Item {
+                    objectName: "wifiNetworksPage"
                     anchors.fill: parent
-                    visible: panelRoot.activeTab === "networks"
+                    opacity: panelRoot.activeTab === "networks" ? 1 : 0
+                    visible: opacity > 0
+                    enabled: panelRoot.activeTab === "networks"
+                    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                    transform: Translate {
+                        x: panelRoot.activeTab === "networks" ? 0 : -14
+                        Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                    }
 
                     ListView {
                         anchors {
@@ -316,6 +362,7 @@ Item {
 
                         delegate: NetworkRow {
                             width: ListView.view.width
+                            revealIndex: index
                             ssid: modelData["ssid"] || ""
                             signal: modelData["signal"] || 0
                             security: modelData["security"] || "Open"
@@ -340,26 +387,38 @@ Item {
                 }
 
                 Column {
+                    objectName: "wifiDetailsPage"
                     width: parent.width
-                    spacing: 8
-                    visible: panelRoot.activeTab === "details"
+                    spacing: 4
+                    opacity: panelRoot.activeTab === "details" ? 1 : 0
+                    visible: opacity > 0
+                    enabled: panelRoot.activeTab === "details"
+                    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                    transform: Translate {
+                        x: panelRoot.activeTab === "details" ? 0 : 14
+                        Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                    }
 
                     InfoRow {
+                        revealIndex: 0
                         label: "Network"
                         value: backend.wifiConnected ? backend.wifiSsid : "Not connected"
                     }
 
                     InfoRow {
+                        revealIndex: 1
                         label: "Signal"
                         value: backend.wifiConnected ? backend.wifiSignalStrength + "%" : "--"
                     }
 
                     InfoRow {
+                        revealIndex: 2
                         label: "Radio"
                         value: backend.wifiEnabled ? "On" : "Off"
                     }
 
                     InfoRow {
+                        revealIndex: 3
                         label: "Backend"
                         value: "NetworkManager"
                     }
@@ -398,15 +457,19 @@ Item {
                     label: "Settings"
                     objectName: "settingsButton"
                     busy: panelRoot.operationBusy && panelRoot.operation.action === "settings"
-                    enabled: !panelRoot.operationBusy
+                    enabled: !panelRoot.actionBusy
                     onClicked: backend.openWifiSettings()
                 }
             }
         }
 
         Rectangle {
+            id: passwordOverlay
             anchors.fill: parent
-            visible: panelRoot.passwordSsid.length > 0
+            opacity: panelRoot.passwordSsid.length > 0 ? 1 : 0
+            visible: opacity > 0
+            enabled: panelRoot.passwordSsid.length > 0
+            Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
             color: Qt.rgba(0, 0, 0, 0.24)
             z: 2
 
@@ -420,6 +483,8 @@ Item {
                 anchors.centerIn: parent
                 radius: 14
                 color: panelRoot.surfaceColor
+                scale: panelRoot.passwordSsid.length > 0 ? 1 : 0.96
+                Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
 
                 Column {
                     anchors.fill: parent
@@ -466,6 +531,7 @@ Item {
 
                         TextInput {
                             id: wifiPasswordInput
+                            objectName: "wifiPasswordInput"
                             anchors.fill: parent
                             anchors.leftMargin: 12
                             anchors.rightMargin: 12
@@ -506,6 +572,7 @@ Item {
                         TextButton {
                             width: (parent.width - parent.spacing) / 2
                             label: "Cancel"
+                            enabled: !panelRoot.actionBusy
                             onClicked: {
                                 if (!panelRoot.connectingSsid)
                                     panelRoot.passwordSsid = ""
@@ -513,26 +580,41 @@ Item {
                         }
 
                         Rectangle {
+                            objectName: "wifiPasswordConnect"
                             width: (parent.width - parent.spacing) / 2
                             height: 36
                             radius: 9
                             color: panelRoot.accentColor
-                            opacity: panelRoot.connectingSsid ? 0.6 : 1
+                            enabled: !panelRoot.actionBusy && wifiPasswordInput.text.length > 0
+                            opacity: enabled || panelRoot.connectingSsid ? 1 : 0.5
+                            scale: passwordConnectMouse.pressed ? 0.94 : passwordConnectMouse.containsMouse && enabled ? 1.03 : 1
+                            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                            Behavior on opacity { NumberAnimation { duration: 160 } }
 
-                            Text {
+                            Row {
                                 anchors.centerIn: parent
-                                text: panelRoot.connectingSsid ? "Connecting…" : "Connect"
-                                color: panelRoot.accentTextColor
-                                font {
-                                    family: panelRoot.family
-                                    pixelSize: 13
-                                    weight: Font.DemiBold
+                                spacing: 6
+                                ActivitySpinner {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    running: panelRoot.connectingSsid.length > 0 && panelRoot.opened
+                                    ink: panelRoot.accentTextColor
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: panelRoot.connectingSsid ? "Connecting…" : "Connect"
+                                    color: panelRoot.accentTextColor
+                                    font {
+                                        family: panelRoot.family
+                                        pixelSize: 13
+                                        weight: Font.DemiBold
+                                    }
                                 }
                             }
 
                             MouseArea {
+                                id: passwordConnectMouse
                                 anchors.fill: parent
-                                enabled: !panelRoot.connectingSsid
+                                hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: panelRoot.submitPassword()
                             }
@@ -546,6 +628,19 @@ Item {
     component NetworkRow: Rectangle {
         id: row
 
+        property int revealIndex: 0
+        readonly property bool revealing: panelRoot.opened && panelRoot.activeTab === "networks"
+        property real revealProgress: revealing ? 1 : 0
+        readonly property bool pendingAction: panelRoot.connectingSsid === ssid || panelRoot.disconnectingSsid === ssid
+        opacity: revealProgress
+        transform: Translate { y: (1 - row.revealProgress) * 16 }
+        Behavior on revealProgress {
+            SequentialAnimation {
+                PauseAnimation { duration: row.revealing ? Math.min(row.revealIndex, 6) * 45 : 0 }
+                NumberAnimation { duration: row.revealing ? 300 : 120; easing.type: Easing.OutCubic }
+            }
+        }
+
         property string ssid: ""
         property int signal: 0
         property string security: ""
@@ -555,9 +650,12 @@ Item {
         readonly property bool enterpriseSetup: !saved
             && (security.indexOf("802.1X") >= 0 || security.indexOf("EAP") >= 0)
 
-        height: 48
+        height: 50
         radius: 9
         color: active ? Theme.selected : Theme.control
+        border.width: 1
+        border.color: pendingAction ? Qt.alpha(panelRoot.accentColor, 0.4) : "transparent"
+        Behavior on border.color { ColorAnimation { duration: 180 } }
 
         Behavior on color {
             ColorAnimation { duration: 120 }
@@ -617,6 +715,7 @@ Item {
 
         Rectangle {
             id: actionButton
+            objectName: "wifiNetworkAction-" + row.ssid
             anchors {
                 right: parent.right
                 verticalCenter: parent.verticalCenter
@@ -626,30 +725,44 @@ Item {
             width: 94
             height: 30
             radius: 8
-            opacity: panelRoot.actionBusy || !backend.wifiEnabled ? 0.6 : 1
+            enabled: !panelRoot.actionBusy && backend.wifiEnabled
+            opacity: enabled || row.pendingAction ? 1 : 0.5
+            scale: actionMouse.pressed ? 0.94 : actionMouse.containsMouse && enabled ? 1.03 : 1
+            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: 160 } }
+            Behavior on color { ColorAnimation { duration: 160 } }
             color: row.active
-                ? (actionMouse.containsMouse ? Theme.controlHover : Theme.control)
-                : (actionMouse.containsMouse
+                ? (actionMouse.containsMouse && enabled ? Theme.controlHover : Theme.control)
+                : (actionMouse.containsMouse && enabled
                     ? Qt.lighter(panelRoot.accentColor, 1.1)
                     : panelRoot.accentColor)
 
-            Text {
+            Row {
                 anchors.centerIn: parent
-                text: panelRoot.connectingSsid === row.ssid
-                    || panelRoot.disconnectingSsid === row.ssid
-                    ? "Wait…" : (row.active ? "Disconnect" : (row.enterpriseSetup ? "Settings" : "Connect"))
-                color: row.active ? panelRoot.textColor : panelRoot.accentTextColor
-                font {
-                    family: panelRoot.family
-                    pixelSize: 11
-                    weight: Font.DemiBold
+                spacing: 5
+                ActivitySpinner {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 14
+                    height: 14
+                    running: row.pendingAction && panelRoot.opened
+                    ink: row.active ? panelRoot.textColor : panelRoot.accentTextColor
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: row.pendingAction ? "Wait…"
+                        : (row.active ? "Disconnect" : (row.enterpriseSetup ? "Settings" : "Connect"))
+                    color: row.active ? panelRoot.textColor : panelRoot.accentTextColor
+                    font {
+                        family: panelRoot.family
+                        pixelSize: 11
+                        weight: Font.DemiBold
+                    }
                 }
             }
 
             MouseArea {
                 id: actionMouse
                 anchors.fill: parent
-                enabled: !panelRoot.actionBusy && backend.wifiEnabled
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
@@ -667,11 +780,24 @@ Item {
     component InfoRow: Rectangle {
         id: row
 
+        objectName: "wifiDetail-" + label
+        property int revealIndex: 0
+        readonly property bool revealing: panelRoot.opened && panelRoot.activeTab === "details"
+        property real revealProgress: revealing ? 1 : 0
+        opacity: revealProgress
+        transform: Translate { y: (1 - row.revealProgress) * 16 }
+        Behavior on revealProgress {
+            SequentialAnimation {
+                PauseAnimation { duration: row.revealing ? row.revealIndex * 55 : 0 }
+                NumberAnimation { duration: row.revealing ? 300 : 120; easing.type: Easing.OutCubic }
+            }
+        }
+
         property string label: ""
         property string value: ""
 
         width: parent.width
-        height: 40
+        height: 36
         radius: 9
         color: Theme.control
 
@@ -740,23 +866,22 @@ Item {
         signal clicked()
 
         height: 34
+        scale: buttonMouse.pressed ? 0.97 : 1
+        Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
 
         Rectangle {
             anchors.fill: parent
             radius: 9
-            color: button.active
-                ? panelRoot.accentColor
-                : (buttonMouse.containsMouse ? Theme.controlHover : Theme.control)
-
-            Behavior on color {
-                ColorAnimation { duration: 120 }
-            }
+            color: buttonMouse.containsMouse && !button.active
+                ? Qt.alpha(panelRoot.accentColor, 0.08) : "transparent"
+            Behavior on color { ColorAnimation { duration: 150 } }
         }
 
         Text {
             anchors.centerIn: parent
             text: button.label
             color: button.active ? panelRoot.accentTextColor : panelRoot.textColor
+            Behavior on color { ColorAnimation { duration: 180 } }
             font {
                 family: panelRoot.family
                 pixelSize: 13
@@ -866,28 +991,4 @@ Item {
         ink: active ? panelRoot.accentColor : panelRoot.textColor
     }
 
-    component SignalOrb: Item {
-        id: orb
-
-        property int strength: 0
-        property bool powered: false
-        property bool connected: false
-
-        width: 86
-        height: 86
-
-        Rectangle {
-            anchors.fill: parent
-            radius: width / 2
-            color: orb.connected ? Theme.heroControlHover : Theme.heroControl
-        }
-
-        FlatIcon {
-            anchors.centerIn: parent
-            name: "wifi"
-            ink: Theme.heroText
-            width: 36
-            height: 36
-        }
-    }
 }

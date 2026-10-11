@@ -64,6 +64,29 @@ case "$*" in
 '-t radio wifi') read state < "$RADIO_TEST_STATE"; if [ "$state" = yes ]; then echo enabled; else echo disabled; fi ;;
 'radio wifi on') /bin/sleep 0.1; echo yes > "$RADIO_TEST_STATE" ;;
 'radio wifi off') /bin/sleep 0.1; echo no > "$RADIO_TEST_STATE" ;;
+*TYPE,STATE,CONNECTION*)
+ read power < "$RADIO_TEST_STATE"
+ read network < "$RADIO_TEST_STATE-wifi"
+ read ssid < "$RADIO_TEST_STATE-wifi-ssid"
+ if [ "$power" = yes ] && [ "$network" = yes ]; then printf 'wifi:connected:%s\n' "$ssid"; else echo 'wifi:disconnected:'; fi ;;
+*ACTIVE,SSID,SIGNAL,SECURITY*)
+ read power < "$RADIO_TEST_STATE"
+ read network < "$RADIO_TEST_STATE-wifi"
+ read ssid < "$RADIO_TEST_STATE-wifi-ssid"
+ if [ "$power" = no ]; then network=no; fi
+ if [ "$ssid" = 'Test Wi-Fi' ]; then
+  printf '%s:Test Wi-Fi:80:WPA2\nno:Guest Wi-Fi:60:WPA2\n' "$network"
+ else
+  printf 'no:Test Wi-Fi:80:WPA2\n%s:Guest Wi-Fi:60:WPA2\n' "$network"
+ fi ;;
+*NAME,TYPE*) echo 'Test Wi-Fi:802-11-wireless' ;;
+*'connection down'*)
+ echo disconnect >> "$RADIO_TEST_STATE-wifi-actions"
+ /bin/sleep 0.2; echo no > "$RADIO_TEST_STATE-wifi" ;;
+*'connection up'*|*'device wifi connect'*)
+ echo connect >> "$RADIO_TEST_STATE-wifi-actions"
+ echo "$6" > "$RADIO_TEST_STATE-wifi-ssid"
+ /bin/sleep 0.2; echo yes > "$RADIO_TEST_STATE-wifi" ;;
 *rescan*) /bin/sleep 0.1; if [ "$RADIO_TEST_FAIL" = yes ]; then echo 'Error: scan failed' >&2; exit 1; fi ;;
 esac
 )", true);
@@ -72,6 +95,9 @@ esac
         write("state", "yes\n");
         write("state-device", "yes\n");
         write("state-actions", "");
+        write("state-wifi", "yes\n");
+        write("state-wifi-ssid", "Test Wi-Fi\n");
+        write("state-wifi-actions", "");
         qunsetenv("RADIO_TEST_FAIL");
         qunsetenv("RADIO_TEST_NO_CHANGE");
     }
@@ -187,8 +213,9 @@ esac
             QObject *settings = panel->findChild<QObject *>("settingsButton");
             QVERIFY(power && scan && settings);
             QVERIFY(power->property("checked").toBool());
-            QObject *orb = panel->findChild<QObject *>("bluetoothOrb");
-            if (radio == QLatin1String("bluetooth")) {
+            const bool bluetooth = radio == QLatin1String("bluetooth");
+            QObject *orb = panel->findChild<QObject *>(radio + "Orb");
+            {
                 QVERIFY(orb);
                 QVERIFY(orb->property("animating").toBool());
                 const double phase = orb->property("phase").toDouble();
@@ -241,31 +268,34 @@ esac
             capture("on");
             if (orb) {
                 for (const bool connect : {false, true}) {
-                    auto *action = findVisualItem(item, "bluetoothDeviceAction-11:22:33:44:55:66");
+                    auto *action = findVisualItem(item, bluetooth
+                        ? "bluetoothDeviceAction-11:22:33:44:55:66" : "wifiNetworkAction-Test Wi-Fi");
                     QVERIFY(action);
                     QVERIFY(action->isEnabled());
                     const QPoint center = action->mapToScene(
                         QPointF(action->width() / 2, action->height() / 2)).toPoint();
                     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center);
-                    QVERIFY(panel->property("deviceActionBusy").toBool());
+                    const char *busyProperty = bluetooth ? "deviceActionBusy" : "actionBusy";
+                    QVERIFY(panel->property(busyProperty).toBool());
+                    QVERIFY(orb->property("working").toBool());
                     QVERIFY(!action->isEnabled());
                     QVERIFY(!power->property("enabled").toBool());
                     QVERIFY(!scan->property("enabled").toBool());
                     QVERIFY(!settings->property("enabled").toBool());
                     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center);
                     capture(connect ? "connecting" : "disconnecting");
-                    QTRY_VERIFY_WITH_TIMEOUT(!panel->property("deviceActionBusy").toBool(), 5000);
-                    QCOMPARE(backend.bluetoothConnected(), connect);
+                    QTRY_VERIFY_WITH_TIMEOUT(!panel->property(busyProperty).toBool(), 5000);
+                    QCOMPARE(bluetooth ? backend.bluetoothConnected() : backend.wifiConnected(), connect);
                 }
-                QFile actions(directory.filePath("state-actions"));
+                QFile actions(directory.filePath(bluetooth ? "state-actions" : "state-wifi-actions"));
                 QVERIFY(actions.open(QIODevice::ReadOnly));
                 QCOMPARE(actions.readAll(), QByteArray("disconnect\nconnect\n"));
-                auto *devices = panel->findChild<QQuickItem *>("bluetoothDevicesPage");
-                auto *details = panel->findChild<QQuickItem *>("bluetoothDetailsPage");
-                auto *indicator = panel->findChild<QQuickItem *>("bluetoothTabIndicator");
+                auto *devices = panel->findChild<QQuickItem *>(bluetooth ? "bluetoothDevicesPage" : "wifiNetworksPage");
+                auto *details = panel->findChild<QQuickItem *>(radio + "DetailsPage");
+                auto *indicator = panel->findChild<QQuickItem *>(radio + "TabIndicator");
                 QVERIFY(devices && details && indicator);
-                auto *deviceDetail = panel->findChild<QQuickItem *>("bluetoothDetail-Device");
-                auto *backendDetail = panel->findChild<QQuickItem *>("bluetoothDetail-Backend");
+                auto *deviceDetail = panel->findChild<QQuickItem *>(bluetooth ? "bluetoothDetail-Device" : "wifiDetail-Network");
+                auto *backendDetail = panel->findChild<QQuickItem *>(radio + "Detail-Backend");
                 QVERIFY(deviceDetail && backendDetail);
                 item->setProperty("activeTab", QStringLiteral("details"));
                 QVERIFY(!devices->isEnabled());
@@ -277,7 +307,7 @@ esac
                 QVERIFY(deviceDetail->opacity() > 0 && deviceDetail->opacity() < 1);
                 QCOMPARE(backendDetail->opacity(), 0.0);
                 // Reverse mid-transition to check that quick tab clicks settle correctly.
-                item->setProperty("activeTab", QStringLiteral("devices"));
+                item->setProperty("activeTab", bluetooth ? QStringLiteral("devices") : QStringLiteral("networks"));
                 QTRY_COMPARE(devices->opacity(), 1.0);
                 QTRY_COMPARE(details->opacity(), 0.0);
                 QTRY_COMPARE(indicator->x(), 0.0);
@@ -288,10 +318,42 @@ esac
             item->setProperty("activeTab", QStringLiteral("details"));
             QTest::qWait(500);
             if (orb) {
-                QCOMPARE(panel->findChild<QQuickItem *>("bluetoothDetail-Device")->opacity(), 1.0);
-                QCOMPARE(panel->findChild<QQuickItem *>("bluetoothDetail-Backend")->opacity(), 1.0);
+                QCOMPARE(panel->findChild<QQuickItem *>(bluetooth ? "bluetoothDetail-Device" : "wifiDetail-Network")->opacity(), 1.0);
+                QCOMPARE(panel->findChild<QQuickItem *>(radio + "Detail-Backend")->opacity(), 1.0);
             }
             capture("details");
+            if (!bluetooth) {
+                item->setProperty("activeTab", QStringLiteral("networks"));
+                QTest::qWait(400);
+                auto *guest = findVisualItem(item, "wifiNetworkAction-Guest Wi-Fi");
+                QVERIFY(guest);
+                const QPoint guestCenter = guest->mapToScene(
+                    QPointF(guest->width() / 2, guest->height() / 2)).toPoint();
+                QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, guestCenter);
+                QCOMPARE(panel->property("passwordSsid").toString(), QStringLiteral("Guest Wi-Fi"));
+                auto *input = panel->findChild<QQuickItem *>("wifiPasswordInput");
+                auto *submit = panel->findChild<QQuickItem *>("wifiPasswordConnect");
+                QVERIFY(input && submit);
+                QVERIFY(!submit->isEnabled());
+                QTest::qWait(240);
+                capture("password");
+                input->setProperty("text", QStringLiteral("test-password"));
+                QVERIFY(submit->isEnabled());
+                const QPoint submitCenter = submit->mapToScene(
+                    QPointF(submit->width() / 2, submit->height() / 2)).toPoint();
+                QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, submitCenter);
+                QVERIFY(panel->property("actionBusy").toBool());
+                QVERIFY(!submit->isEnabled());
+                QVERIFY(!input->isEnabled());
+                QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, submitCenter);
+                capture("password-pending");
+                QTRY_VERIFY(!panel->property("actionBusy").toBool());
+                QCOMPARE(panel->property("passwordSsid").toString(), QString());
+                QCOMPARE(backend.wifiSsid(), QStringLiteral("Guest Wi-Fi"));
+                QFile actions(directory.filePath("state-wifi-actions"));
+                QVERIFY(actions.open(QIODevice::ReadOnly));
+                QCOMPARE(actions.readAll(), QByteArray("disconnect\nconnect\nconnect\n"));
+            }
             item->setProperty("opened", false);
             if (orb) {
                 QVERIFY(!orb->property("animating").toBool());
