@@ -39,7 +39,8 @@ QString dockConfigPath(const QString &name) {
 
 QVariantMap defaultKeyVisualizerSettings() {
     return {{QStringLiteral("fontSize"), QStringLiteral("md")},
-        {QStringLiteral("padding"), QStringLiteral("md")},
+        {QStringLiteral("paddingX"), QStringLiteral("md")},
+        {QStringLiteral("paddingY"), QStringLiteral("md")},
         {QStringLiteral("minWidth"), 180}, {QStringLiteral("maxWidth"), 480},
         {QStringLiteral("widthMode"), QStringLiteral("fit")},
         {QStringLiteral("alignment"), QStringLiteral("center")}};
@@ -47,11 +48,12 @@ QVariantMap defaultKeyVisualizerSettings() {
 
 QVariantMap validatedKeyVisualizerSettings(const QJsonObject &saved) {
     QVariantMap settings = defaultKeyVisualizerSettings();
-    for (const QString &key : {QStringLiteral("fontSize"), QStringLiteral("padding"),
+    for (const QString &key : {QStringLiteral("fontSize"), QStringLiteral("paddingX"), QStringLiteral("paddingY"),
              QStringLiteral("widthMode"), QStringLiteral("alignment")}) {
-        const QString value = saved.value(key).toString();
+        const QString value = saved.value(key).toString(
+            key.startsWith(QLatin1String("padding")) ? saved.value(QStringLiteral("padding")).toString() : QString());
         const QStringList allowed = (key == QLatin1String("fontSize")
-            || key == QLatin1String("padding"))
+            || key.startsWith(QLatin1String("padding")))
             ? QStringList{QStringLiteral("sm"), QStringLiteral("md"), QStringLiteral("lg")}
             : key == QLatin1String("widthMode")
                 ? QStringList{QStringLiteral("fit"), QStringLiteral("fixed")}

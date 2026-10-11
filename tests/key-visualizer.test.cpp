@@ -134,7 +134,7 @@ private slots:
         QCOMPARE(object->property("implicitWidth").toReal(), wordWidth);
     }
 
-    void appliesAndPersistsPadding() {
+    void appliesAndPersistsIndependentPadding() {
         QTemporaryDir config;
         QVERIFY(config.isValid());
         const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
@@ -143,9 +143,16 @@ private slots:
             if (previous.isNull()) qunsetenv("XDG_CONFIG_HOME");
             else qputenv("XDG_CONFIG_HOME", previous);
         });
+        QVERIFY(QDir().mkpath(config.filePath("zhyprbola")));
+        QFile legacy(config.filePath("zhyprbola/key-visualizer"));
+        QVERIFY(legacy.open(QIODevice::WriteOnly));
+        legacy.write(R"({"padding":"lg"})");
+        legacy.close();
         Backend backend;
-        QCOMPARE(backend.keyVisualizerSettings().value(QStringLiteral("padding")).toString(),
-            QStringLiteral("md"));
+        QCOMPARE(backend.keyVisualizerSettings().value(QStringLiteral("paddingX")).toString(),
+            QStringLiteral("lg"));
+        QCOMPARE(backend.keyVisualizerSettings().value(QStringLiteral("paddingY")).toString(),
+            QStringLiteral("lg"));
         backend.setKeyVisualizerSetting(QStringLiteral("minWidth"), 120);
         QQmlEngine engine;
         engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
@@ -160,28 +167,55 @@ private slots:
         for (const QString &font : {QStringLiteral("sm"), QStringLiteral("md"),
                  QStringLiteral("lg")}) {
             backend.setKeyVisualizerSetting(QStringLiteral("fontSize"), font);
-            backend.setKeyVisualizerSetting(QStringLiteral("padding"), QStringLiteral("md"));
+            backend.setKeyVisualizerSetting(QStringLiteral("paddingX"), QStringLiteral("md"));
+            backend.setKeyVisualizerSetting(QStringLiteral("paddingY"), QStringLiteral("md"));
+            QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
             const qreal defaultWidth = object->property("implicitWidth").toReal();
             const qreal defaultHeight = object->property("implicitHeight").toReal();
             QCOMPARE(defaultHeight, font == QStringLiteral("sm") ? 64.0
                 : font == QStringLiteral("lg") ? 96.0 : 78.0);
-            backend.setKeyVisualizerSetting(QStringLiteral("padding"), QStringLiteral("sm"));
-            QCOMPARE(object->property("padding").toInt(), 4);
+            backend.setKeyVisualizerSetting(QStringLiteral("paddingX"), QStringLiteral("sm"));
+            QVERIFY(object->property("previewing").toBool());
+            QCOMPARE(object->property("paddingX").toInt(), 4);
             QVERIFY(object->property("implicitWidth").toReal() < defaultWidth);
+            QCOMPARE(object->property("implicitHeight").toReal(), defaultHeight);
+            const qreal narrowWidth = object->property("implicitWidth").toReal();
+            backend.setKeyVisualizerSetting(QStringLiteral("paddingY"), QStringLiteral("sm"));
+            QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
+            QCOMPARE(object->property("implicitWidth").toReal(), narrowWidth);
             QVERIFY(object->property("implicitHeight").toReal() < defaultHeight);
             QCOMPARE(object->property("implicitHeight").toReal(),
                 qCeil(display->property("implicitHeight").toReal()) + 8.0);
-            backend.setKeyVisualizerSetting(QStringLiteral("padding"), QStringLiteral("lg"));
+            backend.setKeyVisualizerSetting(QStringLiteral("paddingX"), QStringLiteral("lg"));
+            QCOMPARE(object->property("implicitWidth").toReal(), defaultWidth + 24);
+            backend.setKeyVisualizerSetting(QStringLiteral("paddingY"), QStringLiteral("lg"));
             QCOMPARE(object->property("implicitWidth").toReal(), defaultWidth + 24);
             QCOMPARE(object->property("implicitHeight").toReal(), defaultHeight + 24);
         }
-        backend.setKeyVisualizerSetting(QStringLiteral("padding"), QStringLiteral("sm"));
+        backend.setKeyVisualizerSetting(QStringLiteral("paddingX"), QStringLiteral("sm"));
         Backend reloaded;
-        QCOMPARE(reloaded.keyVisualizerSettings().value(QStringLiteral("padding")).toString(),
+        QCOMPARE(reloaded.keyVisualizerSettings().value(QStringLiteral("paddingX")).toString(),
             QStringLiteral("sm"));
-        backend.setKeyVisualizerSetting(QStringLiteral("padding"), QStringLiteral("invalid"));
-        QCOMPARE(backend.keyVisualizerSettings().value(QStringLiteral("padding")).toString(),
+        QCOMPARE(reloaded.keyVisualizerSettings().value(QStringLiteral("paddingY")).toString(),
+            QStringLiteral("lg"));
+        backend.setKeyVisualizerSetting(QStringLiteral("paddingX"), QStringLiteral("invalid"));
+        QCOMPARE(backend.keyVisualizerSettings().value(QStringLiteral("paddingX")).toString(),
             QStringLiteral("md"));
+        QCOMPARE(backend.keyVisualizerSettings().value(QStringLiteral("paddingY")).toString(),
+            QStringLiteral("lg"));
+        QVERIFY(QMetaObject::invokeMethod(object.data(), "appendKey",
+            Q_ARG(QVariant, QStringLiteral("a"))));
+        QVERIFY(!object->property("previewing").toBool());
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("a"));
+        backend.setKeyVisualizerSetting(QStringLiteral("alignment"), QStringLiteral("left"));
+        QVERIFY(object->property("previewing").toBool());
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
+        QVERIFY(QMetaObject::invokeMethod(object.data(), "appendKey",
+            Q_ARG(QVariant, QStringLiteral("b"))));
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("b"));
+        backend.setKeyVisualizerSetting(QStringLiteral("paddingY"), QStringLiteral("md"));
+        QVERIFY(object->property("previewing").toBool());
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
     }
 
     void repeatsWidthButtonsAndAccelerates() {
@@ -549,7 +583,8 @@ private slots:
             };
             for (const auto &selection : {
                      std::pair{QStringLiteral("fontSize"), QStringLiteral("md")},
-                     std::pair{QStringLiteral("padding"), QStringLiteral("md")},
+                     std::pair{QStringLiteral("paddingX"), QStringLiteral("md")},
+                     std::pair{QStringLiteral("paddingY"), QStringLiteral("md")},
                      std::pair{QStringLiteral("widthMode"), QStringLiteral("fit")},
                      std::pair{QStringLiteral("alignment"), QStringLiteral("center")}}) {
                 auto *mark = check(selection.first, selection.second);
@@ -557,11 +592,13 @@ private slots:
                 QVERIFY(mark->isVisible());
             }
             backend.setKeyVisualizerSetting(QStringLiteral("fontSize"), QStringLiteral("lg"));
-            backend.setKeyVisualizerSetting(QStringLiteral("padding"), QStringLiteral("sm"));
+            backend.setKeyVisualizerSetting(QStringLiteral("paddingX"), QStringLiteral("sm"));
+            backend.setKeyVisualizerSetting(QStringLiteral("paddingY"), QStringLiteral("lg"));
             backend.setKeyVisualizerSetting(QStringLiteral("widthMode"), QStringLiteral("fixed"));
             backend.setKeyVisualizerSetting(QStringLiteral("alignment"), QStringLiteral("right"));
             QTRY_VERIFY(check(QStringLiteral("fontSize"), QStringLiteral("lg"))->isVisible());
-            QTRY_VERIFY(check(QStringLiteral("padding"), QStringLiteral("sm"))->isVisible());
+            QTRY_VERIFY(check(QStringLiteral("paddingX"), QStringLiteral("sm"))->isVisible());
+            QTRY_VERIFY(check(QStringLiteral("paddingY"), QStringLiteral("lg"))->isVisible());
             QTRY_VERIFY(check(QStringLiteral("widthMode"), QStringLiteral("fixed"))->isVisible());
             QTRY_VERIFY(check(QStringLiteral("alignment"), QStringLiteral("right"))->isVisible());
             QVERIFY(!check(QStringLiteral("fontSize"), QStringLiteral("md"))->isVisible());

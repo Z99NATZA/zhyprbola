@@ -1915,8 +1915,15 @@ Item {
             }
 
             KeyChoice {
-                title: "Padding"
-                settingKey: "padding"
+                title: "Padding X"
+                settingKey: "paddingX"
+                options: [{key: "sm", label: "sm"}, {key: "md", label: "md"},
+                    {key: "lg", label: "lg"}]
+            }
+
+            KeyChoice {
+                title: "Padding Y"
+                settingKey: "paddingY"
                 options: [{key: "sm", label: "sm"}, {key: "md", label: "md"},
                     {key: "lg", label: "lg"}]
             }

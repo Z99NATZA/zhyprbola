@@ -7,20 +7,31 @@ Item {
     readonly property int fontSize: settings.fontSize === "sm" ? 23
         : settings.fontSize === "lg" ? 38 : 30
     readonly property int defaultPadding: settings.fontSize === "lg" ? 24 : 20
-    readonly property int padding: settings.padding === "sm" ? 4
-        : defaultPadding + (settings.padding === "lg" ? 12 : 0)
+    readonly property int paddingX: settings.paddingX === "sm" ? 4
+        : defaultPadding + (settings.paddingX === "lg" ? 12 : 0)
     readonly property int defaultHeight: settings.fontSize === "sm" ? 64
         : settings.fontSize === "lg" ? 96 : 78
-    readonly property int keyAreaHeight: settings.padding === "sm"
+    readonly property int keyAreaHeight: settings.paddingY === "sm"
         ? Math.ceil(measure.implicitHeight) + 8
-        : defaultHeight + (settings.padding === "lg" ? 24 : 0)
+        : defaultHeight + (settings.paddingY === "lg" ? 24 : 0)
     property bool showAccessPrompt: false
     property var history: []
+    property bool componentReady: false
+    property bool previewing: false
+    readonly property string previewAppearance: [settings.fontSize, settings.paddingX,
+        settings.paddingY, settings.alignment].join(":")
+    onPreviewAppearanceChanged: {
+        if (componentReady) {
+            previewing = true
+            history = ["hello", "␣", "world"]
+            clearTimer.restart()
+        }
+    }
     readonly property string displayText: formatHistory(false)
     readonly property string styledText: formatHistory(true)
     implicitWidth: settings.widthMode === "fixed" ? settings.maxWidth
         : Math.max(showAccessPrompt ? 300 : settings.minWidth,
-            Math.min(settings.maxWidth, measure.implicitWidth + padding * 2))
+            Math.min(settings.maxWidth, measure.implicitWidth + paddingX * 2))
     implicitHeight: keyAreaHeight + (showAccessPrompt ? 58 : 0)
     focus: true
 
@@ -47,6 +58,10 @@ Item {
 
     function appendKey(value) {
         if (!value) return
+        if (previewing) {
+            previewing = false
+            history = []
+        }
         const next = history.concat(value)
         history = next.length > 48 ? next.slice(-48) : next
         clearTimer.restart()
@@ -179,7 +194,10 @@ Item {
     Timer {
         id: clearTimer
         interval: 5000
-        onTriggered: visualizer.history = []
+        onTriggered: {
+            visualizer.previewing = false
+            visualizer.history = []
+        }
     }
 
     Timer {
@@ -220,8 +238,8 @@ Item {
             anchors.right: parent.right
             anchors.top: parent.top
             height: visualizer.keyAreaHeight
-            anchors.leftMargin: visualizer.padding
-            anchors.rightMargin: visualizer.padding
+            anchors.leftMargin: visualizer.paddingX
+            anchors.rightMargin: visualizer.paddingX
             text: visualizer.styledText
             textFormat: Text.StyledText
             color: Theme.text
@@ -275,6 +293,7 @@ Item {
     }
 
     Component.onCompleted: {
+        componentReady = true
         if (visible) {
             forceActiveFocus()
             accessPromptTimer.start()
