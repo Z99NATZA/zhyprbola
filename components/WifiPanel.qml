@@ -372,17 +372,14 @@ Item {
                         }
                     }
 
-                    Text {
+                    RadioDiscoveryStatus {
+                        objectName: "wifiDiscoveryStatus"
                         anchors.centerIn: parent
                         visible: backend.wifiNetworks.length === 0
-                        text: panelRoot.operationBusy && panelRoot.operation.action === "scan"
-                            ? "Looking for networks…"
+                        searching: panelRoot.opened && panelRoot.operationBusy
+                            && (panelRoot.operation.action === "scan" || panelRoot.operation.action === "power-on")
+                        message: searching ? "Searching for networks…"
                             : backend.wifiEnabled ? "No networks found" : "Wi-Fi is off"
-                        color: panelRoot.dimTextColor
-                        font {
-                            family: panelRoot.family
-                            pixelSize: 13
-                        }
                     }
                 }
 

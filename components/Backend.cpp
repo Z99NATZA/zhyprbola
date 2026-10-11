@@ -1484,14 +1484,20 @@ void Backend::runConnectionCommand(const QString &radio, const QString &action,
         const QString output = QString::fromUtf8(process->readAllStandardError()) +
             QString::fromUtf8(process->readAllStandardOutput());
         const bool timedOut = process->property("timedOut").toBool();
-        success = success && !timedOut && !output.contains(QRegularExpression(
+        const bool bluezFailed = radio == QLatin1String("bluetooth") && output.contains(QRegularExpression(
             QStringLiteral("Failed|No default controller|not available|NotReady|NotAuthorized"),
             QRegularExpression::CaseInsensitiveOption));
+        success = success && !timedOut && !bluezFailed;
         refreshSystem();
         if (radio == QLatin1String("wifi")) refreshWifiNetworks();
         if (expectedPower >= 0) {
             const bool powered = radio == QLatin1String("wifi") ? m_wifiEnabled : m_bluetoothEnabled;
             success = success && powered == (expectedPower == 1);
+        }
+        if (success && action == QLatin1String("scan")) {
+            process->deleteLater();
+            finishConnectionScan(radio);
+            return;
         }
         QString message;
         if (success) {
@@ -1510,6 +1516,12 @@ void Backend::runConnectionCommand(const QString &radio, const QString &action,
         }
         setConnectionAction(radio, action, false, message, success);
         process->deleteLater();
+        // Powering on only enables the adapter. Discover again once it is ready,
+        // so the panel does not keep the empty list from when the radio was off.
+        if (success && expectedPower == 1) {
+            if (radio == QLatin1String("wifi")) scanWifiNetworks();
+            else scanBluetoothDevices();
+        }
     };
     connect(process, &QProcess::finished, this, [finish](int code, QProcess::ExitStatus status) {
         finish(code == 0 && status == QProcess::NormalExit);
@@ -1519,6 +1531,28 @@ void Backend::runConnectionCommand(const QString &radio, const QString &action,
     });
     process->start(program, arguments);
     timeout->start(20000);
+}
+
+void Backend::finishConnectionScan(const QString &radio, int remainingChecks) {
+    const QVariantMap operation = m_connectionActions.value(radio).toMap();
+    if (!operation.value(QStringLiteral("busy")).toBool()
+        || operation.value(QStringLiteral("action")).toString() != QLatin1String("scan")) return;
+    const bool wifi = radio == QLatin1String("wifi");
+    const int count = wifi ? m_wifiNetworks.size() : m_bluetoothDevices.size();
+    const bool powered = wifi ? m_wifiEnabled : m_bluetoothEnabled;
+    // Discovery can finish before the daemon publishes its first list after
+    // powering on. Keep progress visible and re-read the cache for up to 5s.
+    if (powered && count == 0 && remainingChecks > 0) {
+        QTimer::singleShot(500, this, [this, radio, remainingChecks, wifi]() {
+            if (wifi) refreshWifiNetworks();
+            else refreshBluetoothDevices();
+            finishConnectionScan(radio, remainingChecks - 1);
+        });
+        return;
+    }
+    setConnectionAction(radio, QStringLiteral("scan"), false,
+        QStringLiteral("Scan complete · %1 %2").arg(count)
+            .arg(wifi ? QStringLiteral("networks") : QStringLiteral("devices")));
 }
 
 void Backend::launchConnectionSettings(const QString &radio, const QStringList &command) {
@@ -1639,7 +1673,7 @@ void Backend::refreshWifiNetworks() {
 void Backend::scanWifiNetworks() {
     runConnectionCommand(QStringLiteral("wifi"), QStringLiteral("scan"), QStringLiteral("nmcli"),
         {QStringLiteral("--wait"), QStringLiteral("10"), QStringLiteral("dev"),
-         QStringLiteral("wifi"), QStringLiteral("rescan")});
+         QStringLiteral("wifi"), QStringLiteral("list"), QStringLiteral("--rescan"), QStringLiteral("yes")});
 }
 
 void Backend::connectWifiNetwork(const QString &ssid, bool secure, bool saved,

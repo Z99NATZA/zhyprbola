@@ -213,6 +213,7 @@ private:
         const QString &message, bool success = true);
     void runConnectionCommand(const QString &radio, const QString &action,
         const QString &program, const QStringList &arguments, int expectedPower = -1);
+    void finishConnectionScan(const QString &radio, int remainingChecks = 10);
     void launchConnectionSettings(const QString &radio, const QStringList &command);
     void refreshSystem();
     void refreshWeather();

@@ -38,10 +38,20 @@ private slots:
         qputenv("PATH", directory.path().toUtf8());
         qputenv("XDG_CONFIG_HOME", directory.path().toUtf8());
         qputenv("RADIO_TEST_STATE", directory.filePath("state").toUtf8());
-        write("bluetoothctl", R"(#!/bin/sh
+        write("bluetoothctl", R"shell(#!/bin/sh
 case "$1" in
 show) read state < "$RADIO_TEST_STATE"; printf 'Controller AA:BB:CC:DD:EE:FF Test\n Powered: %s\n' "$state" ;;
-devices) echo 'Device 11:22:33:44:55:66 Black Shark T23' ;;
+devices)
+ if [ "$RADIO_TEST_DISCOVERY" = yes ]; then
+  read discovered < "$RADIO_TEST_STATE-bluetooth-discovered"
+  if [ "$discovered" = pending ]; then
+   read polls < "$RADIO_TEST_STATE-bluetooth-polls"
+   echo "$((polls + 1))" > "$RADIO_TEST_STATE-bluetooth-polls"
+   if [ "$polls" -ge 3 ]; then discovered=yes; echo yes > "$RADIO_TEST_STATE-bluetooth-discovered"; fi
+  fi
+  if [ "$discovered" != yes ]; then exit 0; fi
+ fi
+ echo 'Device 11:22:33:44:55:66 Black Shark T23' ;;
 info)
  read device < "$RADIO_TEST_STATE-device"
  read power < "$RADIO_TEST_STATE"
@@ -55,14 +65,25 @@ power)
  /bin/sleep 0.1
  if [ "$RADIO_TEST_FAIL" = "yes" ]; then echo 'Failed to set power: org.bluez.Error.NotAuthorized'; exit 0; fi
  if [ "$RADIO_TEST_NO_CHANGE" = "yes" ]; then exit 0; fi
- if [ "$2" = "on" ]; then echo yes > "$RADIO_TEST_STATE"; else echo no > "$RADIO_TEST_STATE"; fi ;;
---timeout) /bin/sleep 0.1; if [ "$RADIO_TEST_FAIL" = "yes" ]; then echo 'Failed to start discovery'; exit 1; fi ;;
+ if [ "$2" = "on" ]; then
+  echo no > "$RADIO_TEST_STATE-bluetooth-discovered"
+  echo yes > "$RADIO_TEST_STATE"
+ else echo no > "$RADIO_TEST_STATE"; fi ;;
+--timeout)
+ echo bluetooth >> "$RADIO_TEST_STATE-scans"
+ /bin/sleep 0.1
+ if [ "$RADIO_TEST_FAIL" = yes ] || [ "$RADIO_TEST_SCAN_FAIL" = yes ]; then echo 'Failed to start discovery'; exit 1; fi
+ if [ "$RADIO_TEST_DELAYED_DISCOVERY" = yes ]; then echo pending > "$RADIO_TEST_STATE-bluetooth-discovered"; else echo yes > "$RADIO_TEST_STATE-bluetooth-discovered"; fi ;;
 esac
-)", true);
-        write("nmcli", R"(#!/bin/sh
+)shell", true);
+        write("nmcli", R"shell(#!/bin/sh
 case "$*" in
 '-t radio wifi') read state < "$RADIO_TEST_STATE"; if [ "$state" = yes ]; then echo enabled; else echo disabled; fi ;;
-'radio wifi on') /bin/sleep 0.1; echo yes > "$RADIO_TEST_STATE" ;;
+'radio wifi on')
+ /bin/sleep 0.1
+ if [ "$RADIO_TEST_FAIL" = yes ]; then echo 'Error: could not enable Wi-Fi' >&2; exit 1; fi
+ echo no > "$RADIO_TEST_STATE-wifi-discovered"
+ echo yes > "$RADIO_TEST_STATE" ;;
 'radio wifi off') /bin/sleep 0.1; echo no > "$RADIO_TEST_STATE" ;;
 *TYPE,STATE,CONNECTION*)
  read power < "$RADIO_TEST_STATE"
@@ -70,6 +91,15 @@ case "$*" in
  read ssid < "$RADIO_TEST_STATE-wifi-ssid"
  if [ "$power" = yes ] && [ "$network" = yes ]; then printf 'wifi:connected:%s\n' "$ssid"; else echo 'wifi:disconnected:'; fi ;;
 *ACTIVE,SSID,SIGNAL,SECURITY*)
+ if [ "$RADIO_TEST_DISCOVERY" = yes ]; then
+  read discovered < "$RADIO_TEST_STATE-wifi-discovered"
+  if [ "$discovered" = pending ]; then
+   read polls < "$RADIO_TEST_STATE-wifi-polls"
+   echo "$((polls + 1))" > "$RADIO_TEST_STATE-wifi-polls"
+   if [ "$polls" -ge 3 ]; then discovered=yes; echo yes > "$RADIO_TEST_STATE-wifi-discovered"; fi
+  fi
+  if [ "$discovered" != yes ]; then exit 0; fi
+ fi
  read power < "$RADIO_TEST_STATE"
  read network < "$RADIO_TEST_STATE-wifi"
  read ssid < "$RADIO_TEST_STATE-wifi-ssid"
@@ -87,9 +117,14 @@ case "$*" in
  echo connect >> "$RADIO_TEST_STATE-wifi-actions"
  echo "$6" > "$RADIO_TEST_STATE-wifi-ssid"
  /bin/sleep 0.2; echo yes > "$RADIO_TEST_STATE-wifi" ;;
-*rescan*) /bin/sleep 0.1; if [ "$RADIO_TEST_FAIL" = yes ]; then echo 'Error: scan failed' >&2; exit 1; fi ;;
+*rescan*)
+ echo wifi >> "$RADIO_TEST_STATE-scans"
+ echo "$*" > "$RADIO_TEST_STATE-wifi-scan-command"
+ /bin/sleep 0.1
+ if [ "$RADIO_TEST_FAIL" = yes ] || [ "$RADIO_TEST_SCAN_FAIL" = yes ]; then echo 'Error: scan failed' >&2; exit 1; fi
+ if [ "$RADIO_TEST_DELAYED_DISCOVERY" = yes ]; then echo pending > "$RADIO_TEST_STATE-wifi-discovered"; else echo yes > "$RADIO_TEST_STATE-wifi-discovered"; fi ;;
 esac
-)", true);
+)shell", true);
     }
     void init() {
         write("state", "yes\n");
@@ -98,8 +133,16 @@ esac
         write("state-wifi", "yes\n");
         write("state-wifi-ssid", "Test Wi-Fi\n");
         write("state-wifi-actions", "");
+        write("state-scans", "");
+        write("state-bluetooth-discovered", "no\n");
+        write("state-wifi-discovered", "no\n");
         qunsetenv("RADIO_TEST_FAIL");
         qunsetenv("RADIO_TEST_NO_CHANGE");
+        qunsetenv("RADIO_TEST_DISCOVERY");
+        qunsetenv("RADIO_TEST_SCAN_FAIL");
+        qunsetenv("RADIO_TEST_DELAYED_DISCOVERY");
+        write("state-bluetooth-polls", "0\n");
+        write("state-wifi-polls", "0\n");
     }
     void cleanupTestCase() { qputenv("PATH", originalPath); }
 
@@ -130,6 +173,106 @@ esac
         QVERIFY(!state(backend, "bluetooth").value("success").toBool());
         QVERIFY(state(backend, "bluetooth").value("message").toString().contains("NotAuthorized"));
         QVERIFY(backend.bluetoothEnabled());
+    }
+    void powerOnDiscoversAfterAdapterReady_data() {
+        QTest::addColumn<QString>("radio");
+        QTest::addColumn<bool>("scanFails");
+        QTest::addColumn<bool>("delayed");
+        QTest::newRow("bluetooth") << QStringLiteral("bluetooth") << false << false;
+        QTest::newRow("wifi") << QStringLiteral("wifi") << false << false;
+        QTest::newRow("bluetooth-scan-failure") << QStringLiteral("bluetooth") << true << false;
+        QTest::newRow("wifi-scan-failure") << QStringLiteral("wifi") << true << false;
+        QTest::newRow("bluetooth-delayed-list") << QStringLiteral("bluetooth") << false << true;
+        QTest::newRow("wifi-delayed-list") << QStringLiteral("wifi") << false << true;
+    }
+    void powerOnDiscoversAfterAdapterReady() {
+        QFETCH(QString, radio);
+        QFETCH(bool, scanFails);
+        QFETCH(bool, delayed);
+        if (delayed) qputenv("RADIO_TEST_DELAYED_DISCOVERY", "yes");
+        write("state", "no\n");
+        qputenv("RADIO_TEST_DISCOVERY", "yes");
+        if (scanFails) qputenv("RADIO_TEST_SCAN_FAIL", "yes");
+        Backend backend;
+        const bool wifi = radio == QLatin1String("wifi");
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty("backend", &backend);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QFINDTESTDATA(
+            wifi ? "../components/WifiPanel.qml" : "../components/BluetoothPanel.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> panel(component.createWithInitialProperties(
+            {{QStringLiteral("standalone"), true}, {QStringLiteral("opened"), true}}));
+        QVERIFY2(panel, qPrintable(component.errorString()));
+        QObject *discovery = panel->findChild<QObject *>(radio + "DiscoveryStatus");
+        QObject *power = panel->findChild<QObject *>("radioPowerButton");
+        QVERIFY(discovery && power);
+        const auto powered = [&]() { return wifi ? backend.wifiEnabled() : backend.bluetoothEnabled(); };
+        const auto list = [&]() { return wifi ? backend.wifiNetworks() : backend.bluetoothDevices(); };
+        const auto setPower = [&](bool enabled) {
+            if (wifi) backend.setWifiEnabled(enabled);
+            else backend.setBluetoothEnabled(enabled);
+        };
+        QVERIFY(!powered());
+        QVERIFY(list().isEmpty());
+        bool scannedWhilePowered = false;
+        connect(&backend, &Backend::connectionActionsChanged, this, [&]() {
+            if (state(backend, radio).value("action") == "scan"
+                && state(backend, radio).value("busy").toBool()) {
+                scannedWhilePowered = powered();
+            }
+        });
+        setPower(true);
+        QCOMPARE(state(backend, radio).value("action").toString(), QStringLiteral("power-on"));
+        QVERIFY(discovery->property("searching").toBool());
+        QVERIFY(!power->property("enabled").toBool());
+        // Repeated power requests and refreshes must not create extra work.
+        setPower(true);
+        if (wifi) backend.scanWifiNetworks();
+        else backend.scanBluetoothDevices();
+        QTRY_VERIFY(scannedWhilePowered);
+        if (delayed) {
+            QVERIFY(state(backend, radio).value("busy").toBool());
+            QVERIFY(list().isEmpty());
+            QVERIFY(discovery->property("searching").toBool());
+            QVERIFY(!power->property("enabled").toBool());
+        }
+        QTRY_VERIFY(!state(backend, radio).value("busy").toBool());
+        QVERIFY(powered());
+        QCOMPARE(state(backend, radio).value("action").toString(), QStringLiteral("scan"));
+        QCOMPARE(state(backend, radio).value("success").toBool(), !scanFails);
+        QCOMPARE(list().isEmpty(), scanFails);
+        QVERIFY(!discovery->property("searching").toBool());
+        QVERIFY(power->property("enabled").toBool());
+        QVERIFY(state(backend, radio).value("message").toString().startsWith(
+            scanFails ? "Could not scan" : "Scan complete"));
+        QFile scans(directory.filePath("state-scans"));
+        QVERIFY(scans.open(QIODevice::ReadOnly));
+        QCOMPARE(scans.readAll(), radio.toUtf8() + '\n');
+        if (wifi) {
+            QFile command(directory.filePath("state-wifi-scan-command"));
+            QVERIFY(command.open(QIODevice::ReadOnly));
+            QVERIFY(command.readAll().contains("wifi list --rescan yes"));
+        }
+    }
+    void failedPowerOnDoesNotScan_data() {
+        QTest::addColumn<QString>("radio");
+        QTest::newRow("bluetooth") << QStringLiteral("bluetooth");
+        QTest::newRow("wifi") << QStringLiteral("wifi");
+    }
+    void failedPowerOnDoesNotScan() {
+        QFETCH(QString, radio);
+        write("state", "no\n");
+        qputenv("RADIO_TEST_FAIL", "yes");
+        Backend backend;
+        if (radio == QLatin1String("wifi")) backend.setWifiEnabled(true);
+        else backend.setBluetoothEnabled(true);
+        QTRY_VERIFY(!state(backend, radio).value("busy").toBool());
+        QCOMPARE(state(backend, radio).value("action").toString(), QStringLiteral("power-on"));
+        QVERIFY(!state(backend, radio).value("success").toBool());
+        QVERIFY(!(radio == QLatin1String("wifi") ? backend.wifiEnabled() : backend.bluetoothEnabled()));
+        QFile scans(directory.filePath("state-scans"));
+        QVERIFY(scans.open(QIODevice::ReadOnly));
+        QVERIFY(scans.readAll().isEmpty());
     }
     void powerCommandMustActuallyChangeTheRadio() {
         qputenv("RADIO_TEST_NO_CHANGE", "yes");

@@ -331,17 +331,14 @@ Item {
                         }
                     }
 
-                    Text {
+                    RadioDiscoveryStatus {
+                        objectName: "bluetoothDiscoveryStatus"
                         anchors.centerIn: parent
                         visible: backend.bluetoothDevices.length === 0
-                        text: panelRoot.operationBusy && panelRoot.operation.action === "scan"
-                            ? "Looking for devices…"
+                        searching: panelRoot.opened && panelRoot.operationBusy
+                            && (panelRoot.operation.action === "scan" || panelRoot.operation.action === "power-on")
+                        message: searching ? "Searching for devices…"
                             : backend.bluetoothEnabled ? "No devices found" : "Bluetooth is off"
-                        color: panelRoot.dimTextColor
-                        font {
-                            family: panelRoot.family
-                            pixelSize: 13
-                        }
                     }
                 }
 

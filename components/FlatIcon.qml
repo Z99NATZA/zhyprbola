@@ -62,6 +62,12 @@ Canvas {
                 ctx.arc(12, 12, 10, -Math.PI / 3, Math.PI / 3)
             }
             ctx.stroke()
+        } else if (name === "search") {
+            ctx.beginPath()
+            ctx.arc(10, 10, 6, 0, Math.PI * 2)
+            ctx.moveTo(14.5, 14.5)
+            ctx.lineTo(21, 21)
+            ctx.stroke()
         } else if (name === "close") {
             ctx.beginPath()
             ctx.moveTo(5, 5)
