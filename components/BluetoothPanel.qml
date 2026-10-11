@@ -10,6 +10,7 @@ Item {
     readonly property bool powerBusy: operationBusy && String(operation.action || "").startsWith("power-")
     property string activeTab: "devices"
     property var pendingDeviceActions: ({})
+    readonly property bool deviceActionBusy: Object.keys(pendingDeviceActions).length > 0
     readonly property string family: Qt.application.font.family
     readonly property color surfaceColor: Theme.componentSurfaceFor("bluetooth")
     readonly property color textColor: Theme.text
@@ -20,7 +21,7 @@ Item {
     signal closeRequested()
 
     function runDeviceAction(address, connect) {
-        if (!address || pendingDeviceActions[address] || operationBusy || !backend.bluetoothEnabled)
+        if (!address || deviceActionBusy || operationBusy || !backend.bluetoothEnabled)
             return
 
         const actions = Object.assign({}, pendingDeviceActions)
@@ -169,7 +170,7 @@ Item {
                     connected: backend.bluetoothConnected
                     working: panelRoot.powerBusy
                         || (panelRoot.operationBusy && panelRoot.operation.action === "scan")
-                        || Object.keys(panelRoot.pendingDeviceActions).length > 0
+                        || panelRoot.deviceActionBusy
                 }
 
                 Column {
@@ -234,38 +235,75 @@ Item {
                     checked: backend.bluetoothEnabled
                     busy: panelRoot.powerBusy
                     pendingChecked: panelRoot.operation.action === "power-on"
-                    enabled: !panelRoot.operationBusy && Object.keys(panelRoot.pendingDeviceActions).length === 0
+                    enabled: !panelRoot.operationBusy && !panelRoot.deviceActionBusy
                     onClicked: backend.setBluetoothEnabled(!backend.bluetoothEnabled)
                 }
             }
 
-            Row {
+            Item {
+                id: tabs
                 width: parent.width
                 height: 34
-                spacing: 8
+                readonly property real tabWidth: (width - 8) / 2
 
-                TabButton {
-                    width: (parent.width - parent.spacing) / 2
-                    label: "Devices"
-                    active: panelRoot.activeTab === "devices"
-                    onClicked: panelRoot.activeTab = "devices"
+                Repeater {
+                    model: 2
+                    Rectangle {
+                        required property int index
+                        x: index * (tabs.tabWidth + 8)
+                        width: tabs.tabWidth
+                        height: tabs.height
+                        radius: 9
+                        color: Theme.control
+                    }
                 }
 
-                TabButton {
-                    width: (parent.width - parent.spacing) / 2
-                    label: "Details"
-                    active: panelRoot.activeTab === "details"
-                    onClicked: panelRoot.activeTab = "details"
+                Rectangle {
+                    objectName: "bluetoothTabIndicator"
+                    x: panelRoot.activeTab === "devices" ? 0 : parent.tabWidth + 8
+                    width: parent.tabWidth
+                    height: parent.height
+                    radius: 9
+                    color: panelRoot.accentColor
+                    Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                }
+
+                Row {
+                    anchors.fill: parent
+                    spacing: 8
+
+                    TabButton {
+                        width: (parent.width - parent.spacing) / 2
+                        label: "Devices"
+                        active: panelRoot.activeTab === "devices"
+                        onClicked: panelRoot.activeTab = "devices"
+                    }
+
+                    TabButton {
+                        width: (parent.width - parent.spacing) / 2
+                        label: "Details"
+                        active: panelRoot.activeTab === "details"
+                        onClicked: panelRoot.activeTab = "details"
+                    }
                 }
             }
 
             Item {
                 width: parent.width
                 height: 158
+                clip: true
 
                 Item {
+                    objectName: "bluetoothDevicesPage"
                     anchors.fill: parent
-                    visible: panelRoot.activeTab === "devices"
+                    opacity: panelRoot.activeTab === "devices" ? 1 : 0
+                    visible: opacity > 0
+                    enabled: panelRoot.activeTab === "devices"
+                    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                    transform: Translate {
+                        x: panelRoot.activeTab === "devices" ? 0 : -14
+                        Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                    }
 
                     ListView {
                         anchors {
@@ -281,6 +319,7 @@ Item {
 
                         delegate: DeviceRow {
                             width: ListView.view.width
+                            revealIndex: index
                             address: modelData["address"] || ""
                             name: modelData["name"] || address
                             iconName: modelData["icon"] || ""
@@ -305,26 +344,38 @@ Item {
                 }
 
                 Column {
+                    objectName: "bluetoothDetailsPage"
                     width: parent.width
                     spacing: 4
-                    visible: panelRoot.activeTab === "details"
+                    opacity: panelRoot.activeTab === "details" ? 1 : 0
+                    visible: opacity > 0
+                    enabled: panelRoot.activeTab === "details"
+                    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                    transform: Translate {
+                        x: panelRoot.activeTab === "details" ? 0 : 14
+                        Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                    }
 
                     InfoRow {
+                        revealIndex: 0
                         label: "Device"
                         value: backend.bluetoothConnected ? backend.bluetoothDeviceName : "Not connected"
                     }
 
                     InfoRow {
+                        revealIndex: 1
                         label: "Radio"
                         value: backend.bluetoothEnabled ? "On" : "Off"
                     }
 
                     InfoRow {
+                        revealIndex: 2
                         label: "Adapter"
                         value: backend.bluetoothAvailable ? "Available" : "Unavailable"
                     }
 
                     InfoRow {
+                        revealIndex: 3
                         label: "Backend"
                         value: "BlueZ"
                     }
@@ -354,7 +405,7 @@ Item {
                     label: "Refresh"
                     objectName: "scanButton"
                     busy: panelRoot.operationBusy && panelRoot.operation.action === "scan"
-                    enabled: !panelRoot.operationBusy && backend.bluetoothEnabled && Object.keys(panelRoot.pendingDeviceActions).length === 0
+                    enabled: !panelRoot.operationBusy && backend.bluetoothEnabled && !panelRoot.deviceActionBusy
                     onClicked: backend.scanBluetoothDevices()
                 }
 
@@ -363,7 +414,7 @@ Item {
                     label: "Settings"
                     objectName: "settingsButton"
                     busy: panelRoot.operationBusy && panelRoot.operation.action === "settings"
-                    enabled: !panelRoot.operationBusy
+                    enabled: !panelRoot.operationBusy && !panelRoot.deviceActionBusy
                     onClicked: backend.openBluetoothSettings()
                 }
             }
@@ -372,6 +423,18 @@ Item {
 
     component DeviceRow: Rectangle {
         id: row
+
+        property int revealIndex: 0
+        readonly property bool revealing: panelRoot.opened && panelRoot.activeTab === "devices"
+        property real revealProgress: revealing ? 1 : 0
+        opacity: revealProgress
+        transform: Translate { y: (1 - row.revealProgress) * 16 }
+        Behavior on revealProgress {
+            SequentialAnimation {
+                PauseAnimation { duration: row.revealing ? Math.min(row.revealIndex, 6) * 45 : 0 }
+                NumberAnimation { duration: row.revealing ? 300 : 120; easing.type: Easing.OutCubic }
+            }
+        }
 
         property string address: ""
         property string name: ""
@@ -384,6 +447,9 @@ Item {
         height: 50
         radius: 9
         color: connected ? Theme.selected : Theme.control
+        border.width: 1
+        border.color: pendingAction ? Qt.alpha(panelRoot.accentColor, 0.4) : "transparent"
+        Behavior on border.color { ColorAnimation { duration: 180 } }
 
         Behavior on color {
             ColorAnimation { duration: 120 }
@@ -440,6 +506,7 @@ Item {
 
         Rectangle {
             id: actionButton
+            objectName: "bluetoothDeviceAction-" + row.address
             anchors {
                 right: parent.right
                 verticalCenter: parent.verticalCenter
@@ -450,26 +517,41 @@ Item {
             height: 30
             radius: 8
             visible: row.connected || row.paired
-            opacity: row.pendingAction || !backend.bluetoothEnabled ? 0.6 : 1
+            enabled: !panelRoot.deviceActionBusy && !panelRoot.operationBusy && backend.bluetoothEnabled
+            opacity: enabled || row.pendingAction ? 1 : 0.5
+            scale: actionMouse.pressed ? 0.94 : actionMouse.containsMouse && enabled ? 1.03 : 1
+            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: 160 } }
+            Behavior on color { ColorAnimation { duration: 160 } }
             color: row.connected
-                ? (actionMouse.containsMouse ? Theme.controlHover : Theme.control)
-                : (actionMouse.containsMouse ? Qt.lighter(panelRoot.accentColor, 1.1) : panelRoot.accentColor)
+                ? (actionMouse.containsMouse && enabled ? Theme.controlHover : Theme.control)
+                : (actionMouse.containsMouse && enabled ? Qt.lighter(panelRoot.accentColor, 1.1) : panelRoot.accentColor)
 
-            Text {
+            Row {
                 anchors.centerIn: parent
-                text: row.pendingAction ? "Wait…" : (row.connected ? "Disconnect" : "Connect")
-                color: row.connected ? panelRoot.textColor : panelRoot.accentTextColor
-                font {
-                    family: panelRoot.family
-                    pixelSize: 11
-                    weight: Font.DemiBold
+                spacing: 5
+                ActivitySpinner {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 14
+                    height: 14
+                    running: Boolean(row.pendingAction) && panelRoot.opened
+                    ink: row.connected ? panelRoot.textColor : panelRoot.accentTextColor
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: row.pendingAction ? "Wait…" : (row.connected ? "Disconnect" : "Connect")
+                    color: row.connected ? panelRoot.textColor : panelRoot.accentTextColor
+                    font {
+                        family: panelRoot.family
+                        pixelSize: 11
+                        weight: Font.DemiBold
+                    }
                 }
             }
 
             MouseArea {
                 id: actionMouse
                 anchors.fill: parent
-                enabled: !row.pendingAction && !panelRoot.operationBusy && backend.bluetoothEnabled
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: panelRoot.runDeviceAction(row.address, !row.connected)
@@ -479,6 +561,19 @@ Item {
 
     component InfoRow: Rectangle {
         id: row
+
+        objectName: "bluetoothDetail-" + label
+        property int revealIndex: 0
+        readonly property bool revealing: panelRoot.opened && panelRoot.activeTab === "details"
+        property real revealProgress: revealing ? 1 : 0
+        opacity: revealProgress
+        transform: Translate { y: (1 - row.revealProgress) * 16 }
+        Behavior on revealProgress {
+            SequentialAnimation {
+                PauseAnimation { duration: row.revealing ? row.revealIndex * 55 : 0 }
+                NumberAnimation { duration: row.revealing ? 300 : 120; easing.type: Easing.OutCubic }
+            }
+        }
 
         property string label: ""
         property string value: ""
@@ -553,19 +648,22 @@ Item {
         signal clicked()
 
         height: 34
+        scale: buttonMouse.pressed ? 0.97 : 1
+        Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
 
         Rectangle {
             anchors.fill: parent
             radius: 9
-            color: button.active
-                ? panelRoot.accentColor
-                : (buttonMouse.containsMouse ? Theme.controlHover : Theme.control)
+            color: buttonMouse.containsMouse && !button.active
+                ? Qt.alpha(panelRoot.accentColor, 0.08) : "transparent"
+            Behavior on color { ColorAnimation { duration: 150 } }
         }
 
         Text {
             anchors.centerIn: parent
             text: button.label
             color: button.active ? panelRoot.accentTextColor : panelRoot.textColor
+            Behavior on color { ColorAnimation { duration: 180 } }
             font {
                 family: panelRoot.family
                 pixelSize: 13

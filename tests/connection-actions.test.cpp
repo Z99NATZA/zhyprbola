@@ -25,6 +25,12 @@ class ConnectionActionsTest : public QObject {
     QVariantMap state(const Backend &backend, const QString &radio) {
         return backend.connectionActions().value(radio).toMap();
     }
+    QQuickItem *findVisualItem(QQuickItem *root, const QString &name) {
+        if (root->objectName() == name) return root;
+        for (auto *child : root->childItems())
+            if (auto *found = findVisualItem(child, name)) return found;
+        return nullptr;
+    }
 private slots:
     void initTestCase() {
         QVERIFY(directory.isValid());
@@ -35,7 +41,16 @@ private slots:
         write("bluetoothctl", R"(#!/bin/sh
 case "$1" in
 show) read state < "$RADIO_TEST_STATE"; printf 'Controller AA:BB:CC:DD:EE:FF Test\n Powered: %s\n' "$state" ;;
-devices) ;;
+devices) echo 'Device 11:22:33:44:55:66 Black Shark T23' ;;
+info)
+ read device < "$RADIO_TEST_STATE-device"
+ read power < "$RADIO_TEST_STATE"
+ if [ "$power" = no ]; then device=no; fi
+ printf 'Name: Black Shark T23\nPaired: yes\nTrusted: yes\nConnected: %s\n' "$device" ;;
+connect|disconnect)
+ echo "$1" >> "$RADIO_TEST_STATE-actions"
+ /bin/sleep 0.2
+ if [ "$1" = connect ]; then echo yes > "$RADIO_TEST_STATE-device"; else echo no > "$RADIO_TEST_STATE-device"; fi ;;
 power)
  /bin/sleep 0.1
  if [ "$RADIO_TEST_FAIL" = "yes" ]; then echo 'Failed to set power: org.bluez.Error.NotAuthorized'; exit 0; fi
@@ -55,6 +70,8 @@ esac
     }
     void init() {
         write("state", "yes\n");
+        write("state-device", "yes\n");
+        write("state-actions", "");
         qunsetenv("RADIO_TEST_FAIL");
         qunsetenv("RADIO_TEST_NO_CHANGE");
     }
@@ -222,7 +239,58 @@ esac
             capture("scanning");
             QTRY_VERIFY(!state(backend, radio).value("busy").toBool());
             capture("on");
+            if (orb) {
+                for (const bool connect : {false, true}) {
+                    auto *action = findVisualItem(item, "bluetoothDeviceAction-11:22:33:44:55:66");
+                    QVERIFY(action);
+                    QVERIFY(action->isEnabled());
+                    const QPoint center = action->mapToScene(
+                        QPointF(action->width() / 2, action->height() / 2)).toPoint();
+                    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center);
+                    QVERIFY(panel->property("deviceActionBusy").toBool());
+                    QVERIFY(!action->isEnabled());
+                    QVERIFY(!power->property("enabled").toBool());
+                    QVERIFY(!scan->property("enabled").toBool());
+                    QVERIFY(!settings->property("enabled").toBool());
+                    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center);
+                    capture(connect ? "connecting" : "disconnecting");
+                    QTRY_VERIFY_WITH_TIMEOUT(!panel->property("deviceActionBusy").toBool(), 5000);
+                    QCOMPARE(backend.bluetoothConnected(), connect);
+                }
+                QFile actions(directory.filePath("state-actions"));
+                QVERIFY(actions.open(QIODevice::ReadOnly));
+                QCOMPARE(actions.readAll(), QByteArray("disconnect\nconnect\n"));
+                auto *devices = panel->findChild<QQuickItem *>("bluetoothDevicesPage");
+                auto *details = panel->findChild<QQuickItem *>("bluetoothDetailsPage");
+                auto *indicator = panel->findChild<QQuickItem *>("bluetoothTabIndicator");
+                QVERIFY(devices && details && indicator);
+                auto *deviceDetail = panel->findChild<QQuickItem *>("bluetoothDetail-Device");
+                auto *backendDetail = panel->findChild<QQuickItem *>("bluetoothDetail-Backend");
+                QVERIFY(deviceDetail && backendDetail);
+                item->setProperty("activeTab", QStringLiteral("details"));
+                QVERIFY(!devices->isEnabled());
+                QVERIFY(details->isEnabled());
+                QTest::qWait(60);
+                QVERIFY(details->opacity() > 0 && details->opacity() < 1);
+                QVERIFY(devices->opacity() > 0 && devices->opacity() < 1);
+                QVERIFY(indicator->x() > 0 && indicator->x() < 199);
+                QVERIFY(deviceDetail->opacity() > 0 && deviceDetail->opacity() < 1);
+                QCOMPARE(backendDetail->opacity(), 0.0);
+                // Reverse mid-transition to check that quick tab clicks settle correctly.
+                item->setProperty("activeTab", QStringLiteral("devices"));
+                QTRY_COMPARE(devices->opacity(), 1.0);
+                QTRY_COMPARE(details->opacity(), 0.0);
+                QTRY_COMPARE(indicator->x(), 0.0);
+                QVERIFY(!details->isEnabled());
+                QTRY_COMPARE(deviceDetail->opacity(), 0.0);
+                QTRY_COMPARE(backendDetail->opacity(), 0.0);
+            }
             item->setProperty("activeTab", QStringLiteral("details"));
+            QTest::qWait(500);
+            if (orb) {
+                QCOMPARE(panel->findChild<QQuickItem *>("bluetoothDetail-Device")->opacity(), 1.0);
+                QCOMPARE(panel->findChild<QQuickItem *>("bluetoothDetail-Backend")->opacity(), 1.0);
+            }
             capture("details");
             item->setProperty("opened", false);
             if (orb) {
