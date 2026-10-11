@@ -1,56 +1,43 @@
 # Architecture
 
 ```text
-GNOME Shell
+GNOME Shell / GJS dock extension
   |
-  v
-GJS dock extension
-  |
-  | command bridge now
-  | D-Bus later if needed
-  v
-Qt/QML panel host
-  |
-  v
-QML panels + C++ backend
+  +-- Native Shell popups: sound, brightness, battery
+  +-- Command bridge -> focused Qt/QML panels + C++ backend
+  +-- D-Bus -> resident Screenshots browser + C++ backend
 ```
 
 ## Ownership
 
 ```text
-GJS:
-- dock placement
-- dock buttons
-- shell behavior
-- panel launching
-
-QML:
-- panel UI
-- panel interaction
-- rich visual surfaces
-
-C++ backend:
-- system data
-- Wi-Fi / Bluetooth / media helpers
-- weather and spectrum plumbing
+GJS:  dock placement, buttons, Shell behavior, popups, and panel launching
+QML:  panel layout, interaction, progress feedback, and animations
+C++:  system data, connection/media helpers, persisted settings, weather, and spectrum
 ```
 
-## Current Bridge
+## Communication
+
+```text
+The extension launches focused panels through the installed panel-command.sh.
+Settings live under ~/.config/zhyprbola; file watchers notify other running hosts.
+Screenshots uses D-Bus for show/hide while preserving its resident process.
+Extend D-Bus to other panels only when lifecycle/state sharing needs it.
+
+The backend owns asynchronous radio power and discovery commands.
+QML reads connectionActions to display progress and block repeated requests.
+RadioOrb, RadioPowerButton, and RadioDiscoveryStatus share radio visuals.
+```
+
+## Development
 
 ```bash
-./scripts/run-panel bluetooth
+make dock                         # Main build/install/enable path
+./scripts/run-panel bluetooth      # Run a focused panel directly
 ./scripts/run-panel wifi
-
-# The extension spawns focused QML panels through the installed panel-command.sh.
-# Move to D-Bus only when panel lifecycle/state sharing needs it.
 ```
 
-## Next
-
-```bash
-# 1. Keep this as the main run path:
-make dock
-
-# 2. Add panels behind PanelHost.qml as needed.
-# 3. Split the backend only when the shared class becomes hard to maintain.
+```text
+Add panels behind PanelHost.qml. Split the backend when it becomes hard to maintain.
+Restart affected hosts after changing C++ or loaded QML; rebuilding does not reload them.
 ```

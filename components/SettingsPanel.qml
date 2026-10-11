@@ -27,11 +27,11 @@ Item {
 
     readonly property var sections: [
         {key: "components", label: "Components"},
-        {key: "opacity", label: "Opacity"},
         {key: "date-time", label: "Date & Time"},
-        {key: "screenshots", label: "Screenshots"},
         {key: "dock", label: "Dock"},
         {key: "keys", label: "Keys"},
+        {key: "opacity", label: "Opacity"},
+        {key: "screenshots", label: "Screenshots"},
         {key: "spectrum", label: "Spectrum"},
         {key: "themes", label: "Themes"},
         {key: "wallpaper", label: "Wallpaper"}
