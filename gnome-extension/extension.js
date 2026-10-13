@@ -106,9 +106,14 @@ export default class ZhyprbolaExtension extends Extension {
     enable() {
         this._disabling = false;
         this._connectionNames = {wifi: '', bluetooth: ''};
+        this._connectionStates = {
+            wifi: {enabled: null, strength: null},
+            bluetooth: {enabled: null},
+        };
         this._connectionLengths = {};
         this._connectionCancellable = new Gio.Cancellable();
         this._connectionRefreshPending = false;
+        this._connectionRefreshQueued = false;
         this._dockInteractions = new Set();
         this._dockRebuildPending = false;
         this._dock = null;
@@ -168,6 +173,8 @@ export default class ZhyprbolaExtension extends Extension {
             GLib.get_user_config_dir(), 'zhyprbola', 'pinned-apps']);
         this._panelRequestPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'panel-request']);
+        this._connectionRefreshPath = GLib.build_filenamev([
+            GLib.get_user_config_dir(), 'zhyprbola', 'connection-refresh']);
         this._settingsSectionRequestPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'settings-section-request']);
         this._themeName = this._readTheme();
@@ -183,6 +190,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._dateTimeSettings = this._readDateTimeSettings();
         this._pinnedApps = this._readPinnedApps();
         this._panelRequest = this._readPanelRequest();
+        this._connectionRefreshToken = this._readConnectionRefreshToken();
         this._appSystem = Shell.AppSystem.get_default();
         this._windowTracker = Shell.WindowTracker.get_default();
         this._backgroundSettings = new Gio.Settings({
@@ -1217,6 +1225,15 @@ export default class ZhyprbolaExtension extends Extension {
         }
     }
 
+    _readConnectionRefreshToken() {
+        try {
+            return new TextDecoder().decode(
+                GLib.file_get_contents(this._connectionRefreshPath)[1]).trim();
+        } catch (_) {
+            return '';
+        }
+    }
+
     _watchSettings() {
         const directory = GLib.path_get_dirname(this._themePath);
         try {
@@ -1284,6 +1301,7 @@ export default class ZhyprbolaExtension extends Extension {
         const dockComponents = this._readDockComponents();
         const dateTimeSettings = this._readDateTimeSettings();
         const pinnedApps = this._readPinnedApps();
+        const connectionRefreshToken = this._readConnectionRefreshToken();
         const themeChanged = theme !== this._themeName;
         const positionChanged = position !== this._dockPosition;
         const bgOpacityChanged = bgOpacity !== this._dockBgOpacity;
@@ -1300,6 +1318,8 @@ export default class ZhyprbolaExtension extends Extension {
             this._dockComponents.quick.join(',');
         const dateTimeChanged = JSON.stringify(dateTimeSettings) !==
             JSON.stringify(this._dateTimeSettings);
+        const connectionsChanged = Boolean(connectionRefreshToken) &&
+            connectionRefreshToken !== this._connectionRefreshToken;
 
         this._themeName = theme;
         this._dockPosition = position;
@@ -1313,6 +1333,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockComponents = dockComponents;
         this._dateTimeSettings = dateTimeSettings;
         this._pinnedApps = pinnedApps;
+        this._connectionRefreshToken = connectionRefreshToken;
 
         this._handlePanelRequest();
         if (positionChanged || groupsChanged || componentsChanged || dockUngroupWindowsChanged)
@@ -1330,6 +1351,8 @@ export default class ZhyprbolaExtension extends Extension {
             this._applyWallpaper(wallpaperChanged && useWallpaper);
         if (edgeChanged)
             this._restartEdgeSpectrum();
+        if (connectionsChanged)
+            this._refreshConnections();
     }
 
     _startEdgeSpectrum() {
@@ -1809,57 +1832,157 @@ export default class ZhyprbolaExtension extends Extension {
         return this._connectionNames?.[name] ?? '';
     }
 
+    _connectionIconName(name) {
+        const state = this._connectionStates?.[name];
+        if (state?.enabled === false)
+            return `${name}-off`;
+        if (name !== 'wifi' || !this._connectionName(name) || state?.strength === null ||
+            state?.strength === undefined)
+            return name;
+        if (state.strength <= 33)
+            return 'wifi-weak';
+        if (state.strength <= 66)
+            return 'wifi-medium';
+        return 'wifi-strong';
+    }
+
+    _wifiSignalLabel() {
+        switch (this._connectionIconName('wifi')) {
+        case 'wifi-weak': return 'Weak signal';
+        case 'wifi-medium': return 'Medium signal';
+        case 'wifi-strong': return 'Strong signal';
+        default: return '';
+        }
+    }
+
+    _connectionAccessibleName(name, label) {
+        const connection = this._connectionName(name);
+        if (this._connectionStates?.[name]?.enabled === false)
+            return `${label}: Off`;
+        if (!connection)
+            return label;
+        const signal = name === 'wifi' ? this._wifiSignalLabel() : '';
+        return `${label}: ${connection}${signal ? `, ${signal}` : ''}`;
+    }
+
+    _parseWifiConnection(output) {
+        const lines = output.replace(/\x1b\[[0-9;]*m/g, '').split('\n');
+        const active = lines.find(line => line.startsWith('yes:'));
+        if (!active)
+            return {name: '', strength: null};
+        const payload = active.slice(4);
+        const signal = payload.match(/^(\d{1,3}):(.*)$/u);
+        return {
+            name: (signal ? signal[2] : payload).replace(/\\([\\:])/g, '$1'),
+            strength: signal ? Math.max(0, Math.min(100, Number(signal[1]))) : null,
+        };
+    }
+
     _parseConnectionName(name, output) {
         const lines = output.replace(/\x1b\[[0-9;]*m/g, '').split('\n');
-        if (name === 'wifi') {
-            const active = lines.find(line => line.startsWith('yes:'));
-            return active ? active.slice(4).replace(/\\([\\:])/g, '$1') : '';
-        }
+        if (name === 'wifi')
+            return this._parseWifiConnection(output).name;
         const device = lines.find(line => /^Device [\dA-Fa-f:]{17} /u.test(line));
         return device ? device.slice(25) : '';
     }
 
-    async _refreshConnections() {
-        if (this._connectionRefreshPending || this._disabling)
+    _runConnectionCommand(argv, cancellable) {
+        return new Promise(resolve => {
+            const finish = (successful, output = '') => resolve({successful, output});
+            try {
+                const launcher = new Gio.SubprocessLauncher({flags:
+                    Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE});
+                launcher.setenv('LC_ALL', 'C', true);
+                const process = launcher.spawnv(argv);
+                const cancelId = cancellable.connect(() => process.force_exit());
+                let timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 3000, () => {
+                    timeoutId = 0;
+                    process.force_exit();
+                    return GLib.SOURCE_REMOVE;
+                });
+                process.communicate_utf8_async(null, cancellable, (source, result) => {
+                    if (timeoutId) {
+                        GLib.source_remove(timeoutId);
+                        timeoutId = 0;
+                    }
+                    cancellable.disconnect(cancelId);
+                    try {
+                        const [, output] = source.communicate_utf8_finish(result);
+                        finish(source.get_successful(), output);
+                    } catch (_) {
+                        finish(false);
+                    }
+                });
+            } catch (_) {
+                finish(false);
+            }
+        });
+    }
+
+    _updateConnectionStatus(name, connectionName, state, cancellable) {
+        if (this._connectionCancellable !== cancellable || cancellable.is_cancelled())
             return;
+        let changed = false;
+        if (this._connectionNames[name] !== connectionName) {
+            this._connectionNames[name] = connectionName;
+            delete this._connectionLengths[name];
+            changed = true;
+        }
+        const previousState = this._connectionStates[name];
+        if (previousState?.enabled !== state.enabled ||
+            previousState?.strength !== state.strength) {
+            this._connectionStates[name] = state;
+            changed = true;
+        }
+        if (changed)
+            this._queueLayout();
+    }
+
+    async _refreshConnections() {
+        if (this._disabling)
+            return;
+        if (this._connectionRefreshPending) {
+            this._connectionRefreshQueued = true;
+            return;
+        }
         this._connectionRefreshPending = true;
         const cancellable = this._connectionCancellable;
-        const commands = {
-            wifi: ['nmcli', '--wait', '3', '--terse', '--escape', 'yes',
-                '--fields', 'ACTIVE,SSID', 'device', 'wifi', 'list', '--rescan', 'no'],
-            bluetooth: ['bluetoothctl', '--timeout', '3', 'devices', 'Connected'],
-        };
-        await Promise.all(Object.entries(commands).map(([name, argv]) =>
-            new Promise(resolve => {
-                const update = value => {
-                    if (!cancellable.is_cancelled() && this._connectionNames[name] !== value) {
-                        this._connectionNames[name] = value;
-                        delete this._connectionLengths[name];
-                        this._queueLayout();
-                    }
-                    resolve();
-                };
-                try {
-                    const launcher = new Gio.SubprocessLauncher({flags:
-                        Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE});
-                    launcher.setenv('LC_ALL', 'C', true);
-                    const process = launcher.spawnv(argv);
-                    const cancelId = cancellable.connect(() => process.force_exit());
-                    process.communicate_utf8_async(null, cancellable, (source, result) => {
-                        cancellable.disconnect(cancelId);
-                        try {
-                            const [, output] = source.communicate_utf8_finish(result);
-                            update(source.get_successful() ? this._parseConnectionName(name, output) : '');
-                        } catch (_) {
-                            update('');
-                        }
-                    });
-                } catch (_) {
-                    update('');
-                }
-            })));
-        if (this._connectionCancellable === cancellable)
+        await Promise.all([
+            Promise.all([
+                this._runConnectionCommand(
+                    ['nmcli', '--wait', '3', '--terse', 'radio', 'wifi'], cancellable),
+                this._runConnectionCommand(['nmcli', '--wait', '3', '--terse', '--escape', 'yes',
+                    '--fields', 'ACTIVE,SIGNAL,SSID', 'device', 'wifi', 'list', '--rescan', 'no'],
+                cancellable),
+            ]).then(([power, list]) => {
+                const connection = list.successful
+                    ? this._parseWifiConnection(list.output) : {name: '', strength: null};
+                this._updateConnectionStatus('wifi', connection.name, {
+                    enabled: power.successful
+                        ? power.output.trim().toLowerCase() === 'enabled' : null,
+                    strength: connection.strength,
+                }, cancellable);
+            }),
+            Promise.all([
+                this._runConnectionCommand(
+                    ['bluetoothctl', 'show'], cancellable),
+                this._runConnectionCommand(
+                    ['bluetoothctl', 'devices', 'Connected'], cancellable),
+            ]).then(([power, devices]) => {
+                this._updateConnectionStatus('bluetooth', devices.successful
+                    ? this._parseConnectionName('bluetooth', devices.output) : '', {
+                    enabled: power.successful
+                        ? /^\s*Powered:\s+yes\s*$/imu.test(power.output) : null,
+                }, cancellable);
+            }),
+        ]);
+        if (this._connectionCancellable === cancellable) {
             this._connectionRefreshPending = false;
+            if (this._connectionRefreshQueued && !this._disabling) {
+                this._connectionRefreshQueued = false;
+                this._refreshConnections();
+            }
+        }
     }
 
     _dockItemLength(item) {
@@ -1891,11 +2014,13 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _createPanelButton({iconName, accessibleName, panelName}) {
+        const statusIconName = ['wifi', 'bluetooth'].includes(panelName)
+            ? this._connectionIconName(panelName) : iconName;
         const icon = new St.Icon({
-            gicon: this._panelGicon(iconName),
+            gicon: this._panelGicon(statusIconName),
             style_class: 'zhyprbola-dock-icon',
         });
-        this._panelIcons.set(iconName, icon);
+        this._panelIcons.set(statusIconName, icon);
 
         const button = new St.Button({
             style_class: 'zhyprbola-dock-button',
@@ -1903,7 +2028,7 @@ export default class ZhyprbolaExtension extends Extension {
             can_focus: true,
             reactive: true,
             track_hover: true,
-            accessible_name: accessibleName,
+            accessible_name: this._connectionAccessibleName(panelName, accessibleName),
         });
         button._panelName = panelName;
         const name = this._connectionName(panelName);
@@ -1936,7 +2061,7 @@ export default class ZhyprbolaExtension extends Extension {
             label.y_expand = false;
             content.add_child(icon);
             content.add_child(label);
-            button.accessible_name = `${accessibleName}: ${name}`;
+            button.accessible_name = this._connectionAccessibleName(panelName, accessibleName);
             button.set_size(vertical ? DOCK_CONFIG.buttonSize : length,
                 vertical ? length : DOCK_CONFIG.buttonSize);
         }
@@ -2037,7 +2162,8 @@ export default class ZhyprbolaExtension extends Extension {
         const items = this._dockItems.get(name) ?? [];
         const state = `${length}:${items.length}:${vertical}:${slot}:` +
             JSON.stringify(items.map(item => item.kind === 'app'
-                ? this._itemOrderKey(item) : [item.name, this._connectionName(item.name)]));
+                ? this._itemOrderKey(item) : [item.name, this._connectionName(item.name),
+                    this._connectionIconName(item.name)]));
         const appButtons = new Map(group.get_children()
             .filter(child => child._delegate?.groupName === name)
             .map(child => [child._delegate.key, child]));
@@ -2168,7 +2294,7 @@ export default class ZhyprbolaExtension extends Extension {
                 continue;
             }
             const icon = item.kind === 'panel'
-                ? this._panelGicon(item.name, theme.iconColor)
+                ? this._panelGicon(this._connectionIconName(item.name), theme.iconColor)
                 : item.kind === 'input-source' ? null : item.app.get_icon();
             menu.addAction(item.label, () => {
                 if (item.name === 'power') {
@@ -2237,7 +2363,7 @@ export default class ZhyprbolaExtension extends Extension {
                 });
                 for (const name of names.slice(start, start + columns)) {
                     const icon = new St.Icon({
-                        gicon: this._panelGicon(name),
+                        gicon: this._panelGicon(this._connectionIconName(name)),
                         style_class: 'zhyprbola-quick-icon',
                     });
                     const buttonItem = new St.Button({
@@ -2246,7 +2372,8 @@ export default class ZhyprbolaExtension extends Extension {
                         reactive: true,
                         can_focus: true,
                         track_hover: true,
-                        accessible_name: new Map(DOCK_COMPONENTS).get(name),
+                        accessible_name: this._connectionAccessibleName(
+                            name, new Map(DOCK_COMPONENTS).get(name)),
                     });
                     buttonItem.connect('clicked', () => {
                         menu.close();

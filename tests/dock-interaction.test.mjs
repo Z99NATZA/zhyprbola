@@ -977,10 +977,70 @@ test('connection names use the active SSID and connected Bluetooth device', () =
     const {dock} = fixture();
     assert.equal(dock._parseConnectionName('wifi', 'no:Other\nyes:Home\\:WiFi\\\\Lab\n'),
         'Home:WiFi\\Lab');
+    assert.deepEqual({...dock._parseWifiConnection(
+        'no:42:Other\nyes:78:Home\\:WiFi\\\\Lab\n')},
+    {name: 'Home:WiFi\\Lab', strength: 78});
     assert.equal(dock._parseConnectionName('wifi', 'no:Other\n'), '');
     assert.equal(dock._parseConnectionName('bluetooth',
         '\x1b[0;94mDevice AA:BB:CC:DD:EE:FF My Headphones\x1b[0m\n'), 'My Headphones');
     assert.equal(dock._parseConnectionName('bluetooth', 'No default controller available\n'), '');
+});
+
+test('connection icons distinguish disabled radios and Wi-Fi signal levels', () => {
+    const {dock} = fixture();
+    dock._connectionNames = {wifi: 'Home', bluetooth: ''};
+    dock._connectionStates = {wifi: {enabled: true, strength: 12},
+        bluetooth: {enabled: false}};
+    assert.equal(dock._connectionIconName('wifi'), 'wifi-weak');
+    assert.equal(dock._connectionAccessibleName('wifi', 'Wi-Fi'),
+        'Wi-Fi: Home, Weak signal');
+    assert.equal(dock._connectionIconName('bluetooth'), 'bluetooth-off');
+    assert.equal(dock._connectionAccessibleName('bluetooth', 'Bluetooth'), 'Bluetooth: Off');
+
+    dock._connectionStates.wifi.strength = 50;
+    assert.equal(dock._connectionIconName('wifi'), 'wifi-medium');
+    dock._connectionStates.wifi.strength = 82;
+    assert.equal(dock._connectionIconName('wifi'), 'wifi-strong');
+    dock._connectionStates.wifi.enabled = false;
+    assert.equal(dock._connectionIconName('wifi'), 'wifi-off');
+    assert.equal(dock._connectionAccessibleName('wifi', 'Wi-Fi'), 'Wi-Fi: Off');
+});
+
+test('connection refresh tokens request an immediate dock status refresh', () => {
+    const {dock} = fixture();
+    Object.assign(dock, {_themeName: 'current', _dockBgOpacity: 50,
+        _dockUngroupWindows: false, _useWallpaper: false, _edgeEnabled: false,
+        _edgePosition: 'bottom', _dockGroups: ['zhyprbola'], _dateTimeSettings: {},
+        _pinnedApps: null});
+    dock._connectionRefreshToken = 'old';
+    dock._readConnectionRefreshToken = () => 'new';
+    dock._readTheme = () => dock._themeName;
+    dock._readDockPosition = () => dock._dockPosition;
+    dock._readDockBgOpacity = () => dock._dockBgOpacity;
+    dock._readDockUngroupWindows = () => dock._dockUngroupWindows;
+    dock._readUseWallpaper = () => dock._useWallpaper;
+    dock._readEdgeEnabled = () => dock._edgeEnabled;
+    dock._readEdgePosition = () => dock._edgePosition;
+    dock._readDockGroups = () => dock._dockGroups;
+    dock._readDockGroupOrder = () => dock._dockGroupOrder;
+    dock._readDockComponents = () => dock._dockComponents;
+    dock._readDateTimeSettings = () => dock._dateTimeSettings;
+    dock._readPinnedApps = () => dock._pinnedApps;
+    dock._handlePanelRequest = () => {};
+    let refreshes = 0;
+    dock._refreshConnections = () => refreshes++;
+    dock._syncSettings();
+    assert.equal(refreshes, 1);
+    assert.equal(dock._connectionRefreshToken, 'new');
+});
+
+test('connection refresh requests queue behind an in-flight probe', async () => {
+    const {dock} = fixture();
+    dock._disabling = false;
+    dock._connectionRefreshPending = true;
+    dock._connectionRefreshQueued = false;
+    await dock._refreshConnections();
+    assert.equal(dock._connectionRefreshQueued, true);
 });
 
 test('connected dock buttons show an icon followed by 12 Unicode characters and dots on every side', () => {
@@ -1043,4 +1103,21 @@ test('connection changes rerender dock labels and restore icons after disconnect
     assert.equal(group.children[0].children[0].gicon, 'wifi');
     assert.equal(group.children[1].children[0].gicon, 'bluetooth');
     assert.equal(group.width, 58);
+});
+
+test('Wi-Fi signal changes rerender the dock icon', () => {
+    const {dock, group} = fixture(800);
+    dock._panelGicon = name => name;
+    dock._connectionNames = {wifi: 'Home', bluetooth: ''};
+    dock._connectionStates = {wifi: {enabled: true, strength: 20},
+        bluetooth: {enabled: true}};
+    dock._dateTimeLabels = new Map();
+    dock._dockGroupsByName.set('zhyprbola', group);
+    dock._dockItems.set('zhyprbola', [{kind: 'panel', name: 'wifi', label: 'Wi-Fi'}]);
+    const render = () => dock._renderDockRegion('zhyprbola', 400, false, 0);
+    render();
+    assert.equal(group.children[0].children[0].children[0].gicon, 'wifi-weak');
+    dock._connectionStates.wifi.strength = 90;
+    render();
+    assert.equal(group.children[0].children[0].children[0].gicon, 'wifi-strong');
 });

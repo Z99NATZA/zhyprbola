@@ -157,6 +157,9 @@ esac
         QTRY_VERIFY(!state(backend, "bluetooth").value("busy").toBool());
         QVERIFY(!backend.bluetoothEnabled());
         QVERIFY(state(backend, "bluetooth").value("success").toBool());
+        QFile refreshRequest(directory.filePath("zhyprbola/connection-refresh"));
+        QVERIFY(refreshRequest.open(QIODevice::ReadOnly));
+        QVERIFY(!refreshRequest.readAll().trimmed().isEmpty());
         backend.setBluetoothEnabled(true);
         QTRY_VERIFY(!state(backend, "bluetooth").value("busy").toBool());
         QVERIFY(backend.bluetoothEnabled());

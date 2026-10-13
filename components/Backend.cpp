@@ -1490,6 +1490,11 @@ void Backend::runConnectionCommand(const QString &radio, const QString &action,
             QStringLiteral("Failed|No default controller|not available|NotReady|NotAuthorized"),
             QRegularExpression::CaseInsensitiveOption));
         success = success && !timedOut && !bluezFailed;
+        // Wake the Shell dock as soon as the power command exits. Its own
+        // status query is authoritative and does not need to wait while this
+        // panel rebuilds device details.
+        if (expectedPower >= 0)
+            writeDockConfig(QStringLiteral("connection-refresh"), timestamp());
         refreshSystem();
         if (radio == QLatin1String("wifi")) refreshWifiNetworks();
         if (expectedPower >= 0) {

@@ -62,6 +62,8 @@ Brightness:   GNOME brightness manager, with ddcutil fallback
 Battery:      UPower percentage, charging state, and remaining/full-charge time
 Input Source: current language code; opens a compact language switcher
 Date & Time:  dock labels; open Settings -> Date & Time, including from overflow
+Connections:  crossed-out icons when radios are off; Wi-Fi shows weak/medium/strong signal
+              power changes push an immediate status refresh to the dock
 
 Unavailable audio/brightness controls are disabled; missing batteries show unavailable.
 ```
