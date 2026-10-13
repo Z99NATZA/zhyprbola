@@ -14,8 +14,10 @@ temporary app-tracker omissions. A slot is removed only after its window closes.
 New windows append to the saved order.
 
 Right-click, the keyboard menu key, or Shift+F10 opens GNOME's app menu.
-Supported actions include open windows, New Window, desktop actions, and Quit.
-Pin to Dash is omitted because Zhyprbola owns its launcher configuration.
+Supported actions include open windows, New Window, and desktop actions. Apps
+and grouped Running items expose GNOME's app-scoped Quit action. An ungrouped
+Running item replaces it with Close Window scoped to that item's window. Pin to
+Dash is omitted because Zhyprbola owns its launcher configuration.
 ```
 
 ## Show Desktop

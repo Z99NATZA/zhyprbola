@@ -69,9 +69,20 @@ class Actor {
 
 class NativeAppMenu {
     constructor(sourceActor, side, options) {
-        Object.assign(this, {sourceActor, side, options, actor: new Actor(), isOpen: false});
+        Object.assign(this, {sourceActor, side, options, actor: new Actor(), isOpen: false,
+            actions: []});
+        this._quitItem = this.addAction('Quit', () => this.app.request_quit());
     }
     setApp(app) { this.app = app; }
+    addAction(label, callback) {
+        const action = {
+            label: {text: label}, callback, destroyed: false,
+            activate() { this.callback(); },
+            destroy() { this.destroyed = true; },
+        };
+        this.actions.push(action);
+        return action;
+    }
     open() { this.isOpen = true; }
     close() { this.isOpen = false; }
     toggle() { this.isOpen = !this.isOpen; }
@@ -671,10 +682,11 @@ test('opening an existing Key Visualizer follows the shared panel toggle', () =>
     assert.equal(minimized, true);
 });
 
-test('right-click opens GNOME menus for Apps and Running without activating a window', () => {
+test('right-click opens GNOME menus without activating an app or window', () => {
     for (const name of ['apps', 'running']) {
         const {dock, group} = fixture();
         const entry = item(1);
+        dock._dockUngroupWindows = false;
         const button = dock._createAppButton(entry, name);
         group.add_child(button);
         let activations = 0;
@@ -692,6 +704,51 @@ test('right-click opens GNOME menus for Apps and Running without activating a wi
         button.emit('clicked');
         assert.equal(activations, 1);
     }
+});
+
+test('ungrouped Running menu closes only the window represented by its icon', () => {
+    const {dock, group, context} = fixture();
+    dock._dockUngroupWindows = true;
+    context.global = {get_current_time: () => 321};
+    const selected = item(1);
+    const sibling = item(2);
+    let selectedDeletes = 0;
+    let siblingDeletes = 0;
+    let appQuits = 0;
+    selected.window.can_close = () => true;
+    selected.window.delete = timestamp => {
+        assert.equal(timestamp, 321);
+        selectedDeletes++;
+    };
+    sibling.window.can_close = () => true;
+    sibling.window.delete = () => { siblingDeletes++; };
+    selected.app.get_windows = () => [selected.window, sibling.window];
+    selected.app.request_quit = () => { appQuits++; };
+
+    const button = dock._createAppButton(selected, 'running');
+    group.add_child(button);
+    button.actions[0].emit('recognize');
+
+    assert.equal(dock._appMenu._quitItem.label.text, 'Close Window');
+    dock._appMenu._quitItem.activate();
+    assert.equal(selectedDeletes, 1);
+    assert.equal(siblingDeletes, 0);
+    assert.equal(appQuits, 0);
+});
+
+test('grouped Running menu keeps GNOME Quit at app scope', () => {
+    const {dock, group} = fixture();
+    dock._dockUngroupWindows = false;
+    const entry = item(1);
+    let appQuits = 0;
+    entry.app.request_quit = () => { appQuits++; };
+    const button = dock._createAppButton(entry, 'running');
+    group.add_child(button);
+
+    button.actions[0].emit('recognize');
+    assert.equal(dock._appMenu._quitItem.label.text, 'Quit');
+    dock._appMenu._quitItem.activate();
+    assert.equal(appQuits, 1);
 });
 
 test('repeated right-click toggles the existing menu and switching icons destroys it', () => {

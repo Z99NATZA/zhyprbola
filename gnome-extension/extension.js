@@ -658,7 +658,7 @@ export default class ZhyprbolaExtension extends Extension {
         const delegate = button._delegate;
         if (!this._dock || delegate.destroyed || delegate.dragging)
             return;
-        const {app} = delegate.item;
+        const {app, window} = delegate.item;
         if (this._appMenu?.sourceActor === button && this._appMenuApp === app) {
             this._appMenu.toggle();
             return;
@@ -677,6 +677,16 @@ export default class ZhyprbolaExtension extends Extension {
             showSingleWindows: true,
         });
         menu.setApp(app);
+        if (delegate.groupName === 'running' && this._dockUngroupWindows && window) {
+            // GNOME's AppMenu Quit action targets Shell.App and can therefore
+            // close sibling windows. A window-sized dock item must instead
+            // close the Meta.Window represented by that specific item.
+            menu._quitItem.destroy();
+            menu._quitItem = menu.addAction('Close Window', () => {
+                if (window.can_close())
+                    window.delete(global.get_current_time());
+            });
+        }
         Main.uiGroup.add_child(menu.actor);
         menu.actor.hide();
         this._menuManager.addMenu(menu);
