@@ -109,11 +109,18 @@ Network and device connection buttons lock conflicting actions while pending.
 ## Screenshots Lifecycle
 
 ```text
-Settings -> Screenshots selects Left or Right and Top, Center, or Bottom.
-The vertical positions are centered at 1/6, 1/2, and 5/6 of screen height.
+Settings -> Screenshots selects Left or Right; its draggable layout zones choose
+Top, Center, or Bottom. Single handles center at 1/6, 1/2, or 5/6 of the edge.
 The 5 x 100 px handle stays visible in fullscreen.
-A 5 x 50 px Show Desktop handle sits 8 px below it, follows the same position
-setting, and also stays visible in fullscreen.
+A Show Desktop handle also stays visible in fullscreen. Its width presets are
+5/8/12 px and height presets are 50/75/100 px; horizontal edges rotate those
+dimensions. It can use any screen edge. On the Dock edge it is inset by the
+Dock thickness so it sits against the Dock's inner boundary. When both handles
+share an edge and position zone, they form a centered group with an 8 px gap. Settings
+provides draggable Top/Center/Bottom zones for vertical edges and
+Left/Center/Right zones for horizontal edges; card order is also persisted.
+Before a setting is saved, both handles share the Center zone, with Screenshots
+first and Show Desktop at 5 x 50 px.
 
 The browser opens beside the handle and remains inside the work area.
 Clicking outside, pressing Escape, or activating the handle again hides it.

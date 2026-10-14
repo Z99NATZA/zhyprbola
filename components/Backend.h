@@ -61,6 +61,8 @@ class Backend : public QObject {
     Q_PROPERTY(QStringList dockQuickComponents READ dockQuickComponents NOTIFY dockSettingsChanged)
     Q_PROPERTY(bool dockUngroupWindows READ dockUngroupWindows NOTIFY dockSettingsChanged)
     Q_PROPERTY(bool useWallpaper READ useWallpaper NOTIFY dockSettingsChanged)
+    Q_PROPERTY(QVariantMap showDesktopEdgeSettings READ showDesktopEdgeSettings
+        NOTIFY showDesktopEdgeSettingsChanged)
     Q_PROPERTY(bool edgeSpectrumEnabled READ edgeSpectrumEnabled NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QString edgeSpectrumPosition READ edgeSpectrumPosition NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QVariantList tasks READ tasks NOTIFY tasksChanged)
@@ -122,6 +124,7 @@ public:
     QStringList dockQuickComponents() const { return m_dockQuickComponents; }
     bool dockUngroupWindows() const { return m_dockUngroupWindows; }
     bool useWallpaper() const { return m_useWallpaper; }
+    QVariantMap showDesktopEdgeSettings() const { return m_showDesktopEdgeSettings; }
     bool edgeSpectrumEnabled() const { return m_edgeSpectrumEnabled; }
     QString edgeSpectrumPosition() const { return m_edgeSpectrumPosition; }
     QVariantList tasks() const { return m_tasks; }
@@ -165,6 +168,9 @@ public:
     Q_INVOKABLE void openDockComponent(const QString &key);
     Q_INVOKABLE void setDockUngroupWindows(bool enabled);
     Q_INVOKABLE void setUseWallpaper(bool enabled);
+    Q_INVOKABLE void setShowDesktopEdgeSetting(const QString &key, const QVariant &value);
+    Q_INVOKABLE void moveEdgeHandle(const QString &key, const QString &alignment,
+        const QString &beforeKey);
     Q_INVOKABLE void setEdgeSpectrumEnabled(bool enabled);
     Q_INVOKABLE void setEdgeSpectrumPosition(const QString &position);
     Q_INVOKABLE void addTask(const QString &text);
@@ -197,6 +203,7 @@ signals:
     void themeChanged();
     void componentOpacityChanged();
     void dockSettingsChanged();
+    void showDesktopEdgeSettingsChanged();
     void edgeSpectrumSettingsChanged();
     void tasksChanged();
     void keyVisualizerSettingsChanged();
@@ -224,6 +231,7 @@ private:
     void refreshTheme();
     void refreshKeyVisualizerSettings();
     void refreshDateTimeSettings();
+    void refreshShowDesktopEdgeSettings();
     void refreshSettingsSectionRequest();
     void readKeyCapture();
     void startEvdevKeyCapture();
@@ -296,6 +304,8 @@ private:
     QStringList m_dockQuickComponents;
     bool m_dockUngroupWindows = false;
     bool m_useWallpaper = false;
+    QFileSystemWatcher m_showDesktopEdgeWatcher;
+    QVariantMap m_showDesktopEdgeSettings;
     bool m_edgeSpectrumEnabled = false;
     QString m_edgeSpectrumPosition = QStringLiteral("bottom");
     QVariantList m_tasks;

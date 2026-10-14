@@ -5,6 +5,7 @@ import Clutter from 'gi://Clutter';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const TITLE = 'Zhyprbola Screenshots';
+const SHARED_HANDLE_GAP = 8;
 
 export function edgeGeometry(monitor, side, alignment) {
     const width = 5;
@@ -17,26 +18,94 @@ export function edgeGeometry(monitor, side, alignment) {
     };
 }
 
-export function showDesktopEdgeGeometry(monitor, side, alignment) {
-    const screenshots = edgeGeometry(monitor, side, alignment);
-    const width = 5;
-    const height = screenshots.height / 2;
-    const gap = 8;
+function insetFromDock(geometry, side, dockPosition, dockThickness) {
+    if (side !== dockPosition)
+        return geometry;
+    if (side === 'left') geometry.x += dockThickness;
+    else if (side === 'right') geometry.x -= dockThickness;
+    else if (side === 'top') geometry.y += dockThickness;
+    else geometry.y -= dockThickness;
+    return geometry;
+}
+
+function clampGeometry(geometry, monitor) {
+    geometry.x = Math.max(monitor.x, Math.min(geometry.x,
+        monitor.x + monitor.width - geometry.width));
+    geometry.y = Math.max(monitor.y, Math.min(geometry.y,
+        monitor.y + monitor.height - geometry.height));
+    return geometry;
+}
+
+export function edgeHandleGeometries(monitor, screenshots = {}, settings = {},
+    dockPosition = 'bottom', dockThickness = 27) {
+    const screenshotSide = screenshots.side === 'right' ? 'right' : 'left';
+    const alignments = ['top', 'center', 'bottom'];
+    const screenshotAlignment = alignments.includes(screenshots.alignment)
+        ? screenshots.alignment : 'center';
+    const desktopSide = ['left', 'right', 'top', 'bottom'].includes(settings.position)
+        ? settings.position : screenshotSide;
+    const desktopAlignment = alignments.includes(settings.alignment)
+        ? settings.alignment : screenshotAlignment;
+    const desktopWidth = {sm: 5, md: 8, lg: 12}[settings.width] ?? 5;
+    const desktopHeight = {sm: 50, md: 75, lg: 100}[settings.height] ?? 50;
+    const desktopVertical = desktopSide === 'left' || desktopSide === 'right';
+    const desktopActorWidth = desktopVertical ? desktopWidth : desktopHeight;
+    const desktopActorHeight = desktopVertical ? desktopHeight : desktopWidth;
+    const screenshot = edgeGeometry(monitor, screenshotSide, screenshotAlignment);
+    const desktopSlot = desktopAlignment === 'top' ? 0
+        : desktopAlignment === 'bottom' ? 2 : 1;
+    const showDesktop = {
+        x: desktopVertical
+            ? (desktopSide === 'right'
+                ? monitor.x + monitor.width - desktopActorWidth : monitor.x)
+            : monitor.x + Math.round(
+                monitor.width * (desktopSlot + 0.5) / 3 - desktopActorWidth / 2),
+        y: desktopVertical
+            ? monitor.y + Math.round(
+                monitor.height * (desktopSlot + 0.5) / 3 - desktopActorHeight / 2)
+            : (desktopSide === 'bottom'
+                ? monitor.y + monitor.height - desktopActorHeight : monitor.y),
+        width: desktopActorWidth,
+        height: desktopActorHeight,
+    };
+
+    if (desktopSide === screenshotSide && desktopAlignment === screenshotAlignment) {
+        const screenshotsFirst = settings.order !== 'show-desktop-first';
+        const first = screenshotsFirst ? screenshot : showDesktop;
+        const second = screenshotsFirst ? showDesktop : screenshot;
+        const segmentStart = monitor.y + monitor.height * desktopSlot / 3;
+        const segmentLength = monitor.height / 3;
+        const groupLength = first.height + SHARED_HANDLE_GAP + second.height;
+        first.y = Math.round(segmentStart + (segmentLength - groupLength) / 2);
+        second.y = first.y + first.height + SHARED_HANDLE_GAP;
+    }
+
+    insetFromDock(screenshot, screenshotSide, dockPosition, dockThickness);
+    insetFromDock(showDesktop, desktopSide, dockPosition, dockThickness);
     return {
-        x: side === 'right' ? monitor.x + monitor.width - width : monitor.x,
-        y: Math.min(screenshots.y + screenshots.height + gap,
-            monitor.y + monitor.height - height),
-        width, height,
+        screenshots: clampGeometry(screenshot, monitor),
+        showDesktop: clampGeometry(showDesktop, monitor),
     };
 }
 
+export function showDesktopEdgeGeometry(monitor, settings = {}, screenshots = {},
+    dockPosition = 'bottom', dockThickness = 27) {
+    return edgeHandleGeometries(monitor, screenshots, settings,
+        dockPosition, dockThickness).showDesktop;
+}
+
 export class ShowDesktopEdge {
-    constructor(toggle, getAccent = () => '#875a82') {
+    constructor(toggle, getAccent = () => '#875a82', getDockPosition = () => 'bottom',
+        getDockThickness = () => 27) {
         this._toggle = toggle;
         this._getAccent = getAccent;
+        this._getDockPosition = getDockPosition;
+        this._getDockThickness = getDockThickness;
         this._checked = false;
         this._configDir = GLib.build_filenamev([GLib.get_user_config_dir(), 'zhyprbola']);
-        this._configPath = GLib.build_filenamev([this._configDir, 'screenshots-edge']);
+        this._configPath = GLib.build_filenamev([this._configDir, 'show-desktop-edge']);
+        this._screenshotsConfigPath = GLib.build_filenamev(
+            [this._configDir, 'screenshots-edge']);
         this._button = new St.Button({
             style_class: 'zhyprbola-show-desktop-edge',
             reactive: true, can_focus: true, track_hover: true,
@@ -51,7 +120,8 @@ export class ShowDesktopEdge {
         this._monitor = Gio.File.new_for_path(this._configDir)
             .monitor_directory(Gio.FileMonitorFlags.NONE, null);
         this._monitor.connect('changed', (_monitor, file, other) => {
-            if ([file?.get_basename(), other?.get_basename()].includes('screenshots-edge'))
+            const names = [file?.get_basename(), other?.get_basename()];
+            if (names.includes('screenshots-edge') || names.includes('show-desktop-edge'))
                 this.layout();
         });
         this.layout();
@@ -68,18 +138,21 @@ export class ShowDesktopEdge {
 
     layout() {
         this._button.set_style(`background-color: ${this._getAccent()};`);
-        let saved = {};
+        let screenshots = {};
+        let settings = {};
+        try {
+            const [, data] = GLib.file_get_contents(this._screenshotsConfigPath);
+            screenshots = JSON.parse(new TextDecoder().decode(data));
+        } catch (_) { /* Follow the Screenshots handle defaults. */ }
         try {
             const [, data] = GLib.file_get_contents(this._configPath);
-            saved = JSON.parse(new TextDecoder().decode(data));
-        } catch (_) { /* Follow the Screenshots handle defaults. */ }
-        const side = saved.side === 'right' ? 'right' : 'left';
-        const alignment = ['top', 'bottom'].includes(saved.alignment)
-            ? saved.alignment : 'center';
+            settings = JSON.parse(new TextDecoder().decode(data));
+        } catch (_) { /* Use the Screenshots side and the smallest size. */ }
         const monitor = Main.layoutManager.primaryMonitor;
         if (!monitor)
             return;
-        const geometry = showDesktopEdgeGeometry(monitor, side, alignment);
+        const geometry = showDesktopEdgeGeometry(monitor, settings, screenshots,
+            this._getDockPosition(), this._getDockThickness());
         this._button.set_position(geometry.x, geometry.y);
         this._button.set_size(geometry.width, geometry.height);
     }
@@ -95,9 +168,12 @@ const BUS = 'org.zhyprbola.Screenshots';
 const PATH = '/org/zhyprbola/Screenshots';
 
 export class ScreenshotEdge {
-    constructor(launch, getAccent = () => '#875a82') {
+    constructor(launch, getAccent = () => '#875a82', getDockPosition = () => 'bottom',
+        getDockThickness = () => 27) {
         this._launch = launch;
         this._getAccent = getAccent;
+        this._getDockPosition = getDockPosition;
+        this._getDockThickness = getDockThickness;
         this._placementId = 0;
         this._generation = 0;
         this._desiredOpen = false;
@@ -106,6 +182,8 @@ export class ScreenshotEdge {
         this._process = null;
         this._configDir = GLib.build_filenamev([GLib.get_user_config_dir(), 'zhyprbola']);
         this._configPath = GLib.build_filenamev([this._configDir, 'screenshots-edge']);
+        this._showDesktopConfigPath = GLib.build_filenamev(
+            [this._configDir, 'show-desktop-edge']);
         this._button = new St.Button({
             style_class: 'zhyprbola-screenshot-edge',
             reactive: true, can_focus: true, track_hover: true,
@@ -126,7 +204,7 @@ export class ScreenshotEdge {
             const inside = rect => x >= rect.x && x < rect.x + rect.width
                 && y >= rect.y && y < rect.y + rect.height;
             const monitor = Main.layoutManager.primaryMonitor;
-            const handle = monitor && edgeGeometry(monitor, this._side, this._alignment);
+            const handle = monitor && this._handleGeometry;
             const window = this._window();
             if (handle && !inside(handle) && (!window || !inside(window.get_frame_rect())))
                 this.hide();
@@ -146,7 +224,8 @@ export class ScreenshotEdge {
         this._monitor = Gio.File.new_for_path(this._configDir)
             .monitor_directory(Gio.FileMonitorFlags.NONE, null);
         this._monitor.connect('changed', (_monitor, file, other) => {
-            if ([file?.get_basename(), other?.get_basename()].includes('screenshots-edge'))
+            const names = [file?.get_basename(), other?.get_basename()];
+            if (names.includes('screenshots-edge') || names.includes('show-desktop-edge'))
                 this.layout();
         });
         this._dismissId = Gio.DBus.session.signal_subscribe(BUS, BUS, 'dismissRequested', PATH,
@@ -221,16 +300,23 @@ export class ScreenshotEdge {
     layout() {
         this._button.set_style(`background-color: ${this._getAccent()};`);
         let saved = {};
+        let showDesktop = {};
         try {
             const [, data] = GLib.file_get_contents(this._configPath);
             saved = JSON.parse(new TextDecoder().decode(data));
         } catch (_) { /* Use defaults until Settings saves a position. */ }
+        try {
+            const [, data] = GLib.file_get_contents(this._showDesktopConfigPath);
+            showDesktop = JSON.parse(new TextDecoder().decode(data));
+        } catch (_) { /* Use the default shared center slot. */ }
         this._side = saved.side === 'right' ? 'right' : 'left';
         this._alignment = ['top', 'bottom'].includes(saved.alignment) ? saved.alignment : 'center';
         const monitor = Main.layoutManager.primaryMonitor;
         if (!monitor)
             return;
-        const geometry = edgeGeometry(monitor, this._side, this._alignment);
+        const geometry = edgeHandleGeometries(monitor, saved, showDesktop,
+            this._getDockPosition(), this._getDockThickness()).screenshots;
+        this._handleGeometry = geometry;
         this._button.set_position(geometry.x, geometry.y);
         this._button.set_size(geometry.width, geometry.height);
         const window = this._window();
@@ -313,8 +399,9 @@ export class ScreenshotEdge {
         const frame = window.get_frame_rect();
         const width = Math.min(frame.width, area.width - 24);
         const height = Math.min(frame.height, area.height - 24);
-        const x = this._side === 'right' ? monitor.x + monitor.width - width : monitor.x;
-        const handle = edgeGeometry(monitor, this._side, this._alignment);
+        const x = this._side === 'right' ? area.x + area.width - width : area.x;
+        const handle = this._handleGeometry ?? edgeGeometry(
+            monitor, this._side, this._alignment);
         const y = Math.max(area.y + 12, Math.min(area.y + area.height - height - 12,
             Math.round(handle.y + handle.height / 2 - height / 2)));
         window.move_resize_frame(false, x, y, width, height);
@@ -326,7 +413,8 @@ export class ScreenshotEdge {
         if (!actor || !monitor)
             return null;
         const frame = window.get_frame_rect();
-        const handle = edgeGeometry(monitor, this._side, this._alignment);
+        const handle = this._handleGeometry ?? edgeGeometry(
+            monitor, this._side, this._alignment);
         actor.set_pivot_point(this._side === 'right' ? 1 : 0,
             Math.max(0, Math.min(1, (handle.y + handle.height / 2 - frame.y) / frame.height)));
         return {actor, scaleX: handle.width / frame.width, scaleY: handle.height / frame.height};

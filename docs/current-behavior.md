@@ -92,8 +92,14 @@ Items persist until deleted and do not expire when the date changes.
 
 ```text
 Edge handle on the primary monitor; watches Pictures/Screenshots, newest first.
-A shorter Show Desktop handle follows 8 px below it and toggles the same saved
-window snapshot as the dock button and Super+0.
+A configurable Show Desktop handle toggles the same saved window snapshot as
+the dock button and Super+0. It supports every screen edge and sm/md/lg width
+and height. Both handles can be distributed across three position zones. Drag
+either card between Top/Center/Bottom on a
+vertical edge or Left/Center/Right on a horizontal edge; dragging within one
+zone changes their order. Items in the same zone form a centered group with an
+8 px gap. On the Dock
+edge both handles sit against the Dock's inner boundary.
 Click: select; Ctrl-click: toggle; Shift-click: range; drag: covered thumbnails.
 Ctrl+A selects all. Ctrl+C copies absolute paths.
 
@@ -106,7 +112,7 @@ Restore never overwrites files. Trash is not purged automatically.
 
 ```text
 Sidebar order: Components, Date & Time, Dock, Keys, Opacity, Screenshots,
-Spectrum, Themes, Wallpaper.
+Show Desktop, Spectrum, Themes, Wallpaper.
 
 When adding or renaming a section in components/SettingsPanel.qml, sort A-Z
 by displayed English label. Keep heading and page mappings synchronized.

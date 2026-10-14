@@ -7,7 +7,8 @@ function fixture() {
     const monitor = {index: 1, x: 1920, y: 0, width: 2560, height: 1440};
     const windows = [], timers = new Map(), calls = [], animations = [], connections = new Map();
     const skippedActors = new Set();
-    let config = {}, appeared, dismissed, cancelled = false, launched = 0, nextTimer = 0;
+    let config = {}, desktopConfig = {}, appeared, dismissed, cancelled = false;
+    let launched = 0, nextTimer = 0;
     const changed = [];
     const process = {wait_async(_cancel, callback) { this.finished = callback; }, wait_finish() {}, force_exit() { this.killed = true; }};
     const context = vm.createContext({
@@ -35,7 +36,8 @@ function fixture() {
                 connect: (_name, callback) => { changed.push(callback); }, cancel: () => { cancelled = true; },
             })})}},
         GLib: {build_filenamev: parts => parts.join('/'), get_user_config_dir: () => '/config',
-            file_get_contents: () => [true, new TextEncoder().encode(JSON.stringify(config))],
+            file_get_contents: path => [true, new TextEncoder().encode(JSON.stringify(
+                path.endsWith('show-desktop-edge') ? desktopConfig : config))],
             mkdir_with_parents() {}, PRIORITY_DEFAULT: 0, SOURCE_REMOVE: false, SOURCE_CONTINUE: true,
             timeout_add: (_priority, _interval, callback) => { const id = ++nextTimer; timers.set(id, callback); return id; },
             source_remove: id => timers.delete(id)},
@@ -54,6 +56,8 @@ function fixture() {
     const source = readFileSync(new URL('../gnome-extension/screenshotEdge.js', import.meta.url), 'utf8');
     vm.runInContext(source.replace(/^import .*;\n/gm, '')
         .replace('export function edgeGeometry', 'globalThis.edgeGeometry = function edgeGeometry')
+        .replace('export function edgeHandleGeometries',
+            'globalThis.edgeHandleGeometries = function edgeHandleGeometries')
         .replace('export function showDesktopEdgeGeometry',
             'globalThis.showDesktopEdgeGeometry = function showDesktopEdgeGeometry')
         .replace('export class ShowDesktopEdge',
@@ -76,21 +80,26 @@ function fixture() {
             config = value;
             for (const callback of changed)
                 callback(null, {get_basename: () => 'screenshots-edge'});
+        },
+        configureDesktop: value => {
+            desktopConfig = value;
+            for (const callback of changed)
+                callback(null, {get_basename: () => 'show-desktop-edge'});
         }};
 }
 
-test('show desktop handle follows Screenshots and sits below it', () => {
+test('show desktop handle shares the selected slot with Screenshots', () => {
     const {context, monitor, configure} = fixture();
     let toggles = 0;
     const handle = new context.ShowDesktopEdge(() => toggles++, () => '#be345f');
     assert.equal(context.Main.layoutManager.chrome.trackFullscreen, false);
     for (const side of ['left', 'right']) for (const alignment of ['top', 'center', 'bottom']) {
         configure({side, alignment});
-        const screenshots = context.edgeGeometry(monitor, side, alignment);
+        const geometry = context.edgeHandleGeometries(monitor, {side, alignment});
         assert.equal(handle._button.width, 5);
-        assert.equal(handle._button.height, screenshots.height / 2);
+        assert.equal(handle._button.height, 50);
         assert.equal(handle._button.x, side === 'left' ? monitor.x : monitor.x + monitor.width - 5);
-        assert.equal(handle._button.y, screenshots.y + screenshots.height + 8);
+        assert.equal(handle._button.y, geometry.showDesktop.y);
     }
     assert.match(handle._button.style, /#be345f/);
     handle._button.click();
@@ -104,15 +113,76 @@ test('show desktop handle follows Screenshots and sits below it', () => {
     assert.equal(handle._button.destroyed, true);
 });
 
-test('handle stays visible in fullscreen and uses space-around at every position', () => {
-    const {edge, context, monitor, configure} = fixture();
+test('show desktop sizes rotate on horizontal edges and avoid the dock side', () => {
+    const {context, monitor, configure, configureDesktop} = fixture();
+    let dockPosition = 'left';
+    const handle = new context.ShowDesktopEdge(() => {}, () => '#be345f',
+        () => dockPosition, () => 27);
+    configure({side: 'left', alignment: 'center'});
+
+    configureDesktop({position: 'left', width: 'lg', height: 'md'});
+    assert.deepEqual({x: handle._button.x, y: handle._button.y,
+        width: handle._button.width, height: handle._button.height},
+    {x: monitor.x + 27, y: 737, width: 12, height: 75});
+
+    dockPosition = 'top';
+    configureDesktop({position: 'top', width: 'md', height: 'lg', alignment: 'top'});
+    assert.deepEqual({x: handle._button.x, y: handle._button.y,
+        width: handle._button.width, height: handle._button.height},
+    {x: 2297, y: 27, width: 100, height: 8});
+
+    dockPosition = 'bottom';
+    configureDesktop({position: 'bottom', width: 'lg', height: 'md', alignment: 'bottom'});
+    assert.deepEqual({x: handle._button.x, y: handle._button.y,
+        width: handle._button.width, height: handle._button.height},
+    {x: 4016, y: 1401, width: 75, height: 12});
+});
+
+test('edge handles form a compact centered group inside a slot and can swap order', () => {
+    const {context, monitor} = fixture();
+    const screenshots = {side: 'left', alignment: 'center'};
+    const settings = {position: 'left', width: 'lg', height: 'md',
+        alignment: 'center', order: 'screenshots-first'};
+
+    let geometry = context.edgeHandleGeometries(
+        monitor, screenshots, settings, 'left', 27);
+    assert.deepEqual({...geometry.screenshots},
+        {x: monitor.x + 27, y: 629, width: 5, height: 100});
+    assert.deepEqual({...geometry.showDesktop},
+        {x: monitor.x + 27, y: 737, width: 12, height: 75});
+
+    settings.order = 'show-desktop-first';
+    geometry = context.edgeHandleGeometries(monitor, screenshots, settings, 'left', 27);
+    assert.deepEqual({...geometry.showDesktop},
+        {x: monitor.x + 27, y: 629, width: 12, height: 75});
+    assert.deepEqual({...geometry.screenshots},
+        {x: monitor.x + 27, y: 712, width: 5, height: 100});
+});
+
+test('show desktop center remains independent from the Screenshots slot', () => {
+    const {context, monitor} = fixture();
+    const geometry = context.edgeHandleGeometries(monitor,
+        {side: 'left', alignment: 'top'},
+        {position: 'left', width: 'sm', height: 'sm', alignment: 'center'},
+        'bottom', 27);
+
+    assert.deepEqual({...geometry.screenshots},
+        {x: monitor.x, y: 190, width: 5, height: 100});
+    assert.deepEqual({...geometry.showDesktop},
+        {x: monitor.x, y: 695, width: 5, height: 50});
+});
+
+test('handle stays visible in fullscreen and follows the three position slots', () => {
+    const {edge, context, monitor, configure, configureDesktop} = fixture();
     assert.equal(context.Main.layoutManager.chrome.trackFullscreen, false);
+    configureDesktop({position: 'top', alignment: 'center'});
     for (const side of ['left', 'right']) for (const alignment of ['top', 'center', 'bottom']) {
         configure({side, alignment});
         assert.equal(edge._button.width, 5);
         assert.equal(edge._button.height, 100);
         assert.equal(edge._button.x, side === 'left' ? monitor.x : monitor.x + monitor.width - 5);
-        assert.equal(edge._button.y, alignment === 'top' ? 190 : alignment === 'bottom' ? 1150 : 670);
+        assert.equal(edge._button.y,
+            alignment === 'top' ? 190 : alignment === 'bottom' ? 1150 : 670);
     }
 });
 

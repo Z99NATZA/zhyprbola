@@ -100,6 +100,34 @@ QVariantMap validatedDateTimeSettings(const QJsonObject &saved) {
     return settings;
 }
 
+QVariantMap validatedShowDesktopEdgeSettings(const QJsonObject &saved,
+    const QString &fallbackPosition, const QString &fallbackAlignment) {
+    QVariantMap settings{{QStringLiteral("position"), fallbackPosition},
+        {QStringLiteral("width"), QStringLiteral("sm")},
+        {QStringLiteral("height"), QStringLiteral("sm")},
+        {QStringLiteral("alignment"), fallbackAlignment},
+        {QStringLiteral("order"), QStringLiteral("screenshots-first")}};
+    const QString position = saved.value(QStringLiteral("position")).toString();
+    if (QStringList{QStringLiteral("left"), QStringLiteral("right"),
+            QStringLiteral("top"), QStringLiteral("bottom")}.contains(position))
+        settings.insert(QStringLiteral("position"), position);
+    for (const QString &key : {QStringLiteral("width"), QStringLiteral("height")}) {
+        const QString value = saved.value(key).toString();
+        if (QStringList{QStringLiteral("sm"), QStringLiteral("md"),
+                QStringLiteral("lg")}.contains(value))
+            settings.insert(key, value);
+    }
+    const QString alignment = saved.value(QStringLiteral("alignment")).toString();
+    if (alignment == QLatin1String("top") || alignment == QLatin1String("center")
+        || alignment == QLatin1String("bottom"))
+        settings.insert(QStringLiteral("alignment"), alignment);
+    const QString order = saved.value(QStringLiteral("order")).toString();
+    if (order == QLatin1String("screenshots-first")
+        || order == QLatin1String("show-desktop-first"))
+        settings.insert(QStringLiteral("order"), order);
+    return settings;
+}
+
 QString latinDigits(QString text) {
     for (int index = 0; index < text.size(); ++index) {
         const QChar character = text.at(index);
@@ -376,6 +404,11 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     connect(&m_dateTimeWatcher, &QFileSystemWatcher::fileChanged,
         this, &Backend::refreshDateTimeSettings);
     refreshDateTimeSettings();
+    connect(&m_showDesktopEdgeWatcher, &QFileSystemWatcher::directoryChanged,
+        this, &Backend::refreshShowDesktopEdgeSettings);
+    connect(&m_showDesktopEdgeWatcher, &QFileSystemWatcher::fileChanged,
+        this, &Backend::refreshShowDesktopEdgeSettings);
+    refreshShowDesktopEdgeSettings();
     connect(&m_settingsSectionRequestWatcher, &QFileSystemWatcher::directoryChanged,
         this, &Backend::refreshSettingsSectionRequest);
     connect(&m_settingsSectionRequestWatcher, &QFileSystemWatcher::fileChanged,
@@ -811,6 +844,123 @@ void Backend::setDateTimeSetting(const QString &key, const QVariant &value) {
         return;
     m_dateTimeSettings = settings;
     emit dateTimeSettingsChanged();
+}
+
+void Backend::refreshShowDesktopEdgeSettings() {
+    const QString path = dockConfigPath(QStringLiteral("show-desktop-edge"));
+    const QString directory = QFileInfo(path).absolutePath();
+    if (QDir().mkpath(directory) && !m_showDesktopEdgeWatcher.directories().contains(directory))
+        m_showDesktopEdgeWatcher.addPath(directory);
+    if (QFileInfo::exists(path) && !m_showDesktopEdgeWatcher.files().contains(path))
+        m_showDesktopEdgeWatcher.addPath(path);
+
+    QString fallbackPosition = QStringLiteral("left");
+    QString fallbackAlignment = QStringLiteral("center");
+    QFile screenshots(dockConfigPath(QStringLiteral("screenshots-edge")));
+    if (screenshots.open(QIODevice::ReadOnly)) {
+        const QJsonObject screenshotSettings = QJsonDocument::fromJson(
+            screenshots.readAll()).object();
+        const QString side = screenshotSettings.value(QStringLiteral("side")).toString();
+        if (side == QLatin1String("left") || side == QLatin1String("right"))
+            fallbackPosition = side;
+        const QString alignment = screenshotSettings.value(
+            QStringLiteral("alignment")).toString();
+        if (alignment == QLatin1String("top") || alignment == QLatin1String("center")
+            || alignment == QLatin1String("bottom"))
+            fallbackAlignment = alignment;
+    }
+    QFile file(path);
+    QJsonObject saved;
+    if (file.open(QIODevice::ReadOnly))
+        saved = QJsonDocument::fromJson(file.readAll()).object();
+    const QVariantMap settings = validatedShowDesktopEdgeSettings(
+        saved, fallbackPosition, fallbackAlignment);
+    if (settings == m_showDesktopEdgeSettings) return;
+    m_showDesktopEdgeSettings = settings;
+    emit showDesktopEdgeSettingsChanged();
+}
+
+void Backend::setShowDesktopEdgeSetting(const QString &key, const QVariant &value) {
+    if (!QStringList{QStringLiteral("position"), QStringLiteral("width"),
+            QStringLiteral("height"), QStringLiteral("alignment"),
+            QStringLiteral("order")}.contains(key)) return;
+    const QString text = value.toString();
+    if (key == QLatin1String("position")) {
+        if (!QStringList{QStringLiteral("left"), QStringLiteral("right"),
+                QStringLiteral("top"), QStringLiteral("bottom")}.contains(text)) return;
+    } else if (key == QLatin1String("width") || key == QLatin1String("height")) {
+        if (!QStringList{QStringLiteral("sm"), QStringLiteral("md"),
+                QStringLiteral("lg")}.contains(text)) return;
+    } else if (key == QLatin1String("alignment")) {
+        if (text != QLatin1String("top") && text != QLatin1String("center")
+            && text != QLatin1String("bottom")) return;
+    } else if (text != QLatin1String("screenshots-first")
+        && text != QLatin1String("show-desktop-first")) return;
+    QJsonObject saved = QJsonObject::fromVariantMap(m_showDesktopEdgeSettings);
+    saved.insert(key, text);
+    const QVariantMap settings = validatedShowDesktopEdgeSettings(saved,
+        m_showDesktopEdgeSettings.value(QStringLiteral("position"),
+            QStringLiteral("left")).toString(),
+        m_showDesktopEdgeSettings.value(QStringLiteral("alignment"),
+            QStringLiteral("center")).toString());
+    if (settings == m_showDesktopEdgeSettings) return;
+    if (!writeDockConfig(QStringLiteral("show-desktop-edge"),
+            QString::fromUtf8(QJsonDocument::fromVariant(settings).toJson(QJsonDocument::Compact))))
+        return;
+    m_showDesktopEdgeSettings = settings;
+    emit showDesktopEdgeSettingsChanged();
+}
+
+void Backend::moveEdgeHandle(const QString &key, const QString &alignment,
+    const QString &beforeKey) {
+    if ((key != QLatin1String("screenshots") && key != QLatin1String("show-desktop"))
+        || (alignment != QLatin1String("top") && alignment != QLatin1String("center")
+            && alignment != QLatin1String("bottom"))) return;
+
+    const QString screenshotPath = dockConfigPath(QStringLiteral("screenshots-edge"));
+    QFile screenshotFile(screenshotPath);
+    QJsonObject screenshotSettings;
+    if (screenshotFile.open(QIODevice::ReadOnly))
+        screenshotSettings = QJsonDocument::fromJson(screenshotFile.readAll()).object();
+    const QString screenshotSide = screenshotSettings.value(QStringLiteral("side")).toString()
+        == QLatin1String("right") ? QStringLiteral("right") : QStringLiteral("left");
+    QString screenshotAlignment = screenshotSettings.value(
+        QStringLiteral("alignment")).toString();
+    if (screenshotAlignment != QLatin1String("top")
+        && screenshotAlignment != QLatin1String("bottom"))
+        screenshotAlignment = QStringLiteral("center");
+
+    QVariantMap settings = m_showDesktopEdgeSettings;
+    if (key == QLatin1String("screenshots")) {
+        screenshotAlignment = alignment;
+        screenshotSettings = QJsonObject{{QStringLiteral("side"), screenshotSide},
+            {QStringLiteral("alignment"), screenshotAlignment}};
+        if (!writeDockConfig(QStringLiteral("screenshots-edge"), QString::fromUtf8(
+                QJsonDocument(screenshotSettings).toJson(QJsonDocument::Compact))))
+            return;
+    } else {
+        settings.insert(QStringLiteral("alignment"), alignment);
+    }
+
+    const QString showSide = settings.value(QStringLiteral("position")).toString();
+    const QString showAlignment = settings.value(QStringLiteral("alignment")).toString();
+    if (showSide == screenshotSide && showAlignment == screenshotAlignment) {
+        const QString other = key == QLatin1String("screenshots")
+            ? QStringLiteral("show-desktop") : QStringLiteral("screenshots");
+        settings.insert(QStringLiteral("order"), beforeKey == other
+            ? (key == QLatin1String("screenshots") ? QStringLiteral("screenshots-first")
+                : QStringLiteral("show-desktop-first"))
+            : (key == QLatin1String("screenshots") ? QStringLiteral("show-desktop-first")
+                : QStringLiteral("screenshots-first")));
+    }
+    const QVariantMap validated = validatedShowDesktopEdgeSettings(QJsonObject::fromVariantMap(
+        settings), showSide, showAlignment);
+    if (!writeDockConfig(QStringLiteral("show-desktop-edge"), QString::fromUtf8(
+            QJsonDocument::fromVariant(validated).toJson(QJsonDocument::Compact))))
+        return;
+    if (validated == m_showDesktopEdgeSettings) return;
+    m_showDesktopEdgeSettings = validated;
+    emit showDesktopEdgeSettingsChanged();
 }
 
 void Backend::refreshSettingsSectionRequest() {

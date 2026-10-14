@@ -32,6 +32,7 @@ Item {
         {key: "keys", label: "Keys"},
         {key: "opacity", label: "Opacity"},
         {key: "screenshots", label: "Screenshots"},
+        {key: "show-desktop", label: "Show Desktop"},
         {key: "spectrum", label: "Spectrum"},
         {key: "themes", label: "Themes"},
         {key: "wallpaper", label: "Wallpaper"}
@@ -95,6 +96,16 @@ Item {
     property var componentPreviewQuick: []
     property real dragStartX: 0
     property real dragStartY: 0
+    property string draggedEdgeHandle: ""
+    property bool draggingEdgeHandle: false
+    property string edgeHandleDragSide: ""
+    property string edgeHandleDropAlignment: ""
+    property string edgeHandleBeforeKey: ""
+    property var edgeHandlePreviewTop: []
+    property var edgeHandlePreviewCenter: []
+    property var edgeHandlePreviewBottom: []
+    property real edgeHandleDragStartX: 0
+    property real edgeHandleDragStartY: 0
     property string draggedOpacityComponent: ""
     property bool draggingOpacityComponent: false
     property string opacityDropZone: ""
@@ -271,6 +282,107 @@ Item {
             backend.moveDockComponent(key, destination, beforeKey)
     }
 
+    function edgeHandleLayout(side) {
+        const layout = {top: [], center: [], bottom: []}
+        const order = backend.showDesktopEdgeSettings.order === "show-desktop-first"
+            ? ["show-desktop", "screenshots"] : ["screenshots", "show-desktop"]
+        for (const key of order) {
+            if (key === "screenshots" && screenshots.edgeSide === side) {
+                const alignment = screenshots.edgeAlignment || "center"
+                layout[alignment].push(key)
+            } else if (key === "show-desktop"
+                && backend.showDesktopEdgeSettings.position === side) {
+                const alignment = backend.showDesktopEdgeSettings.alignment || "center"
+                layout[alignment].push(key)
+            }
+        }
+        return layout
+    }
+
+    function edgeHandleItems(side, alignment) {
+        if (draggedEdgeHandle && edgeHandleDragSide === side) {
+            if (alignment === "top") return edgeHandlePreviewTop
+            if (alignment === "bottom") return edgeHandlePreviewBottom
+            return edgeHandlePreviewCenter
+        }
+        return edgeHandleLayout(side)[alignment]
+    }
+
+    function edgeHandleLabel(key) {
+        return key === "screenshots" ? "Screenshots" : "Show Desktop"
+    }
+
+    function activeEdgeHandleEditor() {
+        return section === "screenshots" ? screenshotHandleEditor : showDesktopHandleEditor
+    }
+
+    function beginEdgeHandleDrag(key, side, point) {
+        draggedEdgeHandle = key
+        edgeHandleDragSide = side
+        edgeHandleDragStartX = point.x
+        edgeHandleDragStartY = point.y
+        const layout = edgeHandleLayout(side)
+        edgeHandlePreviewTop = layout.top.slice()
+        edgeHandlePreviewCenter = layout.center.slice()
+        edgeHandlePreviewBottom = layout.bottom.slice()
+    }
+
+    function updateEdgeHandleDrag(point) {
+        if (!draggedEdgeHandle)
+            return
+        if (!draggingEdgeHandle) {
+            const dx = point.x - edgeHandleDragStartX
+            const dy = point.y - edgeHandleDragStartY
+            if (dx * dx + dy * dy < 36)
+                return
+            draggingEdgeHandle = true
+        }
+
+        floatingEdgeHandle.x = point.x - floatingEdgeHandle.width / 2
+        floatingEdgeHandle.y = point.y - floatingEdgeHandle.height / 2
+        const editor = activeEdgeHandleEditor()
+        const destination = editor.zoneAt(point)
+        editor.setDropAlignment(destination ? destination.slotKey : "")
+        edgeHandleDropAlignment = destination ? destination.slotKey : ""
+        edgeHandleBeforeKey = ""
+
+        const layout = edgeHandleLayout(edgeHandleDragSide)
+        for (const alignment of ["top", "center", "bottom"])
+            layout[alignment] = layout[alignment].filter(key => key !== draggedEdgeHandle)
+        if (destination) {
+            const target = layout[destination.slotKey]
+            const local = destination.mapFromItem(panel, point.x, point.y)
+            const position = local.x < destination.width / 2 ? 0 : target.length
+            edgeHandleBeforeKey = target[position] || ""
+            target.splice(position, 0, draggedEdgeHandle)
+        }
+        edgeHandlePreviewTop = layout.top.slice()
+        edgeHandlePreviewCenter = layout.center.slice()
+        edgeHandlePreviewBottom = layout.bottom.slice()
+    }
+
+    function finishEdgeHandleDrag() {
+        const key = draggedEdgeHandle
+        const alignment = edgeHandleDropAlignment
+        const beforeKey = edgeHandleBeforeKey
+        const commit = draggingEdgeHandle && alignment !== ""
+        const editor = activeEdgeHandleEditor()
+        draggedEdgeHandle = ""
+        draggingEdgeHandle = false
+        edgeHandleDragSide = ""
+        edgeHandleDropAlignment = ""
+        edgeHandleBeforeKey = ""
+        edgeHandlePreviewTop = []
+        edgeHandlePreviewCenter = []
+        edgeHandlePreviewBottom = []
+        editor.setDropAlignment("")
+        if (commit) {
+            backend.moveEdgeHandle(key, alignment, beforeKey)
+            if (key === "screenshots")
+                screenshots.refresh()
+        }
+    }
+
     function beginOpacityDrag(key, point) {
         draggedOpacityComponent = key
         opacityDragStartX = point.x
@@ -440,7 +552,7 @@ Item {
             x: 8
             y: 60
             width: parent.width - 16
-            spacing: 5
+            spacing: 2
 
             Repeater {
                 model: panel.sections
@@ -483,6 +595,7 @@ Item {
         x: panel.contentX
         y: 29
         text: panel.section === "screenshots" ? "Screenshots"
+            : panel.section === "show-desktop" ? "Show Desktop"
             : panel.section === "themes" ? "Themes"
             : panel.section === "opacity" ? "Opacity"
             : (panel.section === "dock" ? "Dock"
@@ -591,69 +704,346 @@ Item {
         x: panel.contentX
         y: 76
         width: panel.contentWidth
-        spacing: 16
+        spacing: 17
         visible: panel.section === "screenshots"
 
-        Text { text: "Screen edge"; color: Theme.text; font.pixelSize: 14 }
-        Row {
-            spacing: 8
-            Repeater {
-                model: ["left", "right"]
-                delegate: ScreenshotPositionChoice {
-                    required property string modelData
-                    label: modelData === "left" ? "Left" : "Right"
-                    chosen: screenshots.edgeSide === modelData
-                    onClicked: screenshots.setPosition(modelData, screenshots.edgeAlignment)
-                }
+        EdgeSettingGroup {
+            title: "Screen edge"
+            objectPrefix: "screenshot-position-"
+            options: [{key: "left", label: "Left"}, {key: "right", label: "Right"}]
+            selectedKey: screenshots.edgeSide
+            onOptionClicked: function(key) {
+                screenshots.setPosition(key, screenshots.edgeAlignment)
             }
         }
-        Text { text: "Vertical position"; color: Theme.text; font.pixelSize: 14 }
-        Row {
-            spacing: 8
-            Repeater {
-                model: ["top", "center", "bottom"]
-                delegate: ScreenshotPositionChoice {
-                    required property string modelData
-                    label: modelData.charAt(0).toUpperCase() + modelData.slice(1)
-                    chosen: screenshots.edgeAlignment === modelData
-                    onClicked: screenshots.setPosition(screenshots.edgeSide, modelData)
+
+        Column {
+            width: parent.width
+            spacing: 6
+
+            Text {
+                text: "Position and order"
+                color: Theme.mutedText
+                font.family: Qt.application.font.family
+                font.pixelSize: 12
+            }
+
+            EdgeHandleLayoutEditor {
+                id: screenshotHandleEditor
+                editorKey: "screenshots"
+                editorSide: screenshots.edgeSide
+            }
+        }
+    }
+
+    Flickable {
+        objectName: "show-desktop-settings-scroll"
+        x: panel.contentX
+        y: 76
+        width: panel.contentWidth
+        height: panel.height - y - 12
+        contentWidth: width
+        contentHeight: showDesktopSettingsColumn.height
+        clip: true
+        boundsBehavior: Flickable.DragAndOvershootBounds
+        flickableDirection: Flickable.VerticalFlick
+        visible: panel.section === "show-desktop"
+
+        Column {
+            id: showDesktopSettingsColumn
+            width: parent.width
+            spacing: 17
+
+            EdgeSettingGroup {
+                title: "Screen edge"
+                objectPrefix: "show-desktop-position-"
+                options: panel.positions
+                selectedKey: backend.showDesktopEdgeSettings.position
+                onOptionClicked: function(key) {
+                    backend.setShowDesktopEdgeSetting("position", key)
+                }
+            }
+
+            EdgeSettingGroup {
+                title: "Width"
+                objectPrefix: "show-desktop-width-"
+                options: [{key: "sm", label: "sm"}, {key: "md", label: "md"},
+                    {key: "lg", label: "lg"}]
+                selectedKey: backend.showDesktopEdgeSettings.width
+                onOptionClicked: function(key) {
+                    backend.setShowDesktopEdgeSetting("width", key)
+                }
+            }
+
+            EdgeSettingGroup {
+                title: "Height"
+                objectPrefix: "show-desktop-height-"
+                options: [{key: "sm", label: "sm"}, {key: "md", label: "md"},
+                    {key: "lg", label: "lg"}]
+                selectedKey: backend.showDesktopEdgeSettings.height
+                onOptionClicked: function(key) {
+                    backend.setShowDesktopEdgeSetting("height", key)
+                }
+            }
+
+            Column {
+                width: parent.width
+                spacing: 6
+
+                Text {
+                    text: "Position and order"
+                    color: Theme.mutedText
+                    font.family: Qt.application.font.family
+                    font.pixelSize: 12
+                }
+
+                EdgeHandleLayoutEditor {
+                    id: showDesktopHandleEditor
+                    editorKey: "show-desktop"
+                    editorSide: backend.showDesktopEdgeSettings.position
                 }
             }
         }
     }
 
-    component ScreenshotPositionChoice: Rectangle {
-        id: positionChoice
-        property string label
-        property bool chosen: false
-        signal clicked()
-        width: 110
-        height: 46
-        radius: 11
-        color: chosen ? Theme.selected : (choiceMouse.containsMouse ? Theme.controlHover : Theme.control)
+    component EdgeSettingGroup: Column {
+        id: edgeGroup
+        required property string title
+        required property string objectPrefix
+        required property var options
+        required property string selectedKey
+        signal optionClicked(string key)
+        width: panel.contentWidth
+        spacing: 6
+
         Text {
-            anchors.centerIn: parent
-            text: positionChoice.label
-            color: Theme.text
-            font.pixelSize: 13
-        }
-        Text {
-            objectName: "screenshot-position-check-" + positionChoice.label.toLowerCase()
-            anchors.right: parent.right
-            anchors.rightMargin: 9
-            anchors.verticalCenter: parent.verticalCenter
-            visible: positionChoice.chosen
-            text: "✓"
-            color: Theme.accent
+            text: edgeGroup.title
+            color: Theme.mutedText
             font.family: Qt.application.font.family
-            font.pixelSize: 15
-            font.weight: Font.Bold
+            font.pixelSize: 12
         }
-        MouseArea {
-            id: choiceMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            onClicked: parent.clicked()
+
+        Row {
+            width: parent.width
+            spacing: 8
+
+            Repeater {
+                model: edgeGroup.options
+
+                delegate: Rectangle {
+                    id: edgeOption
+                    required property var modelData
+                    readonly property bool chosen:
+                        edgeGroup.selectedKey === modelData.key
+                    objectName: edgeGroup.objectPrefix + modelData.key
+                    width: (panel.contentWidth
+                        - 8 * (edgeGroup.options.length - 1)) / edgeGroup.options.length
+                    height: 42
+                    radius: 8
+                    color: chosen ? Theme.selected
+                        : (edgeOptionMouse.containsMouse
+                            ? Theme.controlHover : Theme.control)
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: edgeOption.modelData.label
+                        color: Theme.text
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 14
+                        font.weight: edgeOption.chosen
+                            ? Font.DemiBold : Font.Normal
+                    }
+
+                    Text {
+                        anchors.right: parent.right
+                        anchors.rightMargin: 11
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: edgeOption.chosen
+                        text: "✓"
+                        color: Theme.accent
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
+                    }
+
+                    MouseArea {
+                        id: edgeOptionMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: edgeGroup.optionClicked(edgeOption.modelData.key)
+                    }
+                }
+            }
+        }
+    }
+
+    component EdgeHandleLayoutEditor: Column {
+        id: edgeEditor
+        required property string editorKey
+        required property string editorSide
+        width: panel.contentWidth
+        spacing: 8
+
+        function zoneAt(point) {
+            for (let index = 0; index < edgeZoneRepeater.count; ++index) {
+                const zone = edgeZoneRepeater.itemAt(index)
+                const local = zone.mapFromItem(panel, point.x, point.y)
+                if (local.x >= 0 && local.x < zone.width
+                    && local.y >= 0 && local.y < zone.height)
+                    return zone
+            }
+            return null
+        }
+
+        function setDropAlignment(alignment) {
+            for (let index = 0; index < edgeZoneRepeater.count; ++index) {
+                const zone = edgeZoneRepeater.itemAt(index)
+                zone.dropHovered = zone.slotKey === alignment
+            }
+        }
+
+        Repeater {
+            id: edgeZoneRepeater
+            model: ["top", "center", "bottom"]
+
+            delegate: EdgeHandleZone {
+                required property string modelData
+                editorKey: edgeEditor.editorKey
+                editorSide: edgeEditor.editorSide
+                slotKey: modelData
+                label: edgeEditor.editorSide === "top" || edgeEditor.editorSide === "bottom"
+                    ? (modelData === "top" ? "Left"
+                        : modelData === "bottom" ? "Right" : "Center")
+                    : modelData.charAt(0).toUpperCase() + modelData.slice(1)
+                items: panel.edgeHandleLayout(edgeEditor.editorSide)[modelData]
+            }
+        }
+    }
+
+    component EdgeHandleZone: Rectangle {
+        id: edgeZone
+        required property string editorKey
+        required property string editorSide
+        required property string slotKey
+        required property string label
+        required property var items
+        property bool dropHovered: false
+        readonly property var displayOrder:
+            panel.edgeHandleItems(editorSide, slotKey)
+        readonly property real cardWidth: (width - 32) / 2
+        objectName: "edge-handle-zone-" + editorKey + "-" + editorSide + "-" + slotKey
+
+        width: panel.contentWidth
+        height: 72
+        radius: 12
+        color: dropHovered ? Theme.selected : Theme.control
+        border.width: dropHovered ? 2 : 0
+        border.color: Theme.accent
+
+        Text {
+            x: 12
+            y: 7
+            text: edgeZone.label
+            color: Theme.text
+            font.family: Qt.application.font.family
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+        }
+
+        Text {
+            anchors.right: parent.right
+            anchors.rightMargin: 12
+            y: 7
+            text: edgeZone.items.length
+            color: Theme.mutedText
+            font.family: Qt.application.font.family
+            font.pixelSize: 11
+        }
+
+        Rectangle {
+            x: 12 + Math.max(0, edgeZone.displayOrder.indexOf(
+                panel.draggedEdgeHandle)) * (edgeZone.cardWidth + 8)
+            y: 30
+            width: edgeZone.cardWidth
+            height: 32
+            radius: 9
+            visible: panel.draggingEdgeHandle
+                && edgeZone.displayOrder.includes(panel.draggedEdgeHandle)
+            color: Theme.selected
+            border.width: 2
+            border.color: Theme.accent
+        }
+
+        Repeater {
+            model: edgeZone.items
+
+            delegate: Rectangle {
+                id: edgeHandleCard
+                required property string modelData
+                required property int index
+                readonly property string handleKey: modelData
+                readonly property int previewIndex:
+                    edgeZone.displayOrder.indexOf(handleKey)
+                objectName: "edge-handle-card-" + edgeZone.editorKey + "-"
+                    + edgeZone.editorSide + "-" + edgeZone.slotKey + "-" + handleKey
+                x: 12 + (previewIndex < 0 ? index : previewIndex)
+                    * (edgeZone.cardWidth + 8)
+                y: 30
+                width: edgeZone.cardWidth
+                height: 32
+                radius: 9
+                color: edgeCardMouse.containsMouse ? Theme.controlHover : Theme.accent
+                opacity: panel.draggingEdgeHandle
+                    && panel.draggedEdgeHandle === handleKey ? 0 : 1
+
+                Behavior on x {
+                    enabled: panel.draggingEdgeHandle
+                    NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: panel.edgeHandleLabel(edgeHandleCard.handleKey)
+                    color: edgeCardMouse.containsMouse
+                        ? Theme.text : Theme.accentText
+                    font.family: Qt.application.font.family
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                }
+
+                Text {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "⋮⋮"
+                    color: edgeCardMouse.containsMouse
+                        ? Theme.text : Theme.accentText
+                    font.family: Qt.application.font.family
+                    font.pixelSize: 12
+                }
+
+                MouseArea {
+                    id: edgeCardMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    preventStealing: true
+                    cursorShape: panel.draggingEdgeHandle
+                        ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                    onPressed: function(mouse) {
+                        panel.beginEdgeHandleDrag(edgeHandleCard.handleKey,
+                            edgeZone.editorSide,
+                            edgeCardMouse.mapToItem(panel, mouse.x, mouse.y))
+                    }
+                    onPositionChanged: function(mouse) {
+                        if (pressed)
+                            panel.updateEdgeHandleDrag(
+                                edgeCardMouse.mapToItem(panel, mouse.x, mouse.y))
+                    }
+                    onReleased: panel.finishEdgeHandleDrag()
+                    onCanceled: panel.finishEdgeHandleDrag()
+                }
+            }
         }
     }
 
@@ -1552,6 +1942,36 @@ Item {
                 ? Qt.resolvedUrl("../gnome-extension/icons/"
                     + panel.draggedComponent + ".svg") : ""
             fillMode: Image.PreserveAspectFit
+        }
+    }
+
+    Rectangle {
+        id: floatingEdgeHandle
+        objectName: "edge-handle-drag-overlay"
+        z: 100
+        width: (panel.contentWidth - 32) / 2
+        height: 32
+        radius: 9
+        visible: panel.draggingEdgeHandle
+        color: Theme.accent
+
+        Text {
+            anchors.centerIn: parent
+            text: panel.edgeHandleLabel(panel.draggedEdgeHandle)
+            color: Theme.accentText
+            font.family: Qt.application.font.family
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+        }
+
+        Text {
+            anchors.right: parent.right
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            text: "⋮⋮"
+            color: Theme.accentText
+            font.family: Qt.application.font.family
+            font.pixelSize: 12
         }
     }
 

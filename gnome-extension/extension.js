@@ -215,9 +215,11 @@ export default class ZhyprbolaExtension extends Extension {
         this._screenshotEdge = new ScreenshotEdge(() => Gio.Subprocess.new(
             ['bash', GLib.build_filenamev([this.path, 'panel-command.sh']), 'screenshots', '--resident'],
             Gio.SubprocessFlags.NONE),
-            () => (THEMES.find(theme => theme.name === this._themeName) ?? THEMES[0]).iconColor);
+            () => (THEMES.find(theme => theme.name === this._themeName) ?? THEMES[0]).iconColor,
+            () => this._dockPosition, () => DOCK_CONFIG.buttonSize);
         this._showDesktopEdge = new ShowDesktopEdge(() => this._toggleDesktop(),
-            () => (THEMES.find(theme => theme.name === this._themeName) ?? THEMES[0]).iconColor);
+            () => (THEMES.find(theme => theme.name === this._themeName) ?? THEMES[0]).iconColor,
+            () => this._dockPosition, () => DOCK_CONFIG.buttonSize);
         this._updateShowDesktopState();
         this._dateTimeTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
             this._refreshDateTimeLabels();
