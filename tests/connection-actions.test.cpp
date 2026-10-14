@@ -177,6 +177,43 @@ esac
         QVERIFY(state(backend, "bluetooth").value("message").toString().contains("NotAuthorized"));
         QVERIFY(backend.bluetoothEnabled());
     }
+    void openingPanelsUsesCachedResultsWithoutScanning() {
+        Backend backend;
+        QVERIFY(!backend.wifiNetworks().isEmpty());
+        QVERIFY(!backend.bluetoothDevices().isEmpty());
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty("backend", &backend);
+
+        for (const QString &name : {QStringLiteral("BluetoothPanel"), QStringLiteral("WifiPanel")}) {
+            QQmlComponent component(&engine, QUrl::fromLocalFile(QFINDTESTDATA(
+                "../components/" + name + ".qml")));
+            QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+            QScopedPointer<QObject> panel(component.createWithInitialProperties(
+                {{QStringLiteral("standalone"), true}}));
+            QVERIFY2(panel, qPrintable(component.errorString()));
+            panel->setProperty("opened", true);
+            panel->setProperty("opened", false);
+            panel->setProperty("opened", true);
+        }
+
+        QFile scans(directory.filePath("state-scans"));
+        QVERIFY(scans.open(QIODevice::ReadOnly));
+        QCOMPARE(scans.readAll(), QByteArray());
+    }
+    void requestingTheCurrentPowerStateDoesNothing() {
+        Backend backend;
+        QVERIFY(backend.wifiEnabled());
+        QVERIFY(backend.bluetoothEnabled());
+
+        backend.setWifiEnabled(true);
+        backend.setBluetoothEnabled(true);
+
+        QVERIFY(state(backend, "wifi").isEmpty());
+        QVERIFY(state(backend, "bluetooth").isEmpty());
+        QFile scans(directory.filePath("state-scans"));
+        QVERIFY(scans.open(QIODevice::ReadOnly));
+        QCOMPARE(scans.readAll(), QByteArray());
+    }
     void powerOnDiscoversAfterAdapterReady_data() {
         QTest::addColumn<QString>("radio");
         QTest::addColumn<bool>("scanFails");

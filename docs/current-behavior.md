@@ -41,8 +41,9 @@ Preview controls, text, icons, other controls, the dock, and Shell popups stay o
 
 ```text
 Both panels have a radio summary, an available list, and Details.
-Opening an enabled panel or successfully turning a radio on starts discovery.
-Refresh scans again; Settings opens system connection settings.
+Opening a panel uses cached results without starting discovery. Successfully
+turning a radio on starts discovery; Refresh scans again, and Settings opens
+system connection settings.
 
 Hero icons show radar rings and a counterclockwise orbit, faster while working.
 Turning the radio off fades and stops the animation.

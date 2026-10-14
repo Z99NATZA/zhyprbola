@@ -72,11 +72,6 @@ Item {
     opacity: opened ? 1 : 0
     z: 110
 
-    onOpenedChanged: {
-        if (opened && backend.wifiEnabled)
-            backend.scanWifiNetworks()
-    }
-
     Connections {
         target: backend
         function onWifiConnectionFinished(ssid, success, needsPassword) {

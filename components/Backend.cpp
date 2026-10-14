@@ -538,6 +538,10 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     connect(&m_systemTimer, &QTimer::timeout, this, &Backend::refreshSystem);
     m_systemTimer.start(2000);
     refreshSystem();
+    // Populate Wi-Fi from NetworkManager's existing cache without starting a
+    // new discovery. Active scans are reserved for explicit refreshes and the
+    // transition from radio off to on.
+    refreshWifiNetworks();
 
     connect(&m_weatherTimer, &QTimer::timeout, this, &Backend::refreshWeather);
     m_weatherTimer.start(15 * 60 * 1000);
@@ -1590,6 +1594,7 @@ void Backend::refreshStatus() {
 }
 
 void Backend::setWifiEnabled(bool enabled) {
+    if (enabled == m_wifiEnabled) return;
     runConnectionCommand(QStringLiteral("wifi"),
         enabled ? QStringLiteral("power-on") : QStringLiteral("power-off"), QStringLiteral("nmcli"),
         {QStringLiteral("radio"), QStringLiteral("wifi"),
@@ -1837,6 +1842,7 @@ void Backend::openBluetoothSettings() {
 }
 
 void Backend::setBluetoothEnabled(bool enabled) {
+    if (enabled == m_bluetoothEnabled) return;
     runConnectionCommand(QStringLiteral("bluetooth"),
         enabled ? QStringLiteral("power-on") : QStringLiteral("power-off"), QStringLiteral("bluetoothctl"),
         {QStringLiteral("power"), enabled ? QStringLiteral("on") : QStringLiteral("off")}, enabled ? 1 : 0);

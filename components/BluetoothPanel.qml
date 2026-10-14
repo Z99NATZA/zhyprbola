@@ -56,11 +56,6 @@ Item {
     opacity: opened ? 1 : 0
     z: 111
 
-    onOpenedChanged: {
-        if (opened && backend.bluetoothEnabled)
-            backend.scanBluetoothDevices()
-    }
-
     Connections {
         target: backend
         function onBluetoothDevicesChanged() { panelRoot.reconcileDeviceActions() }
