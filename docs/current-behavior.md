@@ -92,6 +92,8 @@ Items persist until deleted and do not expire when the date changes.
 
 ```text
 Edge handle on the primary monitor; watches Pictures/Screenshots, newest first.
+A shorter Show Desktop handle follows 8 px below it and toggles the same saved
+window snapshot as the dock button and Super+0.
 Click: select; Ctrl-click: toggle; Shift-click: range; drag: covered thumbnails.
 Ctrl+A selects all. Ctrl+C copies absolute paths.
 

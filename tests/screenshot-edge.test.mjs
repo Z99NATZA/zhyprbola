@@ -7,13 +7,17 @@ function fixture() {
     const monitor = {index: 1, x: 1920, y: 0, width: 2560, height: 1440};
     const windows = [], timers = new Map(), calls = [], animations = [], connections = new Map();
     const skippedActors = new Set();
-    let config = {}, changed, appeared, dismissed, cancelled = false, launched = 0, nextTimer = 0;
+    let config = {}, appeared, dismissed, cancelled = false, launched = 0, nextTimer = 0;
+    const changed = [];
     const process = {wait_async(_cancel, callback) { this.finished = callback; }, wait_finish() {}, force_exit() { this.killed = true; }};
     const context = vm.createContext({
         TextDecoder, logError: error => { throw error; },
         Clutter: {AnimationMode: {EASE_OUT_QUAD: 1}, EventType: {BUTTON_PRESS: 1, TOUCH_BEGIN: 2}, EVENT_PROPAGATE: 0},
         St: {Button: class {
-            connect(name, callback) { if (name === 'clicked') this.click = callback; }
+            connect(name, callback) {
+                if (name === 'clicked') this.click = callback;
+                if (name === 'notify::hover') this.hoverChanged = callback;
+            }
             set_style(style) { this.style = style; }
             set_position(x, y) { this.x = x; this.y = y; }
             set_size(width, height) { this.width = width; this.height = height; }
@@ -28,7 +32,7 @@ function fixture() {
                 call: (...args) => { calls.push(args[3]); args.at(-1)({call_finish() {}}, {}); },
             }},
             File: {new_for_path: () => ({monitor_directory: () => ({
-                connect: (_name, callback) => { changed = callback; }, cancel: () => { cancelled = true; },
+                connect: (_name, callback) => { changed.push(callback); }, cancel: () => { cancelled = true; },
             })})}},
         GLib: {build_filenamev: parts => parts.join('/'), get_user_config_dir: () => '/config',
             file_get_contents: () => [true, new TextEncoder().encode(JSON.stringify(config))],
@@ -50,6 +54,10 @@ function fixture() {
     const source = readFileSync(new URL('../gnome-extension/screenshotEdge.js', import.meta.url), 'utf8');
     vm.runInContext(source.replace(/^import .*;\n/gm, '')
         .replace('export function edgeGeometry', 'globalThis.edgeGeometry = function edgeGeometry')
+        .replace('export function showDesktopEdgeGeometry',
+            'globalThis.showDesktopEdgeGeometry = function showDesktopEdgeGeometry')
+        .replace('export class ShowDesktopEdge',
+            'globalThis.ShowDesktopEdge = class ShowDesktopEdge')
         .replace('export class ScreenshotEdge', 'globalThis.ScreenshotEdge = class ScreenshotEdge'), context);
     const edge = new context.ScreenshotEdge(() => { launched++; return process; });
     const actor = {mapped: true, set_pivot_point(x, y) { this.pivot = {x, y}; },
@@ -64,8 +72,37 @@ function fixture() {
     return {edge, context, monitor, window, actor, windows, timers, calls, animations, connections, process, skippedActors,
         map, launched: () => launched, ready: () => appeared(), dismissed: () => dismissed(),
         cancelled: () => cancelled, click: (x, y) => connections.get('click')(null, {type: () => 1, get_coords: () => [x, y]}),
-        configure: value => { config = value; changed(null, {get_basename: () => 'screenshots-edge'}); }};
+        configure: value => {
+            config = value;
+            for (const callback of changed)
+                callback(null, {get_basename: () => 'screenshots-edge'});
+        }};
 }
+
+test('show desktop handle follows Screenshots and sits below it', () => {
+    const {context, monitor, configure} = fixture();
+    let toggles = 0;
+    const handle = new context.ShowDesktopEdge(() => toggles++, () => '#be345f');
+    assert.equal(context.Main.layoutManager.chrome.trackFullscreen, false);
+    for (const side of ['left', 'right']) for (const alignment of ['top', 'center', 'bottom']) {
+        configure({side, alignment});
+        const screenshots = context.edgeGeometry(monitor, side, alignment);
+        assert.equal(handle._button.width, 5);
+        assert.equal(handle._button.height, screenshots.height / 2);
+        assert.equal(handle._button.x, side === 'left' ? monitor.x : monitor.x + monitor.width - 5);
+        assert.equal(handle._button.y, screenshots.y + screenshots.height + 8);
+    }
+    assert.match(handle._button.style, /#be345f/);
+    handle._button.click();
+    assert.equal(toggles, 1);
+    handle.setChecked(true);
+    assert.equal(handle._button.opacity, 225);
+    handle._button.hover = true;
+    handle._button.hoverChanged();
+    assert.equal(handle._button.opacity, 255);
+    handle.destroy();
+    assert.equal(handle._button.destroyed, true);
+});
 
 test('handle stays visible in fullscreen and uses space-around at every position', () => {
     const {edge, context, monitor, configure} = fixture();

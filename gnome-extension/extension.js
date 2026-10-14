@@ -15,7 +15,7 @@ import * as Keyboard from 'resource:///org/gnome/shell/ui/status/keyboard.js';
 import {SoundMenu} from './soundMenu.js';
 import {BrightnessMenu} from './brightnessMenu.js';
 import {BatteryMenu} from './batteryMenu.js';
-import {ScreenshotEdge} from './screenshotEdge.js';
+import {ScreenshotEdge, ShowDesktopEdge} from './screenshotEdge.js';
 
 const DockPosition = Object.freeze({
     LEFT: 'left',
@@ -118,6 +118,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockRebuildPending = false;
         this._dock = null;
         this._showDesktopButton = null;
+        this._showDesktopEdge = null;
         this._showDesktopKeybindingRegistered = false;
         this._keybindingSettings = null;
         this._appMenu = null;
@@ -215,6 +216,9 @@ export default class ZhyprbolaExtension extends Extension {
             ['bash', GLib.build_filenamev([this.path, 'panel-command.sh']), 'screenshots', '--resident'],
             Gio.SubprocessFlags.NONE),
             () => (THEMES.find(theme => theme.name === this._themeName) ?? THEMES[0]).iconColor);
+        this._showDesktopEdge = new ShowDesktopEdge(() => this._toggleDesktop(),
+            () => (THEMES.find(theme => theme.name === this._themeName) ?? THEMES[0]).iconColor);
+        this._updateShowDesktopState();
         this._dateTimeTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
             this._refreshDateTimeLabels();
             return GLib.SOURCE_CONTINUE;
@@ -250,6 +254,7 @@ export default class ZhyprbolaExtension extends Extension {
             () => this._updateShowDesktopState(), this);
         Main.layoutManager.connectObject('monitors-changed', () => {
             this._screenshotEdge?.layout();
+            this._showDesktopEdge?.layout();
             this._queueLayout();
             this._restartEdgeSpectrum();
         }, this);
@@ -276,6 +281,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._unregisterShowDesktopKeybinding();
         this._screenshotEdge?.destroy();
         this._screenshotEdge = null;
+        this._showDesktopEdge?.destroy();
+        this._showDesktopEdge = null;
         global.display.disconnectObject(this);
         global.workspace_manager.disconnectObject(this);
         Main.layoutManager.disconnectObject(this);
@@ -474,7 +481,7 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _updateShowDesktopState() {
-        if (!this._showDesktopButton)
+        if (!this._showDesktopButton && !this._showDesktopEdge)
             return;
         const workspace = global.workspace_manager.get_active_workspace();
         const savedIds = new Set(this._desktopWindows.get(workspace)?.ids ?? []);
@@ -482,9 +489,10 @@ export default class ZhyprbolaExtension extends Extension {
             savedIds.has(window.get_stable_sequence()) && window.minimized &&
             window.located_on_workspace(workspace));
         if (hidden)
-            this._showDesktopButton.add_style_pseudo_class('checked');
+            this._showDesktopButton?.add_style_pseudo_class('checked');
         else
-            this._showDesktopButton.remove_style_pseudo_class('checked');
+            this._showDesktopButton?.remove_style_pseudo_class('checked');
+        this._showDesktopEdge?.setChecked(hidden);
     }
 
     _restoreDesktopWindows(workspace = null) {
@@ -1468,6 +1476,7 @@ export default class ZhyprbolaExtension extends Extension {
 
     _applyTheme() {
         this._screenshotEdge?.layout();
+        this._showDesktopEdge?.layout();
         this._soundMenu?.destroy();
         this._soundMenu = null;
         this._brightnessMenu?.destroy();

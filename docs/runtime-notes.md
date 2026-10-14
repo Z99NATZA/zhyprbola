@@ -112,6 +112,8 @@ Network and device connection buttons lock conflicting actions while pending.
 Settings -> Screenshots selects Left or Right and Top, Center, or Bottom.
 The vertical positions are centered at 1/6, 1/2, and 5/6 of screen height.
 The 5 x 100 px handle stays visible in fullscreen.
+A 5 x 50 px Show Desktop handle sits 8 px below it, follows the same position
+setting, and also stays visible in fullscreen.
 
 The browser opens beside the handle and remains inside the work area.
 Clicking outside, pressing Escape, or activating the handle again hides it.

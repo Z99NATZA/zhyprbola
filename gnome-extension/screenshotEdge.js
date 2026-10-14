@@ -17,6 +17,80 @@ export function edgeGeometry(monitor, side, alignment) {
     };
 }
 
+export function showDesktopEdgeGeometry(monitor, side, alignment) {
+    const screenshots = edgeGeometry(monitor, side, alignment);
+    const width = 5;
+    const height = screenshots.height / 2;
+    const gap = 8;
+    return {
+        x: side === 'right' ? monitor.x + monitor.width - width : monitor.x,
+        y: Math.min(screenshots.y + screenshots.height + gap,
+            monitor.y + monitor.height - height),
+        width, height,
+    };
+}
+
+export class ShowDesktopEdge {
+    constructor(toggle, getAccent = () => '#875a82') {
+        this._toggle = toggle;
+        this._getAccent = getAccent;
+        this._checked = false;
+        this._configDir = GLib.build_filenamev([GLib.get_user_config_dir(), 'zhyprbola']);
+        this._configPath = GLib.build_filenamev([this._configDir, 'screenshots-edge']);
+        this._button = new St.Button({
+            style_class: 'zhyprbola-show-desktop-edge',
+            reactive: true, can_focus: true, track_hover: true,
+            accessible_name: 'Show desktop / Restore windows',
+        });
+        this._button.connect('clicked', () => this._toggle());
+        this._button.connect('notify::hover', () => this._updateOpacity());
+        this._updateOpacity();
+        Main.layoutManager.addTopChrome(this._button,
+            {affectsStruts: false, trackFullscreen: false});
+        GLib.mkdir_with_parents(this._configDir, 0o700);
+        this._monitor = Gio.File.new_for_path(this._configDir)
+            .monitor_directory(Gio.FileMonitorFlags.NONE, null);
+        this._monitor.connect('changed', (_monitor, file, other) => {
+            if ([file?.get_basename(), other?.get_basename()].includes('screenshots-edge'))
+                this.layout();
+        });
+        this.layout();
+    }
+
+    _updateOpacity() {
+        this._button.opacity = this._button.hover ? 255 : this._checked ? 225 : 190;
+    }
+
+    setChecked(checked) {
+        this._checked = checked;
+        this._updateOpacity();
+    }
+
+    layout() {
+        this._button.set_style(`background-color: ${this._getAccent()};`);
+        let saved = {};
+        try {
+            const [, data] = GLib.file_get_contents(this._configPath);
+            saved = JSON.parse(new TextDecoder().decode(data));
+        } catch (_) { /* Follow the Screenshots handle defaults. */ }
+        const side = saved.side === 'right' ? 'right' : 'left';
+        const alignment = ['top', 'bottom'].includes(saved.alignment)
+            ? saved.alignment : 'center';
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (!monitor)
+            return;
+        const geometry = showDesktopEdgeGeometry(monitor, side, alignment);
+        this._button.set_position(geometry.x, geometry.y);
+        this._button.set_size(geometry.width, geometry.height);
+    }
+
+    destroy() {
+        this._monitor.cancel();
+        Main.layoutManager.removeChrome(this._button);
+        this._button.destroy();
+    }
+}
+
 const BUS = 'org.zhyprbola.Screenshots';
 const PATH = '/org/zhyprbola/Screenshots';
 
