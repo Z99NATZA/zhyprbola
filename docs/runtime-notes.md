@@ -64,6 +64,8 @@ Package udev rules normally provide this access.
 ```text
 connectionActions publishes busy, action, message, and success for each radio.
 Repeated power/scan requests are ignored while busy. Failed power-on does not scan.
+Bluetooth power-on clears a soft rfkill block before asking BlueZ to enable the
+controller. The observed controller state wins over a transient BlueZ Busy error.
 
 Wi-Fi discovery requests a fresh list with nmcli dev wifi list --rescan yes.
 Bluetooth discovery uses bluetoothctl --timeout 5 scan on.

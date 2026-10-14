@@ -64,6 +64,8 @@ connect|disconnect)
 power)
  /bin/sleep 0.1
  if [ "$RADIO_TEST_FAIL" = "yes" ]; then echo 'Failed to set power: org.bluez.Error.NotAuthorized'; exit 0; fi
+ read blocked < "$RADIO_TEST_STATE-blocked"
+ if [ "$2" = "on" ] && [ "$blocked" = "yes" ]; then echo 'Failed to set power: org.bluez.Error.Blocked'; exit 1; fi
  if [ "$RADIO_TEST_NO_CHANGE" = "yes" ]; then exit 0; fi
  if [ "$2" = "on" ]; then
   echo no > "$RADIO_TEST_STATE-bluetooth-discovered"
@@ -75,6 +77,11 @@ power)
  if [ "$RADIO_TEST_FAIL" = yes ] || [ "$RADIO_TEST_SCAN_FAIL" = yes ]; then echo 'Failed to start discovery'; exit 1; fi
  if [ "$RADIO_TEST_DELAYED_DISCOVERY" = yes ]; then echo pending > "$RADIO_TEST_STATE-bluetooth-discovered"; else echo yes > "$RADIO_TEST_STATE-bluetooth-discovered"; fi ;;
 esac
+)shell", true);
+        write("rfkill", R"shell(#!/bin/sh
+echo "$*" >> "$RADIO_TEST_STATE-rfkill"
+if [ "$RADIO_TEST_RFKILL_FAIL" = yes ]; then exit 1; fi
+if [ "$1" = unblock ] && [ "$2" = bluetooth ]; then echo no > "$RADIO_TEST_STATE-blocked"; fi
 )shell", true);
         write("nmcli", R"shell(#!/bin/sh
 case "$*" in
@@ -134,6 +141,8 @@ esac
         write("state-wifi-ssid", "Test Wi-Fi\n");
         write("state-wifi-actions", "");
         write("state-scans", "");
+        write("state-blocked", "no\n");
+        write("state-rfkill", "");
         write("state-bluetooth-discovered", "no\n");
         write("state-wifi-discovered", "no\n");
         qunsetenv("RADIO_TEST_FAIL");
@@ -141,6 +150,7 @@ esac
         qunsetenv("RADIO_TEST_DISCOVERY");
         qunsetenv("RADIO_TEST_SCAN_FAIL");
         qunsetenv("RADIO_TEST_DELAYED_DISCOVERY");
+        qunsetenv("RADIO_TEST_RFKILL_FAIL");
         write("state-bluetooth-polls", "0\n");
         write("state-wifi-polls", "0\n");
     }
@@ -213,6 +223,21 @@ esac
         QFile scans(directory.filePath("state-scans"));
         QVERIFY(scans.open(QIODevice::ReadOnly));
         QCOMPARE(scans.readAll(), QByteArray());
+    }
+    void softBlockedBluetoothIsUnblockedBeforePowerOn() {
+        write("state", "no\n");
+        write("state-blocked", "yes\n");
+        Backend backend;
+        QVERIFY(!backend.bluetoothEnabled());
+
+        backend.setBluetoothEnabled(true);
+
+        QTRY_VERIFY(!state(backend, "bluetooth").value("busy").toBool());
+        QVERIFY(state(backend, "bluetooth").value("success").toBool());
+        QVERIFY(backend.bluetoothEnabled());
+        QFile rfkill(directory.filePath("state-rfkill"));
+        QVERIFY(rfkill.open(QIODevice::ReadOnly));
+        QCOMPARE(rfkill.readAll(), QByteArray("unblock bluetooth\n"));
     }
     void powerOnDiscoversAfterAdapterReady_data() {
         QTest::addColumn<QString>("radio");

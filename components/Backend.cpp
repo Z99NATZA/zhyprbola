@@ -337,6 +337,18 @@ QString runBluetoothctl(const QStringList &args, int timeoutMs = 900) {
     return process.exitCode() == 0 ? QString::fromUtf8(process.readAllStandardOutput()).trimmed() : QString();
 }
 
+void unblockBluetoothRadio() {
+    const QString rfkill = QStandardPaths::findExecutable(QStringLiteral("rfkill"));
+    if (rfkill.isEmpty()) return;
+
+    QProcess process;
+    process.start(rfkill, {QStringLiteral("unblock"), QStringLiteral("bluetooth")});
+    if (!process.waitForFinished(1000)) {
+        process.kill();
+        process.waitForFinished(100);
+    }
+}
+
 QString bluetoothInfoValue(const QString &info, const QString &key) {
     const QString prefix = key + QStringLiteral(":");
     for (const QString &line : info.split('\n')) {
@@ -1503,7 +1515,10 @@ void Backend::runConnectionCommand(const QString &radio, const QString &action,
         if (radio == QLatin1String("wifi")) refreshWifiNetworks();
         if (expectedPower >= 0) {
             const bool powered = radio == QLatin1String("wifi") ? m_wifiEnabled : m_bluetoothEnabled;
-            success = success && powered == (expectedPower == 1);
+            // The observed radio state is authoritative. In particular,
+            // rfkill can finish enabling Bluetooth while bluetoothctl briefly
+            // reports Busy as the controller reinitializes.
+            success = powered == (expectedPower == 1);
         }
         if (success && action == QLatin1String("scan")) {
             process->deleteLater();
@@ -1843,6 +1858,7 @@ void Backend::openBluetoothSettings() {
 
 void Backend::setBluetoothEnabled(bool enabled) {
     if (enabled == m_bluetoothEnabled) return;
+    if (enabled) unblockBluetoothRadio();
     runConnectionCommand(QStringLiteral("bluetooth"),
         enabled ? QStringLiteral("power-on") : QStringLiteral("power-off"), QStringLiteral("bluetoothctl"),
         {QStringLiteral("power"), enabled ? QStringLiteral("on") : QStringLiteral("off")}, enabled ? 1 : 0);
