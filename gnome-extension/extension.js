@@ -460,13 +460,12 @@ export default class ZhyprbolaExtension extends Extension {
             return;
         }
 
-        const savedIds = new Set(this._desktopWindows.get(workspace)?.ids ?? []);
-        const stillHidden = windows.filter(window =>
-            savedIds.has(window.get_stable_sequence()) && window.minimized &&
-            !this._isComponentWindow(window) && window.located_on_workspace(workspace));
         const focused = global.display.focus_window;
         this._desktopWindows.set(workspace, {
-            ids: [...stillHidden, ...targets].map(window => window.get_stable_sequence()),
+            // Each hide is a fresh snapshot. Windows that were already minimized,
+            // including ones left hidden by an earlier round, must stay minimized
+            // when this snapshot is restored.
+            ids: targets.map(window => window.get_stable_sequence()),
             focusedId: focused?.get_stable_sequence(),
         });
         for (const window of targets)

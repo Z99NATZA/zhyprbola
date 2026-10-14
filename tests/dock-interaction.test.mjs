@@ -405,7 +405,7 @@ test('show desktop hides on the first click and restores only its own windows', 
     assert.equal(a.activateCalls, 1);
 });
 
-test('partially reopening saved windows still hides visible windows in one click', () => {
+test('a new hide restores only windows visible before that hide', () => {
     const {dock, addWindow} = desktopFixture();
     const a = addWindow(1), b = addWindow(2);
     dock._toggleDesktop();
@@ -416,10 +416,10 @@ test('partially reopening saved windows still hides visible windows in one click
     assert.equal(b.restoreCalls, 0);
     dock._toggleDesktop();
     assert.equal(a.minimized, false);
-    assert.equal(b.minimized, false);
+    assert.equal(b.minimized, true);
 });
 
-test('a new visible window is hidden without restoring windows from the previous round', () => {
+test('a new visible window replaces the previous restore snapshot', () => {
     const {dock, addWindow} = desktopFixture();
     const a = addWindow(1);
     dock._toggleDesktop();
@@ -428,7 +428,7 @@ test('a new visible window is hidden without restoring windows from the previous
     assert.equal(a.minimized, true);
     assert.equal(b.minimized, true);
     dock._toggleDesktop();
-    assert.equal(a.minimized, false);
+    assert.equal(a.minimized, true);
     assert.equal(b.minimized, false);
 });
 
