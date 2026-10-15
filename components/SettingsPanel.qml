@@ -110,9 +110,8 @@ Item {
     property string edgeHandleDragSide: ""
     property string edgeHandleDropAlignment: ""
     property string edgeHandleBeforeKey: ""
-    property var edgeHandlePreviewTop: []
-    property var edgeHandlePreviewCenter: []
-    property var edgeHandlePreviewBottom: []
+    readonly property var edgeHandleSlots: ["1", "2", "3", "4", "5"]
+    property var edgeHandlePreviews: [[], [], [], [], []]
     property real edgeHandleDragStartX: 0
     property real edgeHandleDragStartY: 0
     property string draggedOpacityComponent: ""
@@ -292,16 +291,16 @@ Item {
     }
 
     function edgeHandleLayout(side) {
-        const layout = {top: [], center: [], bottom: []}
+        const layout = {"1": [], "2": [], "3": [], "4": [], "5": []}
         const order = backend.showDesktopEdgeSettings.order === "show-desktop-first"
             ? ["show-desktop", "screenshots"] : ["screenshots", "show-desktop"]
         for (const key of order) {
             if (key === "screenshots" && screenshots.edgeSide === side) {
-                const alignment = screenshots.edgeAlignment || "center"
+                const alignment = screenshots.edgeAlignment || "3"
                 layout[alignment].push(key)
             } else if (key === "show-desktop"
                 && backend.showDesktopEdgeSettings.position === side) {
-                const alignment = backend.showDesktopEdgeSettings.alignment || "center"
+                const alignment = backend.showDesktopEdgeSettings.alignment || "3"
                 layout[alignment].push(key)
             }
         }
@@ -310,9 +309,7 @@ Item {
 
     function edgeHandleItems(side, alignment) {
         if (draggedEdgeHandle && edgeHandleDragSide === side) {
-            if (alignment === "top") return edgeHandlePreviewTop
-            if (alignment === "bottom") return edgeHandlePreviewBottom
-            return edgeHandlePreviewCenter
+            return edgeHandlePreviews[Number(alignment) - 1]
         }
         return edgeHandleLayout(side)[alignment]
     }
@@ -331,9 +328,7 @@ Item {
         edgeHandleDragStartX = point.x
         edgeHandleDragStartY = point.y
         const layout = edgeHandleLayout(side)
-        edgeHandlePreviewTop = layout.top.slice()
-        edgeHandlePreviewCenter = layout.center.slice()
-        edgeHandlePreviewBottom = layout.bottom.slice()
+        edgeHandlePreviews = edgeHandleSlots.map(slot => layout[slot].slice())
     }
 
     function updateEdgeHandleDrag(point) {
@@ -356,7 +351,7 @@ Item {
         edgeHandleBeforeKey = ""
 
         const layout = edgeHandleLayout(edgeHandleDragSide)
-        for (const alignment of ["top", "center", "bottom"])
+        for (const alignment of edgeHandleSlots)
             layout[alignment] = layout[alignment].filter(key => key !== draggedEdgeHandle)
         if (destination) {
             const target = layout[destination.slotKey]
@@ -365,9 +360,7 @@ Item {
             edgeHandleBeforeKey = target[position] || ""
             target.splice(position, 0, draggedEdgeHandle)
         }
-        edgeHandlePreviewTop = layout.top.slice()
-        edgeHandlePreviewCenter = layout.center.slice()
-        edgeHandlePreviewBottom = layout.bottom.slice()
+        edgeHandlePreviews = edgeHandleSlots.map(slot => layout[slot].slice())
     }
 
     function finishEdgeHandleDrag() {
@@ -381,9 +374,7 @@ Item {
         edgeHandleDragSide = ""
         edgeHandleDropAlignment = ""
         edgeHandleBeforeKey = ""
-        edgeHandlePreviewTop = []
-        edgeHandlePreviewCenter = []
-        edgeHandlePreviewBottom = []
+        edgeHandlePreviews = [[], [], [], [], []]
         editor.setDropAlignment("")
         if (commit) {
             backend.moveEdgeHandle(key, alignment, beforeKey)
@@ -901,17 +892,14 @@ Item {
 
         Repeater {
             id: edgeZoneRepeater
-            model: ["top", "center", "bottom"]
+            model: panel.edgeHandleSlots
 
             delegate: EdgeHandleZone {
                 required property string modelData
                 editorKey: edgeEditor.editorKey
                 editorSide: edgeEditor.editorSide
                 slotKey: modelData
-                label: edgeEditor.editorSide === "top" || edgeEditor.editorSide === "bottom"
-                    ? (modelData === "top" ? "Left"
-                        : modelData === "bottom" ? "Right" : "Center")
-                    : modelData.charAt(0).toUpperCase() + modelData.slice(1)
+                label: modelData
                 items: panel.edgeHandleLayout(edgeEditor.editorSide)[modelData]
             }
         }

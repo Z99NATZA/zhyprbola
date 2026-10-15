@@ -139,7 +139,10 @@ void ScreenshotBackend::refresh() {
     if (settings.open(QIODevice::ReadOnly)) {
         const QJsonObject object = QJsonDocument::fromJson(settings.readAll()).object();
         const QString side = object.value(QStringLiteral("side")).toString();
-        const QString alignment = object.value(QStringLiteral("alignment")).toString();
+        QString alignment = object.value(QStringLiteral("alignment")).toString();
+        if (alignment == QLatin1String("top")) alignment = QStringLiteral("1");
+        else if (alignment == QLatin1String("center")) alignment = QStringLiteral("3");
+        else if (alignment == QLatin1String("bottom")) alignment = QStringLiteral("5");
         const QStringList sizes{QStringLiteral("sm"), QStringLiteral("md"), QStringLiteral("lg")};
         const QString width = object.value(QStringLiteral("width")).toString();
         const QString height = object.value(QStringLiteral("height")).toString();
@@ -147,8 +150,8 @@ void ScreenshotBackend::refresh() {
         const QString edgeHeight = sizes.contains(height) ? height : QStringLiteral("lg");
         if ((side == QLatin1String("left") || side == QLatin1String("right")
                 || side == QLatin1String("top") || side == QLatin1String("bottom"))
-            && (alignment == QLatin1String("top") || alignment == QLatin1String("center")
-                || alignment == QLatin1String("bottom"))
+            && QStringList{QStringLiteral("1"), QStringLiteral("2"), QStringLiteral("3"),
+                QStringLiteral("4"), QStringLiteral("5")}.contains(alignment)
             && (side != m_side || alignment != m_alignment
                 || edgeWidth != m_edgeWidth || edgeHeight != m_edgeHeight)) {
             m_side = side;
@@ -209,8 +212,8 @@ void ScreenshotBackend::Quit() {
 void ScreenshotBackend::setPosition(const QString &side, const QString &alignment) {
     if ((side != QLatin1String("left") && side != QLatin1String("right")
             && side != QLatin1String("top") && side != QLatin1String("bottom"))
-        || (alignment != QLatin1String("top") && alignment != QLatin1String("center")
-            && alignment != QLatin1String("bottom"))) return;
+        || !QStringList{QStringLiteral("1"), QStringLiteral("2"), QStringLiteral("3"),
+            QStringLiteral("4"), QStringLiteral("5")}.contains(alignment)) return;
     QFile existing(m_settingsPath);
     QJsonObject saved;
     if (existing.open(QIODevice::ReadOnly))

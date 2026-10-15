@@ -45,7 +45,7 @@ signals:
     void positionChanged();
 private:
     QString m_side = QStringLiteral("left");
-    QString m_alignment = QStringLiteral("center");
+    QString m_alignment = QStringLiteral("3");
 };
 
 class DateTimeTest : public QObject {
@@ -142,11 +142,11 @@ private slots:
         Backend backend;
         QCOMPARE(backend.showDesktopEdgeSettings().value("position").toString(),
             QStringLiteral("top"));
-        backend.moveEdgeHandle("screenshots", "bottom", {});
+        backend.moveEdgeHandle("screenshots", "5", {});
         QVERIFY(file.open(QIODevice::ReadOnly));
         const auto saved = QJsonDocument::fromJson(file.readAll()).object();
         QCOMPARE(saved.value("side").toString(), QStringLiteral("top"));
-        QCOMPARE(saved.value("alignment").toString(), QStringLiteral("bottom"));
+        QCOMPARE(saved.value("alignment").toString(), QStringLiteral("5"));
         QCOMPARE(saved.value("width").toString(), QStringLiteral("lg"));
         QCOMPARE(saved.value("height").toString(), QStringLiteral("md"));
     }
@@ -168,25 +168,25 @@ private slots:
         QCOMPARE(backend.showDesktopEdgeSettings().value("height").toString(),
             QStringLiteral("sm"));
         QCOMPARE(backend.showDesktopEdgeSettings().value("alignment").toString(),
-            QStringLiteral("center"));
+            QStringLiteral("3"));
         QCOMPARE(backend.showDesktopEdgeSettings().value("order").toString(),
             QStringLiteral("screenshots-first"));
         backend.setShowDesktopEdgeSetting(QStringLiteral("width"), QStringLiteral("lg"));
         backend.setShowDesktopEdgeSetting(QStringLiteral("height"), QStringLiteral("md"));
         backend.moveEdgeHandle(QStringLiteral("show-desktop"),
-            QStringLiteral("bottom"), {});
+            QStringLiteral("5"), {});
         backend.moveEdgeHandle(QStringLiteral("screenshots"),
-            QStringLiteral("bottom"), QStringLiteral("show-desktop"));
+            QStringLiteral("5"), QStringLiteral("show-desktop"));
         QCOMPARE(backend.showDesktopEdgeSettings().value("order").toString(),
             QStringLiteral("screenshots-first"));
         backend.moveEdgeHandle(QStringLiteral("screenshots"),
-            QStringLiteral("bottom"), {});
+            QStringLiteral("5"), {});
         QCOMPARE(backend.showDesktopEdgeSettings().value("order").toString(),
             QStringLiteral("show-desktop-first"));
         QFile movedScreenshots(directory.filePath(QStringLiteral("zhyprbola/screenshots-edge")));
         QVERIFY(movedScreenshots.open(QIODevice::ReadOnly));
         QCOMPARE(QJsonDocument::fromJson(movedScreenshots.readAll()).object()
-            .value(QStringLiteral("alignment")).toString(), QStringLiteral("bottom"));
+            .value(QStringLiteral("alignment")).toString(), QStringLiteral("5"));
 
         Backend reopened;
         QCOMPARE(reopened.showDesktopEdgeSettings(), backend.showDesktopEdgeSettings());
@@ -196,7 +196,7 @@ private slots:
         reopened.setShowDesktopEdgeSetting(QStringLiteral("alignment"),
             QStringLiteral("invalid"));
         QCOMPARE(reopened.showDesktopEdgeSettings().value("alignment").toString(),
-            QStringLiteral("bottom"));
+            QStringLiteral("5"));
     }
 
     void loadsDateTimeSettings() {
@@ -245,22 +245,22 @@ private slots:
         QTRY_VERIFY(findItem(settingsItem, QStringLiteral("show-desktop-width-sm")));
         QTRY_VERIFY(findItem(settingsItem, QStringLiteral("show-desktop-height-lg")));
         QTRY_VERIFY(findItem(settingsItem,
-            QStringLiteral("edge-handle-zone-show-desktop-left-top")));
+            QStringLiteral("edge-handle-zone-show-desktop-left-1")));
         QTRY_VERIFY(findItem(settingsItem,
-            QStringLiteral("edge-handle-card-show-desktop-left-center-show-desktop")));
+            QStringLiteral("edge-handle-card-show-desktop-left-3-show-desktop")));
         const QString showDesktopScreenshot =
             qEnvironmentVariable("ZHYPRBOLA_TEST_SHOW_DESKTOP_SCREENSHOT");
         if (!showDesktopScreenshot.isEmpty())
             QVERIFY(window.grabWindow().save(showDesktopScreenshot));
         auto *showDesktopCard = findItem(settingsItem,
-            QStringLiteral("edge-handle-card-show-desktop-left-center-show-desktop"));
+            QStringLiteral("edge-handle-card-show-desktop-left-3-show-desktop"));
         auto *topZone = findItem(settingsItem,
-            QStringLiteral("edge-handle-zone-show-desktop-left-top"));
+            QStringLiteral("edge-handle-zone-show-desktop-left-1"));
         QVERIFY(showDesktopCard);
         QVERIFY(topZone);
         auto *edgeScroll = findItem(settingsItem, QStringLiteral("edge-handles-settings-scroll"));
         QVERIFY(edgeScroll);
-        edgeScroll->setProperty("contentY", 100);
+        edgeScroll->setProperty("contentY", 180);
         const QPoint dragStart = showDesktopCard->mapToScene(QPointF(
             showDesktopCard->width() / 2, showDesktopCard->height() / 2)).toPoint();
         const QPoint dragEnd = topZone->mapToScene(QPointF(
@@ -272,11 +272,11 @@ private slots:
         QTRY_COMPARE(settings->property("draggingEdgeHandle").toBool(), true);
         QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, dragEnd);
         QTRY_COMPARE(backend.showDesktopEdgeSettings().value(
-            QStringLiteral("alignment")).toString(), QStringLiteral("top"));
+            QStringLiteral("alignment")).toString(), QStringLiteral("1"));
         auto *movedShowDesktopCard = findItem(settingsItem,
-            QStringLiteral("edge-handle-card-show-desktop-left-top-show-desktop"));
+            QStringLiteral("edge-handle-card-show-desktop-left-1-show-desktop"));
         auto *centerZone = findItem(settingsItem,
-            QStringLiteral("edge-handle-zone-show-desktop-left-center"));
+            QStringLiteral("edge-handle-zone-show-desktop-left-3"));
         QVERIFY(movedShowDesktopCard);
         QVERIFY(centerZone);
         const QPoint reorderStart = movedShowDesktopCard->mapToScene(QPointF(
@@ -288,23 +288,23 @@ private slots:
         QTest::mouseMove(&window, reorderEnd, 20);
         QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, reorderEnd);
         QTRY_COMPARE(backend.showDesktopEdgeSettings().value(
-            QStringLiteral("alignment")).toString(), QStringLiteral("center"));
+            QStringLiteral("alignment")).toString(), QStringLiteral("3"));
         QTRY_COMPARE(backend.showDesktopEdgeSettings().value(
             QStringLiteral("order")).toString(), QStringLiteral("show-desktop-first"));
         backend.setShowDesktopEdgeSetting(QStringLiteral("position"), QStringLiteral("top"));
         QQuickItem *leftZone = nullptr;
         QTRY_VERIFY(leftZone = findItem(settingsItem,
-            QStringLiteral("edge-handle-zone-show-desktop-top-top")));
-        QCOMPARE(leftZone->property("label").toString(), QStringLiteral("Left"));
+            QStringLiteral("edge-handle-zone-show-desktop-top-1")));
+        QCOMPARE(leftZone->property("label").toString(), QStringLiteral("1"));
         QTRY_VERIFY(findItem(settingsItem,
-            QStringLiteral("edge-handle-card-show-desktop-top-center-show-desktop")));
+            QStringLiteral("edge-handle-card-show-desktop-top-3-show-desktop")));
         settings->setProperty("section", QStringLiteral("screenshots"));
         QCOMPARE(settings->property("section").toString(), QStringLiteral("edge-handles"));
         QTRY_VERIFY(findItem(settingsItem, QStringLiteral("screenshot-position-top")));
         QTRY_VERIFY(findItem(settingsItem, QStringLiteral("screenshot-width-lg")));
         QTRY_VERIFY(findItem(settingsItem, QStringLiteral("screenshot-height-sm")));
         QTRY_VERIFY(findItem(settingsItem,
-            QStringLiteral("edge-handle-card-screenshots-left-center-screenshots")));
+            QStringLiteral("edge-handle-card-screenshots-left-3-screenshots")));
         settings->setProperty("section", QStringLiteral("themes"));
         QCOMPARE(settings->property("section").toString(), QStringLiteral("themes"));
         QFile request(directory.filePath(QStringLiteral("zhyprbola/settings-section-request")));

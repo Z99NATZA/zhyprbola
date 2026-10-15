@@ -70,7 +70,7 @@ private:
     QString m_anchor;
     QString m_error;
     QString m_side = QStringLiteral("left");
-    QString m_alignment = QStringLiteral("center");
+    QString m_alignment = QStringLiteral("3");
     QString m_edgeWidth = QStringLiteral("sm");
     QString m_edgeHeight = QStringLiteral("lg");
     QString m_settingsPath;

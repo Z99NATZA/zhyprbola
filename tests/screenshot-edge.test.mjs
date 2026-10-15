@@ -11,8 +11,8 @@ test('screenshots supports sizes and ordering on every edge', () => {
         const size = vertical ? 'height' : 'width';
         for (const order of ['screenshots-first', 'show-desktop-first']) {
             const result = context.edgeHandleGeometries(monitor,
-                {side, alignment: 'center', width: 'lg', height: 'md'},
-                {position: side, alignment: 'center', width: 'md', height: 'sm', order},
+                {side, alignment: '3', width: 'lg', height: 'md'},
+                {position: side, alignment: '3', width: 'md', height: 'sm', order},
                 side, 27);
             assert.equal(result.screenshots.width, vertical ? 12 : 75);
             assert.equal(result.screenshots.height, vertical ? 75 : 12);
@@ -31,7 +31,7 @@ test('screenshots supports sizes and ordering on every edge', () => {
 test('screenshots opens and animates from horizontal handles', () => {
     for (const side of ['top', 'bottom']) {
         const f = fixture();
-        f.configure({side, alignment: 'bottom', width: 'lg', height: 'md'});
+        f.configure({side, alignment: '5', width: 'lg', height: 'md'});
         f.ready();
         f.edge.toggle();
         f.map();
@@ -132,7 +132,7 @@ test('show desktop handle shares the selected slot with Screenshots', () => {
     let toggles = 0;
     const handle = new context.ShowDesktopEdge(() => toggles++, () => '#be345f');
     assert.equal(context.Main.layoutManager.chrome.trackFullscreen, false);
-    for (const side of ['left', 'right']) for (const alignment of ['top', 'center', 'bottom']) {
+    for (const side of ['left', 'right']) for (const alignment of ['1', '2', '3', '4', '5']) {
         configure({side, alignment});
         const geometry = context.edgeHandleGeometries(monitor, {side, alignment});
         assert.equal(handle._button.width, 5);
@@ -157,7 +157,7 @@ test('show desktop sizes rotate on horizontal edges and avoid the dock side', ()
     let dockPosition = 'left';
     const handle = new context.ShowDesktopEdge(() => {}, () => '#be345f',
         () => dockPosition, () => 27);
-    configure({side: 'left', alignment: 'center'});
+    configure({side: 'left', alignment: '3'});
 
     configureDesktop({position: 'left', width: 'lg', height: 'md'});
     assert.deepEqual({x: handle._button.x, y: handle._button.y,
@@ -165,23 +165,23 @@ test('show desktop sizes rotate on horizontal edges and avoid the dock side', ()
     {x: monitor.x + 27, y: 737, width: 12, height: 75});
 
     dockPosition = 'top';
-    configureDesktop({position: 'top', width: 'md', height: 'lg', alignment: 'top'});
+    configureDesktop({position: 'top', width: 'md', height: 'lg', alignment: '1'});
     assert.deepEqual({x: handle._button.x, y: handle._button.y,
         width: handle._button.width, height: handle._button.height},
-    {x: 2297, y: 27, width: 100, height: 8});
+    {x: 1920, y: 27, width: 100, height: 8});
 
     dockPosition = 'bottom';
-    configureDesktop({position: 'bottom', width: 'lg', height: 'md', alignment: 'bottom'});
+    configureDesktop({position: 'bottom', width: 'lg', height: 'md', alignment: '5'});
     assert.deepEqual({x: handle._button.x, y: handle._button.y,
         width: handle._button.width, height: handle._button.height},
-    {x: 4016, y: 1401, width: 75, height: 12});
+    {x: 4405, y: 1401, width: 75, height: 12});
 });
 
 test('edge handles form a compact centered group inside a slot and can swap order', () => {
     const {context, monitor} = fixture();
-    const screenshots = {side: 'left', alignment: 'center'};
+    const screenshots = {side: 'left', alignment: '3'};
     const settings = {position: 'left', width: 'lg', height: 'md',
-        alignment: 'center', order: 'screenshots-first'};
+        alignment: '3', order: 'screenshots-first'};
 
     let geometry = context.edgeHandleGeometries(
         monitor, screenshots, settings, 'left', 27);
@@ -198,30 +198,29 @@ test('edge handles form a compact centered group inside a slot and can swap orde
         {x: monitor.x + 27, y: 712, width: 5, height: 100});
 });
 
-test('show desktop center remains independent from the Screenshots slot', () => {
+test('show desktop slot remains independent from the Screenshots slot', () => {
     const {context, monitor} = fixture();
     const geometry = context.edgeHandleGeometries(monitor,
-        {side: 'left', alignment: 'top'},
-        {position: 'left', width: 'sm', height: 'sm', alignment: 'center'},
+        {side: 'left', alignment: '1'},
+        {position: 'left', width: 'sm', height: 'sm', alignment: '3'},
         'bottom', 27);
 
     assert.deepEqual({...geometry.screenshots},
-        {x: monitor.x, y: 190, width: 5, height: 100});
+        {x: monitor.x, y: 0, width: 5, height: 100});
     assert.deepEqual({...geometry.showDesktop},
         {x: monitor.x, y: 695, width: 5, height: 50});
 });
 
-test('handle stays visible in fullscreen and follows the three position slots', () => {
+test('handle stays visible in fullscreen and follows the five position slots', () => {
     const {edge, context, monitor, configure, configureDesktop} = fixture();
     assert.equal(context.Main.layoutManager.chrome.trackFullscreen, false);
-    configureDesktop({position: 'top', alignment: 'center'});
-    for (const side of ['left', 'right']) for (const alignment of ['top', 'center', 'bottom']) {
+    configureDesktop({position: 'top', alignment: '3'});
+    for (const side of ['left', 'right']) for (const alignment of ['1', '2', '3', '4', '5']) {
         configure({side, alignment});
         assert.equal(edge._button.width, 5);
         assert.equal(edge._button.height, 100);
         assert.equal(edge._button.x, side === 'left' ? monitor.x : monitor.x + monitor.width - 5);
-        assert.equal(edge._button.y,
-            alignment === 'top' ? 190 : alignment === 'bottom' ? 1150 : 670);
+        assert.equal(edge._button.y, [0, 335, 670, 1005, 1340][Number(alignment) - 1]);
     }
 });
 
@@ -303,14 +302,20 @@ test('Escape dismissal resets state and disable cleans up its own process and li
     assert.equal(edge._button.destroyed, true);
 });
 
-test('space-around gives equal inner gaps and half-sized outer gaps', () => {
+test('five slots span both ends with equal spacing', () => {
     const {context} = fixture();
     const monitor = {x: 100, y: 200, width: 1920, height: 1440};
-    const top = context.edgeGeometry(monitor, 'left', 'top');
-    const center = context.edgeGeometry(monitor, 'left', 'center');
-    const bottom = context.edgeGeometry(monitor, 'left', 'bottom');
-    const outer = top.y - monitor.y;
-    assert.equal(center.y - top.y - top.height, outer * 2);
-    assert.equal(bottom.y - center.y - center.height, outer * 2);
-    assert.equal(monitor.y + monitor.height - bottom.y - bottom.height, outer);
+    const positions = ['1', '2', '3', '4', '5']
+        .map(slot => context.edgeGeometry(monitor, 'left', slot));
+    assert.equal(positions[0].y, monitor.y);
+    assert.equal(positions[4].y + positions[4].height, monitor.y + monitor.height);
+    for (let index = 1; index < positions.length; ++index)
+        assert.equal(positions[index].y - positions[index - 1].y, 335);
+});
+
+test('legacy alignment names map to slots 1, 3, and 5', () => {
+    const {context, monitor} = fixture();
+    assert.equal(context.edgeGeometry(monitor, 'left', 'top').y, monitor.y);
+    assert.equal(context.edgeGeometry(monitor, 'left', 'center').y, 670);
+    assert.equal(context.edgeGeometry(monitor, 'left', 'bottom').y, 1340);
 });

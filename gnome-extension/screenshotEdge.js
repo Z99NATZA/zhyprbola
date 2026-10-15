@@ -6,6 +6,12 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const TITLE = 'Zhyprbola Screenshots';
 const SHARED_HANDLE_GAP = 8;
+const EDGE_SLOTS = ['1', '2', '3', '4', '5'];
+
+function normalizedAlignment(alignment, fallback = '3') {
+    const legacy = {top: '1', center: '3', bottom: '5'}[alignment];
+    return EDGE_SLOTS.includes(alignment) ? alignment : legacy ?? fallback;
+}
 
 export function edgeGeometry(monitor, side, alignment, settings = {}) {
     const thickness = {sm: 5, md: 8, lg: 12}[settings.width] ?? 5;
@@ -13,11 +19,12 @@ export function edgeGeometry(monitor, side, alignment, settings = {}) {
     const vertical = side === 'left' || side === 'right';
     const width = vertical ? thickness : length;
     const height = vertical ? length : thickness;
-    const slot = alignment === 'top' ? 0 : alignment === 'bottom' ? 2 : 1;
+    const offset = (containerLength, itemLength) => Math.round(
+        (containerLength - itemLength) * (Number(normalizedAlignment(alignment)) - 1) / 4);
     return {
         x: vertical ? (side === 'right' ? monitor.x + monitor.width - width : monitor.x)
-            : monitor.x + Math.round(monitor.width * (slot + 0.5) / 3 - width / 2),
-        y: vertical ? monitor.y + Math.round(monitor.height * (slot + 0.5) / 3 - height / 2)
+            : monitor.x + offset(monitor.width, width),
+        y: vertical ? monitor.y + offset(monitor.height, height)
             : (side === 'bottom' ? monitor.y + monitor.height - height : monitor.y),
         width, height,
     };
@@ -45,30 +52,24 @@ export function edgeHandleGeometries(monitor, screenshots = {}, settings = {},
     dockPosition = 'bottom', dockThickness = 27) {
     const screenshotSide = ['left', 'right', 'top', 'bottom'].includes(screenshots.side)
         ? screenshots.side : 'left';
-    const alignments = ['top', 'center', 'bottom'];
-    const screenshotAlignment = alignments.includes(screenshots.alignment)
-        ? screenshots.alignment : 'center';
+    const screenshotAlignment = normalizedAlignment(screenshots.alignment);
     const desktopSide = ['left', 'right', 'top', 'bottom'].includes(settings.position)
         ? settings.position : screenshotSide;
-    const desktopAlignment = alignments.includes(settings.alignment)
-        ? settings.alignment : screenshotAlignment;
+    const desktopAlignment = normalizedAlignment(settings.alignment, screenshotAlignment);
     const desktopWidth = {sm: 5, md: 8, lg: 12}[settings.width] ?? 5;
     const desktopHeight = {sm: 50, md: 75, lg: 100}[settings.height] ?? 50;
     const desktopVertical = desktopSide === 'left' || desktopSide === 'right';
     const desktopActorWidth = desktopVertical ? desktopWidth : desktopHeight;
     const desktopActorHeight = desktopVertical ? desktopHeight : desktopWidth;
     const screenshot = edgeGeometry(monitor, screenshotSide, screenshotAlignment, screenshots);
-    const desktopSlot = desktopAlignment === 'top' ? 0
-        : desktopAlignment === 'bottom' ? 2 : 1;
+    const desktopSlot = Number(desktopAlignment) - 1;
     const showDesktop = {
         x: desktopVertical
             ? (desktopSide === 'right'
                 ? monitor.x + monitor.width - desktopActorWidth : monitor.x)
-            : monitor.x + Math.round(
-                monitor.width * (desktopSlot + 0.5) / 3 - desktopActorWidth / 2),
+            : monitor.x + Math.round((monitor.width - desktopActorWidth) * desktopSlot / 4),
         y: desktopVertical
-            ? monitor.y + Math.round(
-                monitor.height * (desktopSlot + 0.5) / 3 - desktopActorHeight / 2)
+            ? monitor.y + Math.round((monitor.height - desktopActorHeight) * desktopSlot / 4)
             : (desktopSide === 'bottom'
                 ? monitor.y + monitor.height - desktopActorHeight : monitor.y),
         width: desktopActorWidth,
@@ -81,10 +82,9 @@ export function edgeHandleGeometries(monitor, screenshots = {}, settings = {},
         const second = screenshotsFirst ? showDesktop : screenshot;
         const axis = desktopVertical ? 'y' : 'x';
         const size = desktopVertical ? 'height' : 'width';
-        const segmentStart = monitor[axis] + monitor[size] * desktopSlot / 3;
-        const segmentLength = monitor[size] / 3;
         const groupLength = first[size] + SHARED_HANDLE_GAP + second[size];
-        first[axis] = Math.round(segmentStart + (segmentLength - groupLength) / 2);
+        first[axis] = monitor[axis]
+            + Math.round((monitor[size] - groupLength) * desktopSlot / 4);
         second[axis] = first[axis] + first[size] + SHARED_HANDLE_GAP;
     }
 
@@ -319,7 +319,7 @@ export class ScreenshotEdge {
         } catch (_) { /* Use the default shared center slot. */ }
         this._side = ['left', 'right', 'top', 'bottom'].includes(saved.side)
             ? saved.side : 'left';
-        this._alignment = ['top', 'bottom'].includes(saved.alignment) ? saved.alignment : 'center';
+        this._alignment = normalizedAlignment(saved.alignment);
         const monitor = Main.layoutManager.primaryMonitor;
         if (!monitor)
             return;
