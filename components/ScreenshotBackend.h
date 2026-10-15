@@ -13,6 +13,8 @@ class ScreenshotBackend : public QAbstractListModel {
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(QString edgeSide READ edgeSide NOTIFY positionChanged)
     Q_PROPERTY(QString edgeAlignment READ edgeAlignment NOTIFY positionChanged)
+    Q_PROPERTY(QString edgeWidth READ edgeWidth NOTIFY positionChanged)
+    Q_PROPERTY(QString edgeHeight READ edgeHeight NOTIFY positionChanged)
     Q_PROPERTY(bool opened READ opened NOTIFY openedChanged)
     Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
     Q_PROPERTY(int componentOpacity READ componentOpacity NOTIFY componentOpacityChanged)
@@ -31,6 +33,8 @@ public:
     QString error() const { return m_error; }
     QString edgeSide() const { return m_side; }
     QString edgeAlignment() const { return m_alignment; }
+    QString edgeWidth() const { return m_edgeWidth; }
+    QString edgeHeight() const { return m_edgeHeight; }
     bool opened() const { return m_opened; }
     QString themeName() const { return m_theme; }
     int componentOpacity() const { return m_componentOpacity; }
@@ -38,6 +42,7 @@ public:
     QStringList opacityDisabledComponents() const { return m_opacityDisabledComponents; }
     Q_INVOKABLE void dismiss();
     Q_INVOKABLE void setPosition(const QString &side, const QString &alignment);
+    Q_INVOKABLE void setEdgeSize(const QString &key, const QString &value);
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void select(int index, bool control, bool shift);
     Q_INVOKABLE void selectIndices(const QVariantList &indices);
@@ -66,6 +71,8 @@ private:
     QString m_error;
     QString m_side = QStringLiteral("left");
     QString m_alignment = QStringLiteral("center");
+    QString m_edgeWidth = QStringLiteral("sm");
+    QString m_edgeHeight = QStringLiteral("lg");
     QString m_settingsPath;
     QString m_theme = QStringLiteral("current");
     int m_componentOpacity = 100;

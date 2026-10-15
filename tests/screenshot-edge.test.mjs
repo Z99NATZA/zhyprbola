@@ -3,6 +3,45 @@ import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 import vm from 'node:vm';
 
+test('screenshots supports sizes and ordering on every edge', () => {
+    const {context, monitor} = fixture();
+    for (const side of ['left', 'right', 'top', 'bottom']) {
+        const vertical = side === 'left' || side === 'right';
+        const axis = vertical ? 'y' : 'x';
+        const size = vertical ? 'height' : 'width';
+        for (const order of ['screenshots-first', 'show-desktop-first']) {
+            const result = context.edgeHandleGeometries(monitor,
+                {side, alignment: 'center', width: 'lg', height: 'md'},
+                {position: side, alignment: 'center', width: 'md', height: 'sm', order},
+                side, 27);
+            assert.equal(result.screenshots.width, vertical ? 12 : 75);
+            assert.equal(result.screenshots.height, vertical ? 75 : 12);
+            const first = order === 'screenshots-first' ? result.screenshots : result.showDesktop;
+            const second = order === 'screenshots-first' ? result.showDesktop : result.screenshots;
+            assert.equal(second[axis] - first[axis] - first[size], 8);
+            const cross = vertical ? 'x' : 'y';
+            const crossSize = vertical ? 'width' : 'height';
+            assert.equal(result.screenshots[cross], side === 'right' || side === 'bottom'
+                ? monitor[cross] + monitor[crossSize] - result.screenshots[crossSize] - 27
+                : monitor[cross] + 27);
+        }
+    }
+});
+
+test('screenshots opens and animates from horizontal handles', () => {
+    for (const side of ['top', 'bottom']) {
+        const f = fixture();
+        f.configure({side, alignment: 'bottom', width: 'lg', height: 'md'});
+        f.ready();
+        f.edge.toggle();
+        f.map();
+        assert.equal(f.actor.pivot.y, side === 'top' ? 0 : 1);
+        assert.equal(f.window.frame.y, side === 'top' ? 12 : 1400 - 564 - 12);
+        assert.ok(f.window.frame.x >= f.monitor.x);
+        assert.ok(f.window.frame.x + f.window.frame.width <= f.monitor.x + f.monitor.width);
+    }
+});
+
 function fixture() {
     const monitor = {index: 1, x: 1920, y: 0, width: 2560, height: 1440};
     const windows = [], timers = new Map(), calls = [], animations = [], connections = new Map();

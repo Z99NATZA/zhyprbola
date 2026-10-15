@@ -49,6 +49,29 @@ private slots:
         model.selectAll();
         QCOMPARE(model.selectedPaths().size(), 4);
     }
+    void edgeSettingsPersistIndependently() {
+        QTemporaryDir dir;
+        qputenv("XDG_CONFIG_HOME", dir.path().toUtf8());
+        ScreenshotBackend model(dir.path());
+        QCOMPARE(model.edgeWidth(), QStringLiteral("sm"));
+        QCOMPARE(model.edgeHeight(), QStringLiteral("lg"));
+        model.setEdgeSize("width", "lg");
+        model.setEdgeSize("height", "md");
+        model.setPosition("top", "bottom");
+        ScreenshotBackend reopened(dir.path());
+        QCOMPARE(reopened.edgeSide(), QStringLiteral("top"));
+        QCOMPARE(reopened.edgeAlignment(), QStringLiteral("bottom"));
+        QCOMPARE(reopened.edgeWidth(), QStringLiteral("lg"));
+        QCOMPARE(reopened.edgeHeight(), QStringLiteral("md"));
+        reopened.setEdgeSize("height", "invalid");
+        reopened.setPosition("invalid", "center");
+        QCOMPARE(reopened.edgeSide(), QStringLiteral("top"));
+        QCOMPARE(reopened.edgeHeight(), QStringLiteral("md"));
+        reopened.setPosition("bottom", "center");
+        model.refresh();
+        QCOMPARE(model.edgeSide(), QStringLiteral("bottom"));
+        QCOMPARE(model.edgeWidth(), QStringLiteral("lg"));
+    }
     void batchDeleteAndPersistentUndo() {
         QTemporaryDir dir;
         write(dir.filePath("one.png"), "one");

@@ -861,7 +861,8 @@ void Backend::refreshShowDesktopEdgeSettings() {
         const QJsonObject screenshotSettings = QJsonDocument::fromJson(
             screenshots.readAll()).object();
         const QString side = screenshotSettings.value(QStringLiteral("side")).toString();
-        if (side == QLatin1String("left") || side == QLatin1String("right"))
+        if (side == QLatin1String("left") || side == QLatin1String("right")
+            || side == QLatin1String("top") || side == QLatin1String("bottom"))
             fallbackPosition = side;
         const QString alignment = screenshotSettings.value(
             QStringLiteral("alignment")).toString();
@@ -922,8 +923,10 @@ void Backend::moveEdgeHandle(const QString &key, const QString &alignment,
     QJsonObject screenshotSettings;
     if (screenshotFile.open(QIODevice::ReadOnly))
         screenshotSettings = QJsonDocument::fromJson(screenshotFile.readAll()).object();
-    const QString screenshotSide = screenshotSettings.value(QStringLiteral("side")).toString()
-        == QLatin1String("right") ? QStringLiteral("right") : QStringLiteral("left");
+    QString screenshotSide = screenshotSettings.value(QStringLiteral("side")).toString();
+    if (!QStringList{QStringLiteral("left"), QStringLiteral("right"),
+            QStringLiteral("top"), QStringLiteral("bottom")}.contains(screenshotSide))
+        screenshotSide = QStringLiteral("left");
     QString screenshotAlignment = screenshotSettings.value(
         QStringLiteral("alignment")).toString();
     if (screenshotAlignment != QLatin1String("top")
@@ -933,8 +936,8 @@ void Backend::moveEdgeHandle(const QString &key, const QString &alignment,
     QVariantMap settings = m_showDesktopEdgeSettings;
     if (key == QLatin1String("screenshots")) {
         screenshotAlignment = alignment;
-        screenshotSettings = QJsonObject{{QStringLiteral("side"), screenshotSide},
-            {QStringLiteral("alignment"), screenshotAlignment}};
+        screenshotSettings.insert(QStringLiteral("side"), screenshotSide);
+        screenshotSettings.insert(QStringLiteral("alignment"), screenshotAlignment);
         if (!writeDockConfig(QStringLiteral("screenshots-edge"), QString::fromUtf8(
                 QJsonDocument(screenshotSettings).toJson(QJsonDocument::Compact))))
             return;

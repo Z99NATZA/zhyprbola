@@ -28,9 +28,13 @@ class ScreenshotSettingsStub : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString edgeSide READ edgeSide NOTIFY positionChanged)
     Q_PROPERTY(QString edgeAlignment READ edgeAlignment NOTIFY positionChanged)
+    Q_PROPERTY(QString edgeWidth READ edgeWidth CONSTANT)
+    Q_PROPERTY(QString edgeHeight READ edgeHeight CONSTANT)
 public:
     QString edgeSide() const { return m_side; }
     QString edgeAlignment() const { return m_alignment; }
+    QString edgeWidth() const { return QStringLiteral("sm"); }
+    QString edgeHeight() const { return QStringLiteral("lg"); }
     Q_INVOKABLE void setPosition(const QString &side, const QString &alignment) {
         m_side = side;
         m_alignment = alignment;
@@ -127,6 +131,25 @@ private slots:
         }
     }
 
+    void movingScreenshotHandlePreservesSizeAndHorizontalSide() {
+        QTemporaryDir directory;
+        qputenv("XDG_CONFIG_HOME", directory.path().toUtf8());
+        QVERIFY(QDir().mkpath(directory.filePath("zhyprbola")));
+        QFile file(directory.filePath("zhyprbola/screenshots-edge"));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(R"({"side":"top","alignment":"center","width":"lg","height":"md"})");
+        file.close();
+        Backend backend;
+        QCOMPARE(backend.showDesktopEdgeSettings().value("position").toString(),
+            QStringLiteral("top"));
+        backend.moveEdgeHandle("screenshots", "bottom", {});
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto saved = QJsonDocument::fromJson(file.readAll()).object();
+        QCOMPARE(saved.value("side").toString(), QStringLiteral("top"));
+        QCOMPARE(saved.value("alignment").toString(), QStringLiteral("bottom"));
+        QCOMPARE(saved.value("width").toString(), QStringLiteral("lg"));
+        QCOMPARE(saved.value("height").toString(), QStringLiteral("md"));
+    }
     void showDesktopEdgeSettingsPersistAndValidate() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -211,7 +234,12 @@ private slots:
                 == QStringLiteral("show-desktop");
         }
         QVERIFY(hasDateTime);
-        QVERIFY(hasShowDesktop);
+        QVERIFY(!hasShowDesktop);
+        bool hasEdgeHandles = false;
+        for (const QVariant &section : sections)
+            hasEdgeHandles |= section.toMap().value(QStringLiteral("key")).toString()
+                == QStringLiteral("edge-handles");
+        QVERIFY(hasEdgeHandles);
         settings->setProperty("section", QStringLiteral("show-desktop"));
         QTRY_VERIFY(findItem(settingsItem, QStringLiteral("show-desktop-position-left")));
         QTRY_VERIFY(findItem(settingsItem, QStringLiteral("show-desktop-width-sm")));
@@ -230,6 +258,9 @@ private slots:
             QStringLiteral("edge-handle-zone-show-desktop-left-top"));
         QVERIFY(showDesktopCard);
         QVERIFY(topZone);
+        auto *edgeScroll = findItem(settingsItem, QStringLiteral("edge-handles-settings-scroll"));
+        QVERIFY(edgeScroll);
+        edgeScroll->setProperty("contentY", 100);
         const QPoint dragStart = showDesktopCard->mapToScene(QPointF(
             showDesktopCard->width() / 2, showDesktopCard->height() / 2)).toPoint();
         const QPoint dragEnd = topZone->mapToScene(QPointF(
@@ -268,6 +299,10 @@ private slots:
         QTRY_VERIFY(findItem(settingsItem,
             QStringLiteral("edge-handle-card-show-desktop-top-center-show-desktop")));
         settings->setProperty("section", QStringLiteral("screenshots"));
+        QCOMPARE(settings->property("section").toString(), QStringLiteral("edge-handles"));
+        QTRY_VERIFY(findItem(settingsItem, QStringLiteral("screenshot-position-top")));
+        QTRY_VERIFY(findItem(settingsItem, QStringLiteral("screenshot-width-lg")));
+        QTRY_VERIFY(findItem(settingsItem, QStringLiteral("screenshot-height-sm")));
         QTRY_VERIFY(findItem(settingsItem,
             QStringLiteral("edge-handle-card-screenshots-left-center-screenshots")));
         settings->setProperty("section", QStringLiteral("themes"));

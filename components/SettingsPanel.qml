@@ -7,6 +7,15 @@ Item {
     implicitHeight: Math.max(510, Math.ceil(76 + keyVisualizerColumn.height + 12))
     height: implicitHeight
     property string section: "themes"
+    property string edgeHandleTarget: "screenshots"
+    readonly property bool editingScreenshots: edgeHandleTarget === "screenshots"
+    readonly property string edgeSettingsPrefix: editingScreenshots ? "screenshot-" : "show-desktop-"
+    onSectionChanged: {
+        if (section === "screenshots" || section === "show-desktop") {
+            edgeHandleTarget = section
+            section = "edge-handles"
+        }
+    }
     signal closeRequested()
     readonly property int contentRowHeight: 46
     readonly property int contentItemGap: 8
@@ -31,8 +40,7 @@ Item {
         {key: "dock", label: "Dock"},
         {key: "keys", label: "Keys"},
         {key: "opacity", label: "Opacity"},
-        {key: "screenshots", label: "Screenshots"},
-        {key: "show-desktop", label: "Show Desktop"},
+        {key: "edge-handles", label: "Edge Handles"},
         {key: "spectrum", label: "Spectrum"},
         {key: "themes", label: "Themes"},
         {key: "wallpaper", label: "Wallpaper"}
@@ -43,7 +51,8 @@ Item {
         const divider = request.indexOf(":")
         if (divider < 0) return
         const requested = request.slice(divider + 1)
-        if (sections.some(item => item.key === requested))
+        if (requested === "screenshots" || requested === "show-desktop"
+            || sections.some(item => item.key === requested))
             section = requested
     }
 
@@ -313,7 +322,7 @@ Item {
     }
 
     function activeEdgeHandleEditor() {
-        return section === "screenshots" ? screenshotHandleEditor : showDesktopHandleEditor
+        return edgeHandleEditor
     }
 
     function beginEdgeHandleDrag(key, side, point) {
@@ -594,8 +603,7 @@ Item {
     Text {
         x: panel.contentX
         y: 29
-        text: panel.section === "screenshots" ? "Screenshots"
-            : panel.section === "show-desktop" ? "Show Desktop"
+        text: panel.section === "edge-handles" ? "Edge Handles"
             : panel.section === "themes" ? "Themes"
             : panel.section === "opacity" ? "Opacity"
             : (panel.section === "dock" ? "Dock"
@@ -700,89 +708,76 @@ Item {
         }
     }
 
-    Column {
-        x: panel.contentX
-        y: 76
-        width: panel.contentWidth
-        spacing: 17
-        visible: panel.section === "screenshots"
-
-        EdgeSettingGroup {
-            title: "Screen edge"
-            objectPrefix: "screenshot-position-"
-            options: [{key: "left", label: "Left"}, {key: "right", label: "Right"}]
-            selectedKey: screenshots.edgeSide
-            onOptionClicked: function(key) {
-                screenshots.setPosition(key, screenshots.edgeAlignment)
-            }
-        }
-
-        Column {
-            width: parent.width
-            spacing: 6
-
-            Text {
-                text: "Position and order"
-                color: Theme.mutedText
-                font.family: Qt.application.font.family
-                font.pixelSize: 12
-            }
-
-            EdgeHandleLayoutEditor {
-                id: screenshotHandleEditor
-                editorKey: "screenshots"
-                editorSide: screenshots.edgeSide
-            }
-        }
-    }
-
     Flickable {
-        objectName: "show-desktop-settings-scroll"
+        objectName: "edge-handles-settings-scroll"
         x: panel.contentX
         y: 76
         width: panel.contentWidth
         height: panel.height - y - 12
         contentWidth: width
-        contentHeight: showDesktopSettingsColumn.height
+        contentHeight: edgeSettingsColumn.height
         clip: true
         boundsBehavior: Flickable.DragAndOvershootBounds
         flickableDirection: Flickable.VerticalFlick
-        visible: panel.section === "show-desktop"
+        visible: panel.section === "edge-handles"
 
         Column {
-            id: showDesktopSettingsColumn
+            id: edgeSettingsColumn
             width: parent.width
             spacing: 17
 
             EdgeSettingGroup {
-                title: "Screen edge"
-                objectPrefix: "show-desktop-position-"
-                options: panel.positions
-                selectedKey: backend.showDesktopEdgeSettings.position
+                title: "Handle"
+                objectPrefix: "edge-handle-target-"
+                options: [{key: "screenshots", label: "Screenshots"},
+                    {key: "show-desktop", label: "Show Desktop"}]
+                selectedKey: panel.edgeHandleTarget
                 onOptionClicked: function(key) {
-                    backend.setShowDesktopEdgeSetting("position", key)
+                    panel.edgeHandleTarget = key
+                }
+            }
+
+            EdgeSettingGroup {
+                title: "Screen edge"
+                objectPrefix: panel.edgeSettingsPrefix + "position-"
+                options: panel.positions
+                selectedKey: panel.editingScreenshots ? screenshots.edgeSide
+                    : backend.showDesktopEdgeSettings.position
+                onOptionClicked: function(key) {
+                    if (panel.editingScreenshots)
+                        screenshots.setPosition(key, screenshots.edgeAlignment)
+                    else
+                        backend.setShowDesktopEdgeSetting("position", key)
                 }
             }
 
             EdgeSettingGroup {
                 title: "Width"
-                objectPrefix: "show-desktop-width-"
+                objectPrefix: panel.edgeSettingsPrefix + "width-"
                 options: [{key: "sm", label: "sm"}, {key: "md", label: "md"},
                     {key: "lg", label: "lg"}]
-                selectedKey: backend.showDesktopEdgeSettings.width
+                selectedKey: panel.editingScreenshots ? screenshots.edgeWidth
+                    : backend.showDesktopEdgeSettings.width
                 onOptionClicked: function(key) {
-                    backend.setShowDesktopEdgeSetting("width", key)
+                    if (panel.editingScreenshots)
+                        screenshots.setEdgeSize("width", key)
+                    else
+                        backend.setShowDesktopEdgeSetting("width", key)
                 }
             }
 
             EdgeSettingGroup {
                 title: "Height"
-                objectPrefix: "show-desktop-height-"
+                objectPrefix: panel.edgeSettingsPrefix + "height-"
                 options: [{key: "sm", label: "sm"}, {key: "md", label: "md"},
                     {key: "lg", label: "lg"}]
-                selectedKey: backend.showDesktopEdgeSettings.height
+                selectedKey: panel.editingScreenshots ? screenshots.edgeHeight
+                    : backend.showDesktopEdgeSettings.height
                 onOptionClicked: function(key) {
-                    backend.setShowDesktopEdgeSetting("height", key)
+                    if (panel.editingScreenshots)
+                        screenshots.setEdgeSize("height", key)
+                    else
+                        backend.setShowDesktopEdgeSetting("height", key)
                 }
             }
 
@@ -798,9 +793,10 @@ Item {
                 }
 
                 EdgeHandleLayoutEditor {
-                    id: showDesktopHandleEditor
-                    editorKey: "show-desktop"
-                    editorSide: backend.showDesktopEdgeSettings.position
+                    id: edgeHandleEditor
+                    editorKey: panel.edgeHandleTarget
+                    editorSide: panel.editingScreenshots ? screenshots.edgeSide
+                        : backend.showDesktopEdgeSettings.position
                 }
             }
         }

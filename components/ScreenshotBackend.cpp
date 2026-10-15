@@ -140,12 +140,21 @@ void ScreenshotBackend::refresh() {
         const QJsonObject object = QJsonDocument::fromJson(settings.readAll()).object();
         const QString side = object.value(QStringLiteral("side")).toString();
         const QString alignment = object.value(QStringLiteral("alignment")).toString();
-        if ((side == QLatin1String("left") || side == QLatin1String("right"))
+        const QStringList sizes{QStringLiteral("sm"), QStringLiteral("md"), QStringLiteral("lg")};
+        const QString width = object.value(QStringLiteral("width")).toString();
+        const QString height = object.value(QStringLiteral("height")).toString();
+        const QString edgeWidth = sizes.contains(width) ? width : QStringLiteral("sm");
+        const QString edgeHeight = sizes.contains(height) ? height : QStringLiteral("lg");
+        if ((side == QLatin1String("left") || side == QLatin1String("right")
+                || side == QLatin1String("top") || side == QLatin1String("bottom"))
             && (alignment == QLatin1String("top") || alignment == QLatin1String("center")
                 || alignment == QLatin1String("bottom"))
-            && (side != m_side || alignment != m_alignment)) {
+            && (side != m_side || alignment != m_alignment
+                || edgeWidth != m_edgeWidth || edgeHeight != m_edgeHeight)) {
             m_side = side;
             m_alignment = alignment;
+            m_edgeWidth = edgeWidth;
+            m_edgeHeight = edgeHeight;
             emit positionChanged();
         }
     }
@@ -198,12 +207,18 @@ void ScreenshotBackend::Quit() {
 }
 
 void ScreenshotBackend::setPosition(const QString &side, const QString &alignment) {
-    if ((side != QLatin1String("left") && side != QLatin1String("right"))
+    if ((side != QLatin1String("left") && side != QLatin1String("right")
+            && side != QLatin1String("top") && side != QLatin1String("bottom"))
         || (alignment != QLatin1String("top") && alignment != QLatin1String("center")
             && alignment != QLatin1String("bottom"))) return;
+    QFile existing(m_settingsPath);
+    QJsonObject saved;
+    if (existing.open(QIODevice::ReadOnly))
+        saved = QJsonDocument::fromJson(existing.readAll()).object();
+    saved.insert(QStringLiteral("side"), side);
+    saved.insert(QStringLiteral("alignment"), alignment);
     QSaveFile settings(m_settingsPath);
-    const QByteArray json = QJsonDocument(QJsonObject{{QStringLiteral("side"), side},
-        {QStringLiteral("alignment"), alignment}}).toJson();
+    const QByteArray json = QJsonDocument(saved).toJson();
     if (!settings.open(QIODevice::WriteOnly) || settings.write(json) != json.size()
         || !settings.commit()) {
         setError(QStringLiteral("Cannot save edge position."));
@@ -212,6 +227,29 @@ void ScreenshotBackend::setPosition(const QString &side, const QString &alignmen
     m_side = side;
     m_alignment = alignment;
     emit positionChanged();
+}
+
+void ScreenshotBackend::setEdgeSize(const QString &key, const QString &value) {
+    if ((key != QLatin1String("width") && key != QLatin1String("height"))
+        || !QStringList{QStringLiteral("sm"), QStringLiteral("md"),
+            QStringLiteral("lg")}.contains(value)) return;
+    QFile existing(m_settingsPath);
+    QJsonObject saved;
+    if (existing.open(QIODevice::ReadOnly))
+        saved = QJsonDocument::fromJson(existing.readAll()).object();
+    if (!saved.contains(QStringLiteral("side")))
+        saved.insert(QStringLiteral("side"), m_side);
+    if (!saved.contains(QStringLiteral("alignment")))
+        saved.insert(QStringLiteral("alignment"), m_alignment);
+    saved.insert(key, value);
+    QSaveFile settings(m_settingsPath);
+    const QByteArray json = QJsonDocument(saved).toJson();
+    if (!settings.open(QIODevice::WriteOnly) || settings.write(json) != json.size()
+        || !settings.commit()) {
+        setError(QStringLiteral("Cannot save edge size."));
+        return;
+    }
+    refresh();
 }
 
 void ScreenshotBackend::select(int index, bool control, bool shift) {

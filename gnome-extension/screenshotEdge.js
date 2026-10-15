@@ -7,13 +7,18 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 const TITLE = 'Zhyprbola Screenshots';
 const SHARED_HANDLE_GAP = 8;
 
-export function edgeGeometry(monitor, side, alignment) {
-    const width = 5;
-    const height = 100;
+export function edgeGeometry(monitor, side, alignment, settings = {}) {
+    const thickness = {sm: 5, md: 8, lg: 12}[settings.width] ?? 5;
+    const length = {sm: 50, md: 75, lg: 100}[settings.height] ?? 100;
+    const vertical = side === 'left' || side === 'right';
+    const width = vertical ? thickness : length;
+    const height = vertical ? length : thickness;
     const slot = alignment === 'top' ? 0 : alignment === 'bottom' ? 2 : 1;
     return {
-        x: side === 'right' ? monitor.x + monitor.width - width : monitor.x,
-        y: monitor.y + Math.round(monitor.height * (slot + 0.5) / 3 - height / 2),
+        x: vertical ? (side === 'right' ? monitor.x + monitor.width - width : monitor.x)
+            : monitor.x + Math.round(monitor.width * (slot + 0.5) / 3 - width / 2),
+        y: vertical ? monitor.y + Math.round(monitor.height * (slot + 0.5) / 3 - height / 2)
+            : (side === 'bottom' ? monitor.y + monitor.height - height : monitor.y),
         width, height,
     };
 }
@@ -38,7 +43,8 @@ function clampGeometry(geometry, monitor) {
 
 export function edgeHandleGeometries(monitor, screenshots = {}, settings = {},
     dockPosition = 'bottom', dockThickness = 27) {
-    const screenshotSide = screenshots.side === 'right' ? 'right' : 'left';
+    const screenshotSide = ['left', 'right', 'top', 'bottom'].includes(screenshots.side)
+        ? screenshots.side : 'left';
     const alignments = ['top', 'center', 'bottom'];
     const screenshotAlignment = alignments.includes(screenshots.alignment)
         ? screenshots.alignment : 'center';
@@ -51,7 +57,7 @@ export function edgeHandleGeometries(monitor, screenshots = {}, settings = {},
     const desktopVertical = desktopSide === 'left' || desktopSide === 'right';
     const desktopActorWidth = desktopVertical ? desktopWidth : desktopHeight;
     const desktopActorHeight = desktopVertical ? desktopHeight : desktopWidth;
-    const screenshot = edgeGeometry(monitor, screenshotSide, screenshotAlignment);
+    const screenshot = edgeGeometry(monitor, screenshotSide, screenshotAlignment, screenshots);
     const desktopSlot = desktopAlignment === 'top' ? 0
         : desktopAlignment === 'bottom' ? 2 : 1;
     const showDesktop = {
@@ -73,11 +79,13 @@ export function edgeHandleGeometries(monitor, screenshots = {}, settings = {},
         const screenshotsFirst = settings.order !== 'show-desktop-first';
         const first = screenshotsFirst ? screenshot : showDesktop;
         const second = screenshotsFirst ? showDesktop : screenshot;
-        const segmentStart = monitor.y + monitor.height * desktopSlot / 3;
-        const segmentLength = monitor.height / 3;
-        const groupLength = first.height + SHARED_HANDLE_GAP + second.height;
-        first.y = Math.round(segmentStart + (segmentLength - groupLength) / 2);
-        second.y = first.y + first.height + SHARED_HANDLE_GAP;
+        const axis = desktopVertical ? 'y' : 'x';
+        const size = desktopVertical ? 'height' : 'width';
+        const segmentStart = monitor[axis] + monitor[size] * desktopSlot / 3;
+        const segmentLength = monitor[size] / 3;
+        const groupLength = first[size] + SHARED_HANDLE_GAP + second[size];
+        first[axis] = Math.round(segmentStart + (segmentLength - groupLength) / 2);
+        second[axis] = first[axis] + first[size] + SHARED_HANDLE_GAP;
     }
 
     insetFromDock(screenshot, screenshotSide, dockPosition, dockThickness);
@@ -309,7 +317,8 @@ export class ScreenshotEdge {
             const [, data] = GLib.file_get_contents(this._showDesktopConfigPath);
             showDesktop = JSON.parse(new TextDecoder().decode(data));
         } catch (_) { /* Use the default shared center slot. */ }
-        this._side = saved.side === 'right' ? 'right' : 'left';
+        this._side = ['left', 'right', 'top', 'bottom'].includes(saved.side)
+            ? saved.side : 'left';
         this._alignment = ['top', 'bottom'].includes(saved.alignment) ? saved.alignment : 'center';
         const monitor = Main.layoutManager.primaryMonitor;
         if (!monitor)
@@ -399,11 +408,17 @@ export class ScreenshotEdge {
         const frame = window.get_frame_rect();
         const width = Math.min(frame.width, area.width - 24);
         const height = Math.min(frame.height, area.height - 24);
-        const x = this._side === 'right' ? area.x + area.width - width : area.x;
+        const vertical = this._side === 'left' || this._side === 'right';
         const handle = this._handleGeometry ?? edgeGeometry(
             monitor, this._side, this._alignment);
-        const y = Math.max(area.y + 12, Math.min(area.y + area.height - height - 12,
-            Math.round(handle.y + handle.height / 2 - height / 2)));
+        const x = vertical
+            ? (this._side === 'right' ? area.x + area.width - width : area.x)
+            : Math.max(area.x + 12, Math.min(area.x + area.width - width - 12,
+                Math.round(handle.x + handle.width / 2 - width / 2)));
+        const y = vertical
+            ? Math.max(area.y + 12, Math.min(area.y + area.height - height - 12,
+                Math.round(handle.y + handle.height / 2 - height / 2)))
+            : (this._side === 'bottom' ? area.y + area.height - height - 12 : area.y + 12);
         window.move_resize_frame(false, x, y, width, height);
     }
 
@@ -415,8 +430,12 @@ export class ScreenshotEdge {
         const frame = window.get_frame_rect();
         const handle = this._handleGeometry ?? edgeGeometry(
             monitor, this._side, this._alignment);
-        actor.set_pivot_point(this._side === 'right' ? 1 : 0,
-            Math.max(0, Math.min(1, (handle.y + handle.height / 2 - frame.y) / frame.height)));
+        const vertical = this._side === 'left' || this._side === 'right';
+        actor.set_pivot_point(vertical ? (this._side === 'right' ? 1 : 0)
+            : Math.max(0, Math.min(1, (handle.x + handle.width / 2 - frame.x) / frame.width)),
+        vertical
+            ? Math.max(0, Math.min(1, (handle.y + handle.height / 2 - frame.y) / frame.height))
+            : (this._side === 'bottom' ? 1 : 0));
         return {actor, scaleX: handle.width / frame.width, scaleY: handle.height / frame.height};
     }
 
