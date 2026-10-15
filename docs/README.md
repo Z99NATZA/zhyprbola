@@ -5,6 +5,9 @@
 - [Current Behavior](current-behavior.md): UI, defaults, settings, and commands.
 - [Architecture](architecture.md): ownership and communication between layers.
 - [Runtime Notes](runtime-notes.md): lifecycle, input, fallback, and layout details.
+- [Component Window Decision](decisions/component-window-switchers.md): why component
+  windows remain in GNOME Overview and Alt+Tab.
+- [Docs Format](docs-format-guide.md): formatting guide for project documentation.
 - [Zhyprbola Origin](zhyprbola-origin.md): original project notes in Thai.
 - [v0.1.0](release/v0.1.0.md): first release features in Thai and English.
 
