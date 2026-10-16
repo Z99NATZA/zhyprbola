@@ -1713,7 +1713,7 @@ Item {
         Text {
             x: 13
             y: 12
-            text: "Open"
+            text: "Click for open"
             color: Theme.text
             font.family: Qt.application.font.family
             font.pixelSize: 14

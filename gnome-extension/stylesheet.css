@@ -230,6 +230,95 @@
     box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
 }
 
+.zhyprbola-key-count-menu .popup-menu-content {
+    border: 0;
+    border-radius: 14px;
+    min-width: 0;
+    padding: 14px 16px;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+}
+
+.zhyprbola-key-count-summary {
+    width: 230px;
+    padding: 0 4px 4px;
+    background-color: transparent;
+}
+
+.zhyprbola-key-count-choice {
+    width: 230px;
+    spacing: 24px;
+    padding: 4px;
+    background-color: transparent;
+}
+
+.zhyprbola-key-count-title {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.zhyprbola-key-count-name,
+.zhyprbola-key-count-value {
+    font-size: 12px;
+}
+
+.zhyprbola-key-count-name {
+    font-weight: 500;
+}
+
+.zhyprbola-key-count-value {
+    font-weight: 700;
+}
+
+.zhyprbola-key-count-current .zhyprbola-key-count-summary,
+.zhyprbola-key-count-current .zhyprbola-key-count-choice {
+    color: #875a82;
+}
+
+.zhyprbola-key-count-white .zhyprbola-key-count-summary,
+.zhyprbola-key-count-white .zhyprbola-key-count-choice {
+    color: #467b9d;
+}
+
+.zhyprbola-key-count-white-sky .zhyprbola-key-count-summary,
+.zhyprbola-key-count-white-sky .zhyprbola-key-count-choice {
+    color: #1e73e7;
+}
+
+.zhyprbola-key-count-forest .zhyprbola-key-count-summary,
+.zhyprbola-key-count-forest .zhyprbola-key-count-choice {
+    color: #477f6d;
+}
+
+.zhyprbola-key-count-one-half-gray .zhyprbola-key-count-summary,
+.zhyprbola-key-count-one-half-gray .zhyprbola-key-count-choice {
+    color: #68717d;
+}
+
+.zhyprbola-key-count-red .zhyprbola-key-count-summary,
+.zhyprbola-key-count-red .zhyprbola-key-count-choice {
+    color: #b83252;
+}
+
+.zhyprbola-key-count-mauve .zhyprbola-key-count-summary,
+.zhyprbola-key-count-mauve .zhyprbola-key-count-choice {
+    color: #be345f;
+}
+
+.zhyprbola-key-count-silver-dawn .zhyprbola-key-count-summary,
+.zhyprbola-key-count-silver-dawn .zhyprbola-key-count-choice {
+    color: #6275a6;
+}
+
+.zhyprbola-key-count-menu .zhyprbola-key-count-choice:hover {
+    color: #111827;
+    background-color: transparent !important;
+}
+
+.zhyprbola-key-count-menu .zhyprbola-key-count-choice:focus,
+.zhyprbola-key-count-menu .zhyprbola-key-count-choice:active {
+    background-color: transparent !important;
+}
+
 .zhyprbola-sound-menu .zhyprbola-sound-row {
     padding: 0;
     spacing: 16px;

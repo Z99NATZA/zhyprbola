@@ -89,6 +89,26 @@ class NativeAppMenu {
     destroy() { this.close(); this.actor.destroy(); this.destroyed = true; }
 }
 
+class StaticPopupMenu {
+    constructor(sourceActor, alignment, side) {
+        Object.assign(this, {sourceActor, alignment, side, actor: new Actor(),
+            box: new Actor(), items: [], isOpen: false});
+        this.actor.add_child(this.box);
+    }
+    addMenuItem(item) { this.items.push(item); this.box.add_child(item); }
+    open(animation) { this.isOpen = true; this.openAnimation = animation; }
+    close(animation) { this.isOpen = false; this.closeAnimation = animation; }
+    destroy() { this.close(); this.actor.destroy(); this.destroyed = true; }
+}
+
+class StaticPopupMenuItem extends Actor {
+    constructor(props = {}) {
+        assert.equal(Object.hasOwn(props, 'track_hover'), false,
+            'PopupBaseMenuItem does not accept track_hover');
+        super(props);
+    }
+}
+
 function fixture(length = 400) {
     const idles = new Map();
     const keybindings = new Map();
@@ -101,7 +121,7 @@ function fixture(length = 400) {
             Side: {LEFT: 0, RIGHT: 1, TOP: 2, BOTTOM: 3},
             DirectionType: {TAB_FORWARD: 0}},
         Clutter: {FixedLayout: class {}, AnimationMode: {EASE_OUT_QUAD: 0},
-            RotateAxis: {Z_AXIS: 2}, ActorAlign: {CENTER: 0},
+            RotateAxis: {Z_AXIS: 2}, ActorAlign: {CENTER: 0, START: 1, END: 2},
             ClickGesture: Actor, BUTTON_SECONDARY: 3},
         Pango: {EllipsizeMode: {NONE: 0, END: 3}},
         DND: {makeDraggable: actor => (actor.draggable = new Actor())},
@@ -120,7 +140,9 @@ function fixture(length = 400) {
         SoundMenu: NativeAppMenu,
         BrightnessMenu: NativeAppMenu,
         BatteryMenu: NativeAppMenu,
-        PopupMenu: {PopupMenuManager: class {}},
+        PopupMenu: {PopupMenuManager: class {}, PopupMenu: StaticPopupMenu,
+            PopupBaseMenuItem: StaticPopupMenuItem},
+        BoxPointer: {PopupAnimation: {NONE: 'none'}},
         Extension: class {},
     });
     const source = readFileSync(new URL('../gnome-extension/extension.js', import.meta.url), 'utf8');
@@ -578,35 +600,113 @@ test('Daily Key Count updates immediately and resets on the next local date', ()
     tomorrow.setDate(now.getDate() + 1);
     dock._keyCount = 41;
     dock._keyCountDate = dock._localDateKey(now);
+    dock._keyCountDays = {[dock._keyCountDate]: 41};
     dock._keyCountLabels = new Set([{text: ''}]);
     dock._keyCountSaveId = 1;
     dock._recordKeyPress();
     assert.equal(dock._keyCount, 42);
-    assert.equal([...dock._keyCountLabels][0].text, 'keys:42');
+    assert.equal([...dock._keyCountLabels][0].text, 'keys:1d:42');
     dock._saveKeyCount = () => {};
     dock._ensureCurrentKeyCountDate(tomorrow);
     assert.equal(dock._keyCount, 0);
     assert.equal(dock._keyCountDate, dock._localDateKey(tomorrow));
-    assert.equal([...dock._keyCountLabels][0].text, 'keys:0');
+    assert.equal(dock._keyCountDays[dock._keyCountDate], 0);
+    assert.equal([...dock._keyCountLabels][0].text, 'keys:1d:0');
 });
 
-test('Daily Key Count is clickable and rotates with a vertical dock', () => {
+test('Daily Key Count opens statistics and rotates with a vertical dock', () => {
     const {dock} = fixture();
     dock._keyCount = 1234;
     dock._keyCountLabels = new Set();
     dock._dateTimeLabels = new Map();
     dock._dockItems.set('running', [{kind: 'key-count', name: 'key-count'}]);
-    let opened = '';
-    dock._openPanel = name => { opened = name; };
+    let anchor = null;
+    dock._openKeyCountMenu = button => { anchor = button; };
     const group = dock._dockGroupsByName.get('running');
     dock._renderDockRegion('running', 200, false, 0);
-    assert.equal(group.children[0].width, 82);
-    assert.equal(group.children[0].children[0].text, 'keys:1234');
+    assert.equal(group.children[0].width, 124);
+    assert.equal(group.children[0].children[0].text, 'keys:1d:1,234');
     group.children[0].emit('clicked');
-    assert.equal(opened, 'key-visualizer');
+    assert.equal(anchor, group.children[0]);
     dock._renderDockRegion('running', 200, true, 0);
-    assert.equal(group.children[0].height, 82);
+    assert.equal(group.children[0].height, 124);
     assert.equal(group.children[0].children[0].children[0].angle, -90);
+});
+
+test('Daily Key Count migrates the original single-day state into history', () => {
+    const {dock, context} = fixture();
+    context.TextDecoder = TextDecoder;
+    context.GLib.file_get_contents = () => [true,
+        new TextEncoder().encode(JSON.stringify({date: '2026-10-15', count: 321}))];
+    dock._localDateKey = () => '2026-10-16';
+    dock._loadKeyCount();
+    assert.equal(dock._keyCount, 0);
+    assert.equal(dock._keyCountDays['2026-10-15'], 321);
+});
+
+test('Key statistics aggregate rolling, calendar, best-day, and all-time totals', () => {
+    const {dock} = fixture();
+    dock._keyCountDays = {
+        '2025-12-31': 700,
+        '2026-04-15': 600,
+        '2026-04-16': 500,
+        '2026-07-15': 400,
+        '2026-07-16': 300,
+        '2026-09-16': 200,
+        '2026-10-01': 1,
+        '2026-10-02': 5,
+        '2026-10-09': 10,
+        '2026-10-10': 25,
+        '2026-10-15': 50,
+        '2026-10-16': 100,
+    };
+    const stats = Object.fromEntries(dock._keyCountStats(new Date(2026, 9, 16))
+        .map(stat => [stat.key, stat.value]));
+    assert.deepEqual({...stats}, {
+        today: 100,
+        '7-days': 175,
+        '15-days': 190,
+        month: 191,
+        '3-months': 691,
+        '6-months': 1591,
+        year: 2191,
+        'best-day': 700,
+        all: 2891,
+    });
+});
+
+test('rolling month statistics clamp month-end cutoffs', () => {
+    const {dock} = fixture();
+    dock._keyCountDays = {'2026-02-28': 10, '2026-02-27': 20, '2026-05-31': 1};
+    const stats = Object.fromEntries(dock._keyCountStats(new Date(2026, 4, 31))
+        .map(stat => [stat.key, stat.value]));
+    assert.equal(stats['3-months'], 11);
+});
+
+test('Key statistics choices update the dock and open without animation', () => {
+    const {dock} = fixture();
+    dock._keyCount = 1234;
+    dock._keyCountDate = '2026-10-16';
+    dock._keyCountDays = {'2026-10-15': 100, '2026-10-16': 1234};
+    dock._keyCountLabels = new Set([{text: ''}]);
+    const localDateKey = dock._localDateKey.bind(dock);
+    dock._localDateKey = now => now ? localDateKey(now) : '2026-10-16';
+    const button = new Actor();
+    dock._openKeyCountMenu(button);
+    assert.equal(dock._keyCountMenu.isOpen, true);
+    assert.equal(dock._keyCountMenu.openAnimation, 'none');
+    assert.equal(dock._keyCountMenu.items[0].reactive, false);
+    assert.equal(dock._keyCountStatLabels.size, 9);
+    assert.equal(dock._keyCountStatLabels.get('today').text, '1,234');
+    assert.equal(dock._keyCountStatLabels.get('best-day').text, '1,234');
+    assert.equal(dock._keyCountMenu.items[2].reactive, true);
+    dock._keyCountMenu.items[2].emit('activate');
+    assert.equal(dock._keyCountStatKey, '7-days');
+    assert.equal([...dock._keyCountLabels][0].text, 'keys:7d:1,334');
+    assert.equal(dock._keyCountMenu.closeAnimation, 'none');
+    dock._openKeyCountMenu(button);
+    assert.equal(dock._keyCountMenu.isOpen, true);
+    assert.equal(dock._keyCountMenu.openAnimation, 'none');
 });
 
 test('dock date and time follow locale, format and seconds settings', () => {

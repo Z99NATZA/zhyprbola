@@ -102,9 +102,12 @@ monitoring or keyboard-device read access. On GNOME Wayland, use the
 "Allow temporarily" button in Key visualizer when prompted.
 
 The dock's Daily Key Count uses the same global-access fallback but receives only
-anonymous press markers. It stores only the local date and total in
-`~/.local/state/zhyprbola/key-count.json`, resets at the next local day, and never
-stores key names or typed text.
+anonymous press markers. It stores a total for each local date in
+`~/.local/state/zhyprbola/key-count.json`, starts a new total at the next local
+day, and never stores key names or typed text. Clicking the dock text opens
+statistics for today, 7/15 days, this month, rolling 3/6 months, this year, the
+best day, and all time. Selecting a range changes the dock text, for example
+`keys:7d:1,234`; hovering a range changes only its text color.
 
 Authorization
 ----------

@@ -8,6 +8,7 @@ import Pango from 'gi://Pango';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {AppMenu} from 'resource:///org/gnome/shell/ui/appMenu.js';
+import * as BoxPointer from 'resource:///org/gnome/shell/ui/boxpointer.js';
 import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -63,7 +64,11 @@ const DOCK_COMPONENTS = [
     ['components', 'Components'],
 ];
 const INLINE_DOCK_COMPONENTS = ['date-display', 'time-display', 'key-count'];
-const KEY_COUNT_ITEM_LENGTH = 82;
+const KEY_COUNT_ITEM_LENGTH = 124;
+const KEY_COUNT_STAT_KEYS = Object.freeze([
+    'today', '7-days', '15-days', 'month', '3-months', '6-months', 'year',
+    'best-day', 'all',
+]);
 const DEFAULT_PINNED_APPS = [
     ['google-chrome.desktop', 'com.google.Chrome.desktop', 'chromium.desktop'],
     ['org.gnome.Terminal.desktop', 'org.gnome.Console.desktop', 'kgx.desktop',
@@ -127,6 +132,9 @@ export default class ZhyprbolaExtension extends Extension {
         this._appMenu = null;
         this._appMenuApp = null;
         this._soundMenu = null;
+        this._keyCountMenu = null;
+        this._keyCountStatLabels = null;
+        this._keyCountStatKey = 'today';
         this._brightnessMenu = null;
         this._batteryMenu = null;
         this._desktopWindows = new Map();
@@ -1236,16 +1244,28 @@ export default class ZhyprbolaExtension extends Extension {
 
     _loadKeyCount() {
         this._keyCountDate = this._localDateKey();
-        this._keyCount = 0;
+        this._keyCountDays = {};
+        this._keyCountStatKey = 'today';
         try {
             const [, contents] = GLib.file_get_contents(this._keyCountPath);
             const saved = JSON.parse(new TextDecoder().decode(contents));
-            if (saved.date === this._keyCountDate && Number.isSafeInteger(saved.count)
-                && saved.count >= 0)
-                this._keyCount = saved.count;
+            if (KEY_COUNT_STAT_KEYS.includes(saved.display))
+                this._keyCountStatKey = saved.display;
+            if (saved.days && typeof saved.days === 'object') {
+                for (const [date, count] of Object.entries(saved.days)) {
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isSafeInteger(count)
+                        && count >= 0)
+                        this._keyCountDays[date] = count;
+                }
+            } else if (/^\d{4}-\d{2}-\d{2}$/.test(saved.date)
+                && Number.isSafeInteger(saved.count) && saved.count >= 0) {
+                // Migrate the original single-day state without losing its total.
+                this._keyCountDays[saved.date] = saved.count;
+            }
         } catch (_) {
             // A missing or invalid state file starts a fresh daily count.
         }
+        this._keyCount = this._keyCountDays[this._keyCountDate] ?? 0;
     }
 
     _ensureCurrentKeyCountDate(now = new Date()) {
@@ -1253,24 +1273,32 @@ export default class ZhyprbolaExtension extends Extension {
         if (date === this._keyCountDate)
             return;
         this._keyCountDate = date;
-        this._keyCount = 0;
+        this._keyCount = this._keyCountDays[date] ?? 0;
+        this._keyCountDays[date] = this._keyCount;
         this._refreshKeyCountLabels();
         this._saveKeyCount();
     }
 
     _keyCountText() {
-        return `keys:${this._keyCount}`;
+        const selected = this._keyCountStatKey ?? 'today';
+        const stat = selected === 'today'
+            ? {shortLabel: '1d', value: this._keyCount ?? 0}
+            : this._keyCountStats().find(item => item.key === selected);
+        const value = new Intl.NumberFormat('en-US').format(stat?.value ?? 0);
+        return `keys:${stat?.shortLabel ?? '1d'}:${value}`;
     }
 
     _refreshKeyCountLabels() {
         const text = this._keyCountText();
         for (const label of this._keyCountLabels ?? [])
             label.text = text;
+        this._refreshKeyCountMenu();
     }
 
     _recordKeyPress() {
         this._ensureCurrentKeyCountDate();
         this._keyCount++;
+        this._keyCountDays[this._keyCountDate] = this._keyCount;
         this._refreshKeyCountLabels();
         if (!this._keyCountSaveId) {
             this._keyCountSaveId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 2, () => {
@@ -1287,9 +1315,62 @@ export default class ZhyprbolaExtension extends Extension {
         try {
             GLib.mkdir_with_parents(GLib.path_get_dirname(this._keyCountPath), 0o700);
             GLib.file_set_contents(this._keyCountPath,
-                `${JSON.stringify({date: this._keyCountDate, count: this._keyCount})}\n`);
+                `${JSON.stringify({version: 1, display: this._keyCountStatKey,
+                    days: this._keyCountDays})}\n`);
         } catch (error) {
             logError(error, 'Failed to save daily key count');
+        }
+    }
+
+    _keyCountStats(now = new Date()) {
+        const today = this._localDateKey(now);
+        const cutoff = (days = 0, months = 0) => {
+            const date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            if (months) {
+                const target = new Date(now.getFullYear(), now.getMonth() - months, 1);
+                const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0)
+                    .getDate();
+                date.setFullYear(target.getFullYear(), target.getMonth(),
+                    Math.min(now.getDate(), lastDay));
+            } else {
+                date.setDate(date.getDate() - days);
+            }
+            return this._localDateKey(date);
+        };
+        const days = this._keyCountDays ?? {};
+        const sum = (from = '', to = '9999-99-99') => Object.entries(days)
+            .reduce((total, [date, count]) => date >= from && date <= to
+                ? total + count : total, 0);
+        const month = `${today.slice(0, 7)}-01`;
+        const year = `${today.slice(0, 4)}-01-01`;
+        return [
+            {key: 'today', label: 'Today', shortLabel: '1d', value: days[today] ?? 0},
+            {key: '7-days', label: '7 days', shortLabel: '7d',
+                value: sum(cutoff(6), today)},
+            {key: '15-days', label: '15 days', shortLabel: '15d',
+                value: sum(cutoff(14), today)},
+            {key: 'month', label: 'This month', shortLabel: 'month',
+                value: sum(month, today)},
+            {key: '3-months', label: '3 months', shortLabel: '3m',
+                value: sum(cutoff(0, 3), today)},
+            {key: '6-months', label: '6 months', shortLabel: '6m',
+                value: sum(cutoff(0, 6), today)},
+            {key: 'year', label: 'This year', shortLabel: 'year',
+                value: sum(year, today)},
+            {key: 'best-day', label: 'Best day', shortLabel: 'max1d',
+                value: Math.max(0, ...Object.values(days))},
+            {key: 'all', label: 'All time', shortLabel: 'all', value: sum()},
+        ];
+    }
+
+    _refreshKeyCountMenu() {
+        if (!this._keyCountStatLabels)
+            return;
+        const format = new Intl.NumberFormat('en-US');
+        for (const stat of this._keyCountStats()) {
+            const label = this._keyCountStatLabels.get(stat.key);
+            if (label)
+                label.text = format.format(stat.value);
         }
     }
 
@@ -1650,6 +1731,9 @@ export default class ZhyprbolaExtension extends Extension {
         this._showDesktopEdge?.layout();
         this._soundMenu?.destroy();
         this._soundMenu = null;
+        this._keyCountMenu?.destroy();
+        this._keyCountMenu = null;
+        this._keyCountStatLabels = null;
         this._brightnessMenu?.destroy();
         this._brightnessMenu = null;
         this._batteryMenu?.destroy();
@@ -1735,6 +1819,9 @@ export default class ZhyprbolaExtension extends Extension {
 
         this._soundMenu?.destroy();
         this._soundMenu = null;
+        this._keyCountMenu?.destroy();
+        this._keyCountMenu = null;
+        this._keyCountStatLabels = null;
         this._brightnessMenu?.destroy();
         this._brightnessMenu = null;
         this._batteryMenu?.destroy();
@@ -2336,11 +2423,11 @@ export default class ZhyprbolaExtension extends Extension {
             can_focus: true,
             reactive: true,
             track_hover: true,
-            accessible_name: 'Daily key count; open Key Visualizer',
+            accessible_name: 'Daily key count; open key statistics',
         });
         button.set_size(vertical ? DOCK_CONFIG.buttonSize : KEY_COUNT_ITEM_LENGTH,
             vertical ? KEY_COUNT_ITEM_LENGTH : DOCK_CONFIG.buttonSize);
-        button.connect('clicked', () => this._openPanel('key-visualizer'));
+        button.connect('clicked', () => this._openKeyCountMenu(button));
         return button;
     }
 
@@ -2403,6 +2490,9 @@ export default class ZhyprbolaExtension extends Extension {
         if (name === 'zhyprbola') {
             this._soundMenu?.destroy();
             this._soundMenu = null;
+            this._keyCountMenu?.destroy();
+            this._keyCountMenu = null;
+            this._keyCountStatLabels = null;
             this._brightnessMenu?.destroy();
             this._brightnessMenu = null;
             this._batteryMenu?.destroy();
@@ -2518,8 +2608,8 @@ export default class ZhyprbolaExtension extends Extension {
                 continue;
             }
             if (item.kind === 'key-count') {
-                menu.addAction(`${item.label}: ${this._keyCount}`,
-                    () => this._openPanel('key-visualizer'));
+                menu.addAction(this._keyCountText(),
+                    () => this._openKeyCountMenu(button));
                 continue;
             }
             const icon = item.kind === 'panel'
@@ -2661,6 +2751,69 @@ export default class ZhyprbolaExtension extends Extension {
         this._menuManager.addMenu(menu);
         this._soundMenu = menu;
         menu.open();
+    }
+
+    _openKeyCountMenu(button) {
+        if (this._keyCountMenu?.sourceActor === button) {
+            if (this._keyCountMenu.isOpen)
+                this._keyCountMenu.close(BoxPointer.PopupAnimation.NONE);
+            else
+                this._keyCountMenu.open(BoxPointer.PopupAnimation.NONE);
+            return;
+        }
+        this._keyCountMenu?.destroy();
+        const side = {
+            [DockPosition.LEFT]: St.Side.RIGHT,
+            [DockPosition.RIGHT]: St.Side.LEFT,
+            [DockPosition.TOP]: St.Side.BOTTOM,
+            [DockPosition.BOTTOM]: St.Side.TOP,
+        }[this._dockPosition];
+        const theme = THEMES.find(item => item.name === this._themeName) ?? THEMES[0];
+        const menu = new PopupMenu.PopupMenu(button, 0.5, side);
+        menu.actor.add_style_class_name('zhyprbola-key-count-menu');
+        menu.actor.add_style_class_name(`zhyprbola-key-count-${theme.name}`);
+        menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor};`);
+        const title = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
+        title.add_style_class_name('zhyprbola-key-count-summary');
+        title.add_child(new St.Label({
+            text: 'Key Statistics',
+            style_class: 'zhyprbola-key-count-title',
+        }));
+        menu.addMenuItem(title);
+        const format = new Intl.NumberFormat('en-US');
+        this._keyCountStatLabels = new Map();
+        for (const stat of this._keyCountStats()) {
+            const item = new PopupMenu.PopupBaseMenuItem({
+                reactive: true,
+                can_focus: true,
+            });
+            item.add_style_class_name('zhyprbola-key-count-choice');
+            item.add_child(new St.Label({
+                text: stat.label,
+                style_class: 'zhyprbola-key-count-name',
+                x_expand: true,
+                x_align: Clutter.ActorAlign.START,
+            }));
+            const value = new St.Label({
+                text: format.format(stat.value),
+                style_class: 'zhyprbola-key-count-value',
+                x_align: Clutter.ActorAlign.END,
+            });
+            this._keyCountStatLabels.set(stat.key, value);
+            item.add_child(value);
+            item.connect('activate', () => {
+                this._keyCountStatKey = stat.key;
+                this._refreshKeyCountLabels();
+                this._saveKeyCount();
+                menu.close(BoxPointer.PopupAnimation.NONE);
+            });
+            menu.addMenuItem(item);
+        }
+        Main.uiGroup.add_child(menu.actor);
+        menu.actor.hide();
+        this._menuManager.addMenu(menu);
+        this._keyCountMenu = menu;
+        menu.open(BoxPointer.PopupAnimation.NONE);
     }
 
     _openBrightnessMenu(button) {

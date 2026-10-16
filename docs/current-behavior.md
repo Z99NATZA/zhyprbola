@@ -63,7 +63,7 @@ Brightness:   GNOME brightness manager, with ddcutil fallback
 Battery:      UPower percentage, charging state, and remaining/full-charge time
 Input Source: current language code; opens a compact language switcher
 Date & Time:  dock labels; open Settings -> Date & Time, including from overflow
-Key Count:    `keys:<count>` for the current local day; click to open Key Visualizer
+Key Count:    selected statistic, e.g. `keys:7d:1,234`; click for the range popup
 Connections:  crossed-out icons when radios are off; Wi-Fi shows weak/medium/strong signal
               power changes push an immediate status refresh to the dock
 
@@ -82,8 +82,12 @@ English/Thai global input requires GNOME AT-SPI or readable Linux input devices.
 Without permission, keys are captured only while focused.
 
 Daily Key Count runs with the dock and resets when the local date changes. Its
-capture path emits only press markers; persisted state contains only date and count,
-never key names, modifiers, or typed text. Held-key repeat events count as presses.
+capture path emits only press markers; persisted state contains only dates and daily
+counts, never key names, modifiers, or typed text. Held-key repeat events count as
+presses. The popup summarizes today, 7/15 days, this month, rolling 3/6 months,
+this year, the best day, and all time. Its text-only rows select which total is
+shown on the dock; hovering a popup row changes its text color without a
+background or animation.
 ```
 
 ## Tasks
