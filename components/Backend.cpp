@@ -293,6 +293,7 @@ bool validComponentKey(const QString &key) {
 
 QStringList dockComponentKeys() {
     return {QStringLiteral("date-display"), QStringLiteral("time-display"),
+        QStringLiteral("key-count"),
         QStringLiteral("settings"), QStringLiteral("bluetooth"),
         QStringLiteral("wifi"), QStringLiteral("clock-weather"),
         QStringLiteral("system-status"), QStringLiteral("audio-spectrum"),
@@ -526,6 +527,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
                 if (name != QLatin1String("components")
                     && name != QLatin1String("date-display")
                     && name != QLatin1String("time-display")
+                    && name != QLatin1String("key-count")
                     && componentNames.contains(name)
                     && !m_dockVisibleComponents.contains(name)
                     && !m_dockHiddenComponents.contains(name)
@@ -535,6 +537,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
             for (const QString &name : componentNames)
                 if (name != QLatin1String("date-display")
                     && name != QLatin1String("time-display")
+                    && name != QLatin1String("key-count")
                     && !m_dockVisibleComponents.contains(name)
                     && !m_dockHiddenComponents.contains(name)
                     && !m_dockQuickComponents.contains(name))
@@ -542,7 +545,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
                         || name == QLatin1String("battery")
                         || name == QLatin1String("key-visualizer")
                         ? m_dockQuickComponents : m_dockVisibleComponents).append(name);
-            for (const QString &name : {QStringLiteral("time-display"),
+            for (const QString &name : {QStringLiteral("key-count"), QStringLiteral("time-display"),
                      QStringLiteral("date-display")}) {
                 if (!m_dockVisibleComponents.contains(name)
                     && !m_dockHiddenComponents.contains(name))
@@ -762,7 +765,8 @@ void Backend::moveDockComponent(const QString &key, const QString &destination,
         || (key == QLatin1String("settings") && destination != QLatin1String("visible"))
         || ((key == QLatin1String("components")
                 || key == QLatin1String("date-display")
-                || key == QLatin1String("time-display"))
+                || key == QLatin1String("time-display")
+                || key == QLatin1String("key-count"))
             && destination == QLatin1String("quick"))) return;
 
     QStringList visible = m_dockVisibleComponents;

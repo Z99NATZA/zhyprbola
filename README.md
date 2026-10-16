@@ -101,6 +101,11 @@ the panel shows keys typed in other applications only when GNOME grants keyboard
 monitoring or keyboard-device read access. On GNOME Wayland, use the
 "Allow temporarily" button in Key visualizer when prompted.
 
+The dock's Daily Key Count uses the same global-access fallback but receives only
+anonymous press markers. It stores only the local date and total in
+`~/.local/state/zhyprbola/key-count.json`, resets at the next local day, and never
+stores key names or typed text.
+
 Authorization
 ----------
 

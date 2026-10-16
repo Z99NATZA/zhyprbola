@@ -95,7 +95,11 @@ private slots:
         Backend backend;
         QVERIFY(backend.dockVisibleComponents().contains(QStringLiteral("date-display")));
         QVERIFY(backend.dockVisibleComponents().contains(QStringLiteral("time-display")));
+        QVERIFY(backend.dockVisibleComponents().contains(QStringLiteral("key-count")));
         QVERIFY(!backend.dockQuickComponents().contains(QStringLiteral("date-display")));
+        QVERIFY(!backend.dockQuickComponents().contains(QStringLiteral("key-count")));
+        backend.moveDockComponent(QStringLiteral("key-count"), QStringLiteral("quick"), {});
+        QVERIFY(backend.dockVisibleComponents().contains(QStringLiteral("key-count")));
         backend.moveDockComponent(QStringLiteral("date-display"), QStringLiteral("quick"), {});
         QVERIFY(backend.dockVisibleComponents().contains(QStringLiteral("date-display")));
         backend.moveDockComponent(QStringLiteral("date-display"), QStringLiteral("hidden"), {});

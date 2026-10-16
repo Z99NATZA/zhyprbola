@@ -75,8 +75,8 @@ struct Device {
 
 class Capture : public QObject {
 public:
-    explicit Capture(QCoreApplication &app, bool testMode = false) : QObject(&app),
-        m_app(app), m_testMode(testMode),
+    explicit Capture(QCoreApplication &app, bool testMode = false, bool countOnly = false)
+        : QObject(&app), m_app(app), m_testMode(testMode), m_countOnly(countOnly),
         m_settings(g_settings_new("org.gnome.desktop.input-sources")),
         m_keyboardSettings(g_settings_new("org.gnome.desktop.peripherals.keyboard")),
         m_context(xkb_context_new(XKB_CONTEXT_NO_FLAGS), xkb_context_unref),
@@ -475,8 +475,13 @@ private:
         char name[128] = {};
         xkb_keysym_get_name(sym, name, sizeof(name));
         if (event.value == 0) {
+            if (m_countOnly) return;
             send({{QStringLiteral("type"), QStringLiteral("release")},
                 {QStringLiteral("name"), QString::fromLatin1(name)}});
+            return;
+        }
+        if (m_countOnly) {
+            send({{QStringLiteral("type"), QStringLiteral("press")}});
             return;
         }
         const int size = xkb_state_key_get_utf8(m_textState.get(), code, nullptr, 0);
@@ -641,6 +646,7 @@ private:
 
     QCoreApplication &m_app;
     bool m_testMode;
+    bool m_countOnly = false;
     unsigned int m_testLayout = 0;
     GSettings *m_settings;
     GSettings *m_keyboardSettings;
@@ -674,8 +680,9 @@ int main(int argc, char **argv) {
     const bool testMode = sourceSwitchTest || stateRecoveryTest || eventOrderTest
         || repeatTimingTest || app.arguments().contains(
         QStringLiteral("--self-test"));
+    const bool countOnly = app.arguments().contains(QStringLiteral("--count-only"));
     if (testMode) qputenv("GSETTINGS_BACKEND", "memory");
-    Capture capture(app, testMode);
+    Capture capture(app, testMode, countOnly);
     if (!capture.ready()) {
         qWarning("No readable keyboard devices or XKB layout for key capture");
         return 1;

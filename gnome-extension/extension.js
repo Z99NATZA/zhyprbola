@@ -44,6 +44,7 @@ const DEFAULT_DOCK_GROUP_ORDER = ['apps', 'running', 'zhyprbola'];
 const DOCK_COMPONENTS = [
     ['date-display', 'Date'],
     ['time-display', 'Time'],
+    ['key-count', 'Daily Key Count'],
     ['settings', 'Zhyprbola settings'],
     ['bluetooth', 'Bluetooth'],
     ['wifi', 'Wi-Fi'],
@@ -61,6 +62,8 @@ const DOCK_COMPONENTS = [
     ['power', 'Power'],
     ['components', 'Components'],
 ];
+const INLINE_DOCK_COMPONENTS = ['date-display', 'time-display', 'key-count'];
+const KEY_COUNT_ITEM_LENGTH = 82;
 const DEFAULT_PINNED_APPS = [
     ['google-chrome.desktop', 'com.google.Chrome.desktop', 'chromium.desktop'],
     ['org.gnome.Terminal.desktop', 'org.gnome.Console.desktop', 'kgx.desktop',
@@ -148,6 +151,11 @@ export default class ZhyprbolaExtension extends Extension {
         this._inputSourceMenuCloseId = 0;
         this._runningOrder = new Map();
         this._nextRunningOrder = 0;
+        this._keyCountProcess = null;
+        this._keyCountStream = null;
+        this._keyCountCancellable = null;
+        this._keyCountSaveId = 0;
+        this._keyCountRetryId = 0;
         this._themePath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'theme']);
         this._dockPositionPath = GLib.build_filenamev([
@@ -170,6 +178,8 @@ export default class ZhyprbolaExtension extends Extension {
             GLib.get_user_config_dir(), 'zhyprbola', 'dock-components']);
         this._dateTimePath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'date-time']);
+        this._keyCountPath = GLib.build_filenamev([
+            GLib.get_user_state_dir(), 'zhyprbola', 'key-count.json']);
         this._pinnedAppsPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'pinned-apps']);
         this._panelRequestPath = GLib.build_filenamev([
@@ -189,6 +199,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockGroupOrder = this._readDockGroupOrder();
         this._dockComponents = this._readDockComponents();
         this._dateTimeSettings = this._readDateTimeSettings();
+        this._loadKeyCount();
         this._pinnedApps = this._readPinnedApps();
         this._panelRequest = this._readPanelRequest();
         this._connectionRefreshToken = this._readConnectionRefreshToken();
@@ -206,6 +217,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._publishedInputSource = null;
 
         this._createDock();
+        this._startKeyCounter();
         this._refreshConnections();
         this._connectionTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 5, () => {
             this._refreshConnections();
@@ -223,6 +235,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._updateShowDesktopState();
         this._dateTimeTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
             this._refreshDateTimeLabels();
+            this._ensureCurrentKeyCountDate();
             return GLib.SOURCE_CONTINUE;
         });
         this._applyDockPosition();
@@ -275,6 +288,7 @@ export default class ZhyprbolaExtension extends Extension {
 
     disable() {
         this._disabling = true;
+        this._stopKeyCounter();
         this._connectionCancellable?.cancel();
         if (this._connectionTimerId) {
             GLib.source_remove(this._connectionTimerId);
@@ -386,6 +400,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockRenderState = new Map();
         this._panelIcons = new Map();
         this._dateTimeLabels = new Map();
+        this._keyCountLabels = new Set();
         this._menuManager = new ClickOnlyPopupMenuManager(this._dock);
         for (const name of this._dockGroupOrder) {
             const region = new St.Widget({
@@ -529,7 +544,8 @@ export default class ZhyprbolaExtension extends Extension {
         const labels = new Map(DOCK_COMPONENTS);
         this._dockItems.set('zhyprbola', this._dockComponents.visible.map(name => ({
             kind: name === 'input-source' ? 'input-source'
-                : name === 'date-display' || name === 'time-display' ? 'date-time' : 'panel',
+                : name === 'date-display' || name === 'time-display' ? 'date-time'
+                    : name === 'key-count' ? 'key-count' : 'panel',
             name,
             label: labels.get(name),
         })));
@@ -1101,19 +1117,17 @@ export default class ZhyprbolaExtension extends Extension {
                 name !== 'settings' && known.has(name) && !visible.includes(name)))];
             const quick = [...new Set((Array.isArray(saved.quick) ? saved.quick : [])
                 .filter(name => name !== 'settings' && name !== 'components'
-                    && name !== 'date-display'
-                    && name !== 'time-display' && known.has(name) &&
+                    && !INLINE_DOCK_COMPONENTS.includes(name) && known.has(name) &&
                     !visible.includes(name) && !hidden.includes(name)))];
             if (!visible.includes('settings')) visible.push('settings');
             for (const name of defaults) {
                 if (!visible.includes(name) && !hidden.includes(name) &&
-                    !quick.includes(name) && name !== 'date-display'
-                    && name !== 'time-display')
+                    !quick.includes(name) && !INLINE_DOCK_COMPONENTS.includes(name))
                     (name === 'sound' || name === 'brightness' || name === 'battery'
                         || name === 'key-visualizer'
                         ? quick : visible).push(name);
             }
-            for (const name of ['time-display', 'date-display']) {
+            for (const name of ['key-count', 'time-display', 'date-display']) {
                 if (!visible.includes(name) && !hidden.includes(name))
                     visible.unshift(name);
             }
@@ -1213,6 +1227,161 @@ export default class ZhyprbolaExtension extends Extension {
             if (label.text !== value)
                 label.text = value;
         }
+    }
+
+    _localDateKey(now = new Date()) {
+        const pad = value => String(value).padStart(2, '0');
+        return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    }
+
+    _loadKeyCount() {
+        this._keyCountDate = this._localDateKey();
+        this._keyCount = 0;
+        try {
+            const [, contents] = GLib.file_get_contents(this._keyCountPath);
+            const saved = JSON.parse(new TextDecoder().decode(contents));
+            if (saved.date === this._keyCountDate && Number.isSafeInteger(saved.count)
+                && saved.count >= 0)
+                this._keyCount = saved.count;
+        } catch (_) {
+            // A missing or invalid state file starts a fresh daily count.
+        }
+    }
+
+    _ensureCurrentKeyCountDate(now = new Date()) {
+        const date = this._localDateKey(now);
+        if (date === this._keyCountDate)
+            return;
+        this._keyCountDate = date;
+        this._keyCount = 0;
+        this._refreshKeyCountLabels();
+        this._saveKeyCount();
+    }
+
+    _keyCountText() {
+        return `keys:${this._keyCount}`;
+    }
+
+    _refreshKeyCountLabels() {
+        const text = this._keyCountText();
+        for (const label of this._keyCountLabels ?? [])
+            label.text = text;
+    }
+
+    _recordKeyPress() {
+        this._ensureCurrentKeyCountDate();
+        this._keyCount++;
+        this._refreshKeyCountLabels();
+        if (!this._keyCountSaveId) {
+            this._keyCountSaveId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 2, () => {
+                this._keyCountSaveId = 0;
+                this._saveKeyCount();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+    }
+
+    _saveKeyCount() {
+        if (!this._keyCountPath)
+            return;
+        try {
+            GLib.mkdir_with_parents(GLib.path_get_dirname(this._keyCountPath), 0o700);
+            GLib.file_set_contents(this._keyCountPath,
+                `${JSON.stringify({date: this._keyCountDate, count: this._keyCount})}\n`);
+        } catch (error) {
+            logError(error, 'Failed to save daily key count');
+        }
+    }
+
+    _readKeyCounterLine(process, stream, cancellable) {
+        stream.read_line_async(GLib.PRIORITY_DEFAULT, cancellable, (source, result) => {
+            let line;
+            try {
+                [line] = source.read_line_finish_utf8(result);
+            } catch (error) {
+                if (!cancellable.is_cancelled())
+                    logError(error, 'Failed to read daily key counter');
+                return;
+            }
+            if (this._keyCountProcess !== process || line === null)
+                return;
+            try {
+                if (JSON.parse(line).type === 'press')
+                    this._recordKeyPress();
+            } catch (_) {
+                // Ignore malformed helper output and continue reading.
+            }
+            this._readKeyCounterLine(process, stream, cancellable);
+        });
+    }
+
+    _startKeyCounter(useEvdev = false) {
+        if (this._disabling || this._keyCountProcess)
+            return;
+        const script = GLib.build_filenamev([this.path, 'key-count-capture.js']);
+        const helper = GLib.build_filenamev([this.path, 'key-count-command.sh']);
+        const command = useEvdev ? ['bash', helper] : ['gjs', '-m', script];
+        if (!Gio.File.new_for_path(useEvdev ? helper : script).query_exists(null))
+            return;
+        try {
+            const process = Gio.Subprocess.new(command,
+                Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE |
+                Gio.SubprocessFlags.STDERR_SILENCE);
+            const stream = new Gio.DataInputStream({base_stream: process.get_stdout_pipe()});
+            const cancellable = new Gio.Cancellable();
+            this._keyCountProcess = process;
+            this._keyCountStream = stream;
+            this._keyCountCancellable = cancellable;
+            this._readKeyCounterLine(process, stream, cancellable);
+            process.wait_async(null, (source, result) => {
+                try {
+                    source.wait_finish(result);
+                } catch (_) {
+                    // Failure is handled by the fallback/retry below.
+                }
+                if (this._keyCountProcess !== process)
+                    return;
+                cancellable.cancel();
+                this._keyCountProcess = null;
+                this._keyCountStream = null;
+                this._keyCountCancellable = null;
+                if (this._disabling)
+                    return;
+                if (!useEvdev) {
+                    this._startKeyCounter(true);
+                    return;
+                }
+                if (!this._keyCountRetryId) {
+                    this._keyCountRetryId = GLib.timeout_add_seconds(
+                        GLib.PRIORITY_DEFAULT, 30, () => {
+                            this._keyCountRetryId = 0;
+                            this._startKeyCounter(false);
+                            return GLib.SOURCE_REMOVE;
+                        });
+                }
+            });
+        } catch (error) {
+            logError(error, 'Failed to start daily key counter');
+            if (!useEvdev)
+                this._startKeyCounter(true);
+        }
+    }
+
+    _stopKeyCounter() {
+        if (this._keyCountSaveId) {
+            GLib.source_remove(this._keyCountSaveId);
+            this._keyCountSaveId = 0;
+        }
+        if (this._keyCountRetryId) {
+            GLib.source_remove(this._keyCountRetryId);
+            this._keyCountRetryId = 0;
+        }
+        this._saveKeyCount();
+        this._keyCountCancellable?.cancel();
+        this._keyCountProcess?.force_exit();
+        this._keyCountProcess = null;
+        this._keyCountStream = null;
+        this._keyCountCancellable = null;
     }
 
     _readPinnedApps() {
@@ -1998,6 +2167,8 @@ export default class ZhyprbolaExtension extends Extension {
     _dockItemLength(item) {
         if (item.kind === 'date-time')
             return this._dateTimeItemLength(item.name);
+        if (item.kind === 'key-count')
+            return KEY_COUNT_ITEM_LENGTH;
         const name = this._connectionName(item.name);
         if (!name)
             return DOCK_CONFIG.buttonSize;
@@ -2133,6 +2304,46 @@ export default class ZhyprbolaExtension extends Extension {
         return button;
     }
 
+    _createKeyCountWidget(vertical) {
+        const label = new St.Label({
+            text: this._keyCountText(),
+            style_class: 'zhyprbola-dock-datetime-label zhyprbola-dock-key-count-label',
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        this._keyCountLabels.add(label);
+        let child = label;
+        if (vertical) {
+            label.set_size(KEY_COUNT_ITEM_LENGTH - 8, DOCK_CONFIG.buttonSize);
+            const widget = new St.Widget({
+                style_class: 'zhyprbola-dock-datetime zhyprbola-dock-key-count',
+                layout_manager: new Clutter.FixedLayout(),
+                width: DOCK_CONFIG.buttonSize,
+                height: KEY_COUNT_ITEM_LENGTH,
+            });
+            label.set_pivot_point(0.5, 0.5);
+            label.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, -90);
+            label.set_position((DOCK_CONFIG.buttonSize - KEY_COUNT_ITEM_LENGTH + 8) / 2,
+                (KEY_COUNT_ITEM_LENGTH - DOCK_CONFIG.buttonSize) / 2);
+            widget.add_child(label);
+            child = widget;
+        }
+        const button = new St.Button({
+            style_class: 'zhyprbola-dock-button zhyprbola-dock-datetime-button ' +
+                'zhyprbola-dock-key-count-button',
+            child,
+            can_focus: true,
+            reactive: true,
+            track_hover: true,
+            accessible_name: 'Daily key count; open Key Visualizer',
+        });
+        button.set_size(vertical ? DOCK_CONFIG.buttonSize : KEY_COUNT_ITEM_LENGTH,
+            vertical ? KEY_COUNT_ITEM_LENGTH : DOCK_CONFIG.buttonSize);
+        button.connect('clicked', () => this._openPanel('key-visualizer'));
+        return button;
+    }
+
     _openDateTimeSettings() {
         try {
             GLib.mkdir_with_parents(GLib.path_get_dirname(this._settingsSectionRequestPath),
@@ -2209,6 +2420,7 @@ export default class ZhyprbolaExtension extends Extension {
             this._inputSourceButton = null;
             this._inputSourceLabel = null;
             this._dateTimeLabels.clear();
+            this._keyCountLabels?.clear();
             this._powerMenu?.destroy();
             this._powerMenu = null;
             this._panelIcons.clear();
@@ -2246,6 +2458,8 @@ export default class ZhyprbolaExtension extends Extension {
                 ? this._createInputSourceButton()
                 : item.kind === 'date-time'
                 ? this._createDateTimeWidget(item.name, vertical)
+                : item.kind === 'key-count'
+                ? this._createKeyCountWidget(vertical)
                 : item.kind === 'panel'
                 ? this._createPanelButton({iconName: item.name,
                     accessibleName: item.label, panelName: item.name})
@@ -2301,6 +2515,11 @@ export default class ZhyprbolaExtension extends Extension {
                     ? this._formatDockDate() : this._formatDockTime();
                 menu.addAction(`${item.label}: ${value}`,
                     () => this._openDateTimeSettings());
+                continue;
+            }
+            if (item.kind === 'key-count') {
+                menu.addAction(`${item.label}: ${this._keyCount}`,
+                    () => this._openPanel('key-visualizer'));
                 continue;
             }
             const icon = item.kind === 'panel'
@@ -2699,7 +2918,7 @@ export default class ZhyprbolaExtension extends Extension {
         const regionCount = this._dockGroupOrder.length;
         const dateTimeIndex = this._dockGroupOrder.indexOf('zhyprbola');
         const hasDateTime = this._dockComponents.visible.some(name =>
-            name === 'date-display' || name === 'time-display' || this._connectionName(name));
+            INLINE_DOCK_COMPONENTS.includes(name) || this._connectionName(name));
         let regionLengths = Array.from({length: regionCount}, (_, index) =>
             Math.floor(available * (index + 1) / regionCount) -
             Math.floor(available * index / regionCount));

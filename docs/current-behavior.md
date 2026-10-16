@@ -29,7 +29,7 @@ Hidden:  not shown
 Quick:   inside the Components popup
 
 Sound, Brightness, Battery, and Key Visualizer start in Quick.
-Date and Time cannot move to Quick. Settings cannot leave Show.
+Date, Time, and Daily Key Count cannot move to Quick. Settings cannot leave Show.
 
 Settings -> Opacity: drag surfaces between Opacity and Default; range 0-100%.
 Settings and Screenshots can move between these lists.
@@ -63,6 +63,7 @@ Brightness:   GNOME brightness manager, with ddcutil fallback
 Battery:      UPower percentage, charging state, and remaining/full-charge time
 Input Source: current language code; opens a compact language switcher
 Date & Time:  dock labels; open Settings -> Date & Time, including from overflow
+Key Count:    `keys:<count>` for the current local day; click to open Key Visualizer
 Connections:  crossed-out icons when radios are off; Wi-Fi shows weak/medium/strong signal
               power changes push an immediate status refresh to the dock
 
@@ -79,6 +80,10 @@ Font, padding, or alignment changes show hello ␣ world for five seconds.
 The next typed key replaces the preview. Legacy padding initializes both axes.
 English/Thai global input requires GNOME AT-SPI or readable Linux input devices.
 Without permission, keys are captured only while focused.
+
+Daily Key Count runs with the dock and resets when the local date changes. Its
+capture path emits only press markers; persisted state contains only date and count,
+never key names, modifiers, or typed text. Held-key repeat events count as presses.
 ```
 
 ## Tasks

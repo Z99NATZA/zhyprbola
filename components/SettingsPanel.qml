@@ -139,7 +139,8 @@ Item {
                 && key !== "power"
                 && key !== "components"
                 && key !== "date-display"
-                && key !== "time-display")
+                && key !== "time-display"
+                && key !== "key-count")
     }
 
     function beginGroupDrag(name, point, offsetX, offsetY) {
@@ -226,7 +227,8 @@ Item {
                 && (draggedComponent !== "settings" || zone.zoneKey === "visible")
                 && (zone.zoneKey !== "quick" || (draggedComponent !== "components"
                     && draggedComponent !== "date-display"
-                    && draggedComponent !== "time-display"))) {
+                    && draggedComponent !== "time-display"
+                    && draggedComponent !== "key-count"))) {
                 destination = zone
                 localPoint = local
                 break
@@ -1577,10 +1579,11 @@ Item {
             ? (zoneKey === "visible" ? panel.componentPreviewShow
                 : zoneKey === "hidden" ? panel.componentPreviewHidden
                 : panel.componentPreviewQuick) : items
+        readonly property int rowCount: Math.max(2, Math.ceil(displayOrder.length / 9))
         objectName: "dock-zone-" + zoneKey
 
         width: panel.contentWidth
-        height: 136
+        height: 62 + rowCount * 37
         radius: 12
         color: dropHovered ? Theme.selected : Theme.control
         border.width: dropHovered ? 2 : 0

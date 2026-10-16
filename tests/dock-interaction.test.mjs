@@ -559,6 +559,56 @@ test('Date and Time enter the dock as labels, not panel launchers', () => {
         ['date-time', 'date-time']);
 });
 
+test('Daily Key Count defaults beside date and time and renders as an inline label', () => {
+    const {dock} = fixture();
+    const fresh = dock._readDockComponents();
+    assert.equal(fresh.visible.includes('key-count'), true);
+    assert.equal(fresh.quick.includes('key-count'), false);
+    dock._dockGroupsByName.set('zhyprbola', new Actor());
+    dock._dockComponents.visible = ['date-display', 'time-display', 'key-count'];
+    dock._createComponentButtons();
+    assert.deepEqual(dock._dockItems.get('zhyprbola').map(item => item.kind),
+        ['date-time', 'date-time', 'key-count']);
+});
+
+test('Daily Key Count updates immediately and resets on the next local date', () => {
+    const {dock} = fixture();
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(now.getDate() + 1);
+    dock._keyCount = 41;
+    dock._keyCountDate = dock._localDateKey(now);
+    dock._keyCountLabels = new Set([{text: ''}]);
+    dock._keyCountSaveId = 1;
+    dock._recordKeyPress();
+    assert.equal(dock._keyCount, 42);
+    assert.equal([...dock._keyCountLabels][0].text, 'keys:42');
+    dock._saveKeyCount = () => {};
+    dock._ensureCurrentKeyCountDate(tomorrow);
+    assert.equal(dock._keyCount, 0);
+    assert.equal(dock._keyCountDate, dock._localDateKey(tomorrow));
+    assert.equal([...dock._keyCountLabels][0].text, 'keys:0');
+});
+
+test('Daily Key Count is clickable and rotates with a vertical dock', () => {
+    const {dock} = fixture();
+    dock._keyCount = 1234;
+    dock._keyCountLabels = new Set();
+    dock._dateTimeLabels = new Map();
+    dock._dockItems.set('running', [{kind: 'key-count', name: 'key-count'}]);
+    let opened = '';
+    dock._openPanel = name => { opened = name; };
+    const group = dock._dockGroupsByName.get('running');
+    dock._renderDockRegion('running', 200, false, 0);
+    assert.equal(group.children[0].width, 82);
+    assert.equal(group.children[0].children[0].text, 'keys:1234');
+    group.children[0].emit('clicked');
+    assert.equal(opened, 'key-visualizer');
+    dock._renderDockRegion('running', 200, true, 0);
+    assert.equal(group.children[0].height, 82);
+    assert.equal(group.children[0].children[0].children[0].angle, -90);
+});
+
 test('dock date and time follow locale, format and seconds settings', () => {
     const {dock} = fixture();
     const now = new Date(2026, 9, 7, 15, 14, 9);

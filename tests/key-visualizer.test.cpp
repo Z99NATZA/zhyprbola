@@ -486,7 +486,7 @@ private slots:
         QVERIFY(supportedRepeater);
         QVERIFY(opaqueRepeater);
         QCOMPARE(supportedRepeater->property("count").toInt(), 11);
-        QCOMPARE(opaqueRepeater->property("count").toInt(), 8);
+        QCOMPARE(opaqueRepeater->property("count").toInt(), 9);
         QCOMPARE(surface->property("color").value<QColor>().alpha(), 89);
         QCOMPARE(box->property("color").value<QColor>().alpha(), 89);
         QCOMPARE(supported->property("color").value<QColor>().alpha(), 89);
@@ -525,7 +525,7 @@ private slots:
         QVERIFY(backend.opacityDisabledComponents().contains(QStringLiteral("settings")));
         QTRY_COMPARE(surface->property("color").value<QColor>().alpha(), 255);
         QTRY_COMPARE(supportedRepeater->property("count").toInt(), 10);
-        QTRY_COMPARE(opaqueRepeater->property("count").toInt(), 9);
+        QTRY_COMPARE(opaqueRepeater->property("count").toInt(), 10);
 
         backend.moveOpacityComponent(QStringLiteral("screenshots"), QStringLiteral("default"), {});
         QTRY_VERIFY(observer.opacityDisabledComponents().contains(QStringLiteral("screenshots")));

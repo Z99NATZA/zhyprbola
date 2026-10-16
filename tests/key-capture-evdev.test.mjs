@@ -20,6 +20,17 @@ test('evdev helper maps English, modifiers, Thai and special keys',
         ['space', 'BackSpace', 'Return']);
 });
 
+test('evdev count-only mode never emits key identity or typed text',
+    {skip: !existsSync(helper) && 'run make build first'}, () => {
+    const result = spawnSync(helper.pathname, ['--self-test', '--count-only'],
+        {encoding: 'utf8'});
+    assert.equal(result.status, 0, result.stderr);
+    const events = result.stdout.trim().split('\n').map(JSON.parse);
+    assert.ok(events.length > 0);
+    assert.ok(events.every(event => event.type === 'press'));
+    assert.ok(events.every(event => Object.keys(event).length === 1));
+});
+
 test('evdev helper follows GNOME input-source changes across windows',
     {skip: !existsSync(helper) && 'run make build first'}, () => {
     const result = spawnSync(helper.pathname, ['--self-test-source-switch'],

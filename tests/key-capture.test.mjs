@@ -77,3 +77,49 @@ test('denied keyboard monitor never reports ready', () => {
         /Global keyboard monitoring was denied: Access denied/);
     assert.deepEqual(output, []);
 });
+
+test('daily counter emits only press markers and stops when the parent closes', () => {
+    const listeners = new Map();
+    const output = [];
+    let monitorCall;
+    let parentClosed;
+    let loopQuit = false;
+    const device = {
+        get_capabilities: () => 1,
+        connect: (name, callback) => listeners.set(name, callback),
+    };
+    const context = vm.createContext({
+        Atspi: {
+            init() {},
+            Device: {new: () => device},
+            DeviceCapability: {KEYBOARD_MONITOR: 1},
+        },
+        Gio: {
+            DBus: {session: {call_sync: (...args) => { monitorCall = args; return {}; }}},
+            DBusCallFlags: {NONE: 0},
+        },
+        GLib: {
+            MainLoop: class { run() {} quit() { loopQuit = true; } },
+            IOChannel: {unix_new: () => ({})},
+            IOCondition: {HUP: 16, ERR: 8},
+            PRIORITY_DEFAULT: 0,
+            SOURCE_REMOVE: false,
+            io_add_watch: (_channel, _priority, _condition, callback) => {
+                parentClosed = callback;
+            },
+        },
+        print: line => output.push(JSON.parse(line)),
+    });
+    const source = readFileSync(new URL('../scripts/key-count-capture.js', import.meta.url),
+        'utf8');
+    vm.runInContext(source.replace(/^import .*;\n/gm, ''), context);
+
+    assert.equal(monitorCall[0], 'org.gnome.Shell');
+    assert.equal(monitorCall[2], 'org.freedesktop.a11y.KeyboardMonitor');
+    assert.deepEqual(output, [{type: 'ready'}]);
+    listeners.get('key-pressed')(device, 38, 0x61, 0, 'secret');
+    assert.deepEqual(output.at(-1), {type: 'press'});
+    assert.deepEqual(Object.keys(output.at(-1)), ['type']);
+    assert.equal(parentClosed(), false);
+    assert.equal(loopQuit, true);
+});
