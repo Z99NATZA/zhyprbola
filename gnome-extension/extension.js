@@ -717,6 +717,7 @@ export default class ZhyprbolaExtension extends Extension {
             favoritesSection: false,
             showSingleWindows: true,
         });
+        menu.actor.add_style_class_name('zhyprbola-app-menu');
         menu.setApp(app);
         if (delegate.groupName === 'running' && this._dockUngroupWindows && window) {
             // GNOME's AppMenu Quit action targets Shell.App and can therefore
