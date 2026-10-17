@@ -163,6 +163,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._keyCountStream = null;
         this._keyCountCancellable = null;
         this._keyCountSaveId = 0;
+        this._keyCountStageId = 0;
+        this._keyCountReady = false;
         this._keyCountRetryId = 0;
         this._themePath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'theme']);
@@ -1375,6 +1377,21 @@ export default class ZhyprbolaExtension extends Extension {
         }
     }
 
+    _onKeyCountEvent(event) {
+        if (!this._disabling && !this._keyCountReady &&
+            event.type() === Clutter.EventType.KEY_PRESS)
+            this._recordKeyPress();
+        return Clutter.EVENT_PROPAGATE;
+    }
+
+    _setKeyCounterReady(ready) {
+        this._keyCountReady = ready;
+        if (this._keyCountStatusLabel)
+            this._keyCountStatusLabel.text = ready
+                ? 'Counting across applications'
+                : 'Limited to GNOME events — allow access for other apps';
+    }
+
     _readKeyCounterLine(process, stream, cancellable) {
         stream.read_line_async(GLib.PRIORITY_DEFAULT, cancellable, (source, result) => {
             let line;
@@ -1388,7 +1405,10 @@ export default class ZhyprbolaExtension extends Extension {
             if (this._keyCountProcess !== process || line === null)
                 return;
             try {
-                if (JSON.parse(line).type === 'press')
+                const type = JSON.parse(line).type;
+                if (type === 'ready' || type === 'press')
+                    this._setKeyCounterReady(true);
+                if (type === 'press')
                     this._recordKeyPress();
             } catch (_) {
                 // Ignore malformed helper output and continue reading.
@@ -1400,6 +1420,11 @@ export default class ZhyprbolaExtension extends Extension {
     _startKeyCounter(useEvdev = false) {
         if (this._disabling || this._keyCountProcess)
             return;
+        // Like KeyVizz, keep Shell events available when global access is denied.
+        // A ready helper takes exclusive ownership to avoid counting twice.
+        if (!this._keyCountStageId)
+            this._keyCountStageId = global.stage.connect('captured-event',
+                (_actor, event) => this._onKeyCountEvent(event));
         const script = GLib.build_filenamev([this.path, 'key-count-capture.js']);
         const helper = GLib.build_filenamev([this.path, 'key-count-command.sh']);
         const command = useEvdev ? ['bash', helper] : ['gjs', '-m', script];
@@ -1424,6 +1449,7 @@ export default class ZhyprbolaExtension extends Extension {
                 if (this._keyCountProcess !== process)
                     return;
                 cancellable.cancel();
+                this._setKeyCounterReady(false);
                 this._keyCountProcess = null;
                 this._keyCountStream = null;
                 this._keyCountCancellable = null;
@@ -1450,6 +1476,12 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _stopKeyCounter() {
+        if (this._keyCountStageId) {
+            global.stage.disconnect(this._keyCountStageId);
+            this._keyCountStageId = 0;
+        }
+        this._setKeyCounterReady(false);
+        this._keyCountStatusLabel = null;
         if (this._keyCountSaveId) {
             GLib.source_remove(this._keyCountSaveId);
             this._keyCountSaveId = 0;
@@ -2810,6 +2842,23 @@ export default class ZhyprbolaExtension extends Extension {
             });
             menu.addMenuItem(item);
         }
+        const status = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
+        const statusLabel = new St.Label({text: '', style_class: 'zhyprbola-key-count-name'});
+        status.add_child(statusLabel);
+        menu.addMenuItem(status);
+        this._keyCountStatusLabel = statusLabel;
+        this._setKeyCounterReady(this._keyCountReady);
+        menu.actor.connect('destroy', () => {
+            if (this._keyCountStatusLabel === statusLabel)
+                this._keyCountStatusLabel = null;
+        });
+        const access = new PopupMenu.PopupBaseMenuItem({reactive: true, can_focus: true});
+        access.add_child(new St.Label({text: 'Keyboard access…'}));
+        access.connect('activate', () => {
+            menu.close(BoxPointer.PopupAnimation.NONE);
+            this._openPanel('key-visualizer');
+        });
+        menu.addMenuItem(access);
         Main.uiGroup.add_child(menu.actor);
         menu.actor.hide();
         this._menuManager.addMenu(menu);

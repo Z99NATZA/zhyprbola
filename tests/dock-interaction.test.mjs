@@ -689,8 +689,8 @@ test('Key statistics choices update the dock and open without animation', () => 
     dock._keyCountDate = '2026-10-16';
     dock._keyCountDays = {'2026-10-15': 100, '2026-10-16': 1234};
     dock._keyCountLabels = new Set([{text: ''}]);
-    const localDateKey = dock._localDateKey.bind(dock);
-    dock._localDateKey = now => now ? localDateKey(now) : '2026-10-16';
+    const stats = dock._keyCountStats.bind(dock);
+    dock._keyCountStats = () => stats(new Date(2026, 9, 16));
     const button = new Actor();
     dock._openKeyCountMenu(button);
     assert.equal(dock._keyCountMenu.isOpen, true);
@@ -1270,4 +1270,64 @@ test('Wi-Fi signal changes rerender the dock icon', () => {
     dock._connectionStates.wifi.strength = 90;
     render();
     assert.equal(group.children[0].children[0].children[0].gicon, 'wifi-strong');
+});
+
+
+test('key counter falls back to Shell presses and avoids duplicates with a ready helper', () => {
+    const {dock, context} = fixture();
+    context.Clutter.EventType = {KEY_PRESS: 1, KEY_RELEASE: 2};
+    context.Clutter.EVENT_PROPAGATE = 0;
+    let count = 0;
+    dock._recordKeyPress = () => count++;
+    const press = {type: () => 1};
+    const release = {type: () => 2};
+    assert.equal(dock._onKeyCountEvent(press), 0);
+    dock._onKeyCountEvent(release);
+    assert.equal(count, 1);
+    dock._setKeyCounterReady(true);
+    dock._onKeyCountEvent(press);
+    assert.equal(count, 1);
+    dock._setKeyCounterReady(false);
+    dock._onKeyCountEvent(press);
+    assert.equal(count, 2);
+    dock._disabling = true;
+    dock._onKeyCountEvent(press);
+    assert.equal(count, 2);
+});
+
+test('key count menu explains limited access and opens the existing authorization panel', () => {
+    const {dock} = fixture();
+    dock._keyCountDays = {};
+    dock._openKeyCountMenu(new Actor());
+    assert.match(dock._keyCountStatusLabel.text, /Limited to GNOME/);
+    dock._setKeyCounterReady(true);
+    assert.equal(dock._keyCountStatusLabel.text, 'Counting across applications');
+    let opened;
+    dock._openPanel = name => { opened = name; };
+    dock._keyCountMenu.items.at(-1).emit('activate');
+    assert.equal(opened, 'key-visualizer');
+    dock._keyCountMenu.destroy();
+    assert.equal(dock._keyCountStatusLabel, null);
+});
+
+
+test('helper readiness switches counting and stale helper output is ignored', () => {
+    const {dock, context} = fixture();
+    context.GLib.PRIORITY_DEFAULT = 0;
+    const process = {};
+    dock._keyCountProcess = process;
+    let count = 0;
+    dock._recordKeyPress = () => count++;
+    const lines = ['{"type":"ready"}', '{"type":"press"}', null];
+    const stream = {
+        read_line_async(_priority, _cancel, callback) { callback(this, {}); },
+        read_line_finish_utf8() { return [lines.shift()]; },
+    };
+    dock._readKeyCounterLine(process, stream, {});
+    assert.equal(dock._keyCountReady, true);
+    assert.equal(count, 1);
+    lines.push('{"type":"press"}');
+    dock._keyCountProcess = {};
+    dock._readKeyCounterLine(process, stream, {});
+    assert.equal(count, 1);
 });

@@ -102,7 +102,13 @@ monitoring or keyboard-device read access. On GNOME Wayland, use the
 "Allow temporarily" button in Key visualizer when prompted.
 
 The dock's Daily Key Count uses the same global-access fallback but receives only
-anonymous press markers. It stores a total for each local date in
+anonymous press markers. When global access is unavailable it falls back to
+GNOME Shell captured events, like KeyVizz; this may only count Shell interactions
+on Wayland. The statistics menu shows whether counting is global or limited.
+Choose **Keyboard access…**, then **Allow temporarily** in Key Visualizer to
+allow counting in other applications. The counter retries global access every
+30 seconds and stops counting Shell events once the global helper is ready, so
+presses are not counted twice. It stores a total for each local date in
 `~/.local/state/zhyprbola/key-count.json`, starts a new total at the next local
 day, and never stores key names or typed text. Clicking the dock text opens
 statistics for today, 7/15 days, this month, rolling 3/6 months, this year, the
