@@ -78,7 +78,7 @@ test('denied keyboard monitor never reports ready', () => {
     assert.deepEqual(output, []);
 });
 
-test('daily counter emits only press markers and stops when the parent closes', () => {
+test('daily counter emits one anonymous marker per physical press and stops with parent', () => {
     const listeners = new Map();
     const output = [];
     let monitorCall;
@@ -120,6 +120,11 @@ test('daily counter emits only press markers and stops when the parent closes', 
     listeners.get('key-pressed')(device, 38, 0x61, 0, 'secret');
     assert.deepEqual(output.at(-1), {type: 'press'});
     assert.deepEqual(Object.keys(output.at(-1)), ['type']);
+    listeners.get('key-pressed')(device, 38, 0x61, 0, 'secret');
+    assert.equal(output.length, 2, 'held-key repeats must not increment the counter');
+    listeners.get('key-released')(device, 38, 0x61, 0, '');
+    listeners.get('key-pressed')(device, 38, 0x61, 0, 'secret');
+    assert.equal(output.length, 3, 'a new press after release must be counted');
     assert.equal(parentClosed(), false);
     assert.equal(loopQuit, true);
 });

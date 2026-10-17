@@ -124,3 +124,12 @@ test('evdev repeats using GNOME timing, stops on release and respects disabled r
     assert.deepEqual(events.slice(releasedB + 1).map(event => [event.type, event.name]),
         [['release', 'a'], ['press', 'c'], ['release', 'c']]);
 });
+
+test('evdev count-only mode counts a held key once',
+    {skip: !existsSync(helper) && 'run make build first'}, () => {
+    const result = spawnSync(helper.pathname,
+        ['--self-test-repeat-timing', '--count-only'], {encoding: 'utf8'});
+    assert.equal(result.status, 0, result.stderr);
+    const events = result.stdout.trim().split('\n').map(JSON.parse);
+    assert.deepEqual(events, [{type: 'press'}, {type: 'press'}, {type: 'press'}]);
+});

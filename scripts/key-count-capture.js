@@ -20,8 +20,16 @@ try {
     throw new Error(`Global keyboard monitoring was denied: ${error.message}`);
 }
 
-// The counter intentionally emits no key code, symbol, modifier, or text.
-device.connect('key-pressed', () => print('{"type":"press"}'));
+// Keep key identity only in memory long enough to suppress auto-repeat. The
+// counter output still contains no key code, symbol, modifier, or text.
+const pressed = new Set();
+device.connect('key-pressed', (_device, hwCode) => {
+    if (pressed.has(hwCode))
+        return;
+    pressed.add(hwCode);
+    print('{"type":"press"}');
+});
+device.connect('key-released', (_device, hwCode) => pressed.delete(hwCode));
 
 const loop = new GLib.MainLoop(null, false);
 const parentInput = GLib.IOChannel.unix_new(0);

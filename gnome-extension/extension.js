@@ -165,6 +165,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._keyCountSaveId = 0;
         this._keyCountStageId = 0;
         this._keyCountReady = false;
+        this._keyCountPressed = new Set();
         this._keyCountGrantProcess = null;
         this._keyCountAccessMessage = null;
         this._keyCountRetryId = 0;
@@ -1380,8 +1381,17 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _onKeyCountEvent(event) {
-        if (!this._disabling && !this._keyCountReady &&
-            event.type() === Clutter.EventType.KEY_PRESS)
+        const type = event.type();
+        if (type !== Clutter.EventType.KEY_PRESS && type !== Clutter.EventType.KEY_RELEASE)
+            return Clutter.EVENT_PROPAGATE;
+        const code = event.get_key_code();
+        if (type === Clutter.EventType.KEY_RELEASE) {
+            this._keyCountPressed.delete(code);
+            return Clutter.EVENT_PROPAGATE;
+        }
+        const repeated = this._keyCountPressed.has(code);
+        this._keyCountPressed.add(code);
+        if (!repeated && !this._disabling && !this._keyCountReady)
             this._recordKeyPress();
         return Clutter.EVENT_PROPAGATE;
     }
@@ -1547,6 +1557,7 @@ export default class ZhyprbolaExtension extends Extension {
             global.stage.disconnect(this._keyCountStageId);
             this._keyCountStageId = 0;
         }
+        this._keyCountPressed.clear();
         this._setKeyCounterReady(false);
         this._keyCountStatusLabel = null;
         if (this._keyCountSaveId) {

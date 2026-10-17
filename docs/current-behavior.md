@@ -83,8 +83,9 @@ Without permission, keys are captured only while focused.
 
 Daily Key Count runs with the dock and resets when the local date changes. Its
 capture path emits only press markers; persisted state contains only dates and daily
-counts, never key names, modifiers, or typed text. Held-key repeat events count as
-presses. The popup summarizes today, 7/15 days, this month, rolling 3/6 months,
+counts, never key names, modifiers, or typed text. Holding a key counts once until
+that key is released and pressed again. The popup summarizes today, 7/15 days,
+this month, rolling 3/6 months,
 this year, the best day, and all time. Its text-only rows select which total is
 shown on the dock; hovering a popup row changes its text color without a
 background or animation.

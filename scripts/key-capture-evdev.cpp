@@ -451,6 +451,7 @@ private:
             || event.value < 0 || event.value > 2) return;
         auto &pressed = devicePressed ? *devicePressed : m_testPressed;
         if (event.value == 2) {
+            if (m_countOnly) return;
             // Repeats produce display events without another XKB key-down:
             // the physical key is already held and must only be released once.
             if (!m_keyCounts.contains(event.code)
@@ -460,7 +461,8 @@ private:
             if (!updatePressed(pressed, event.code, event.value == 1)) return;
             // Mirrored interfaces represent a single logical key-down.
             if (event.value == 1 && wasDown) return;
-            if (event.value == 1 && xkb_keymap_key_repeats(m_keymap.get(), event.code + 8)) {
+            if (!m_countOnly && event.value == 1
+                && xkb_keymap_key_repeats(m_keymap.get(), event.code + 8)) {
                 m_repeatKey = event.code;
                 m_repeatDeadline = monotonicMilliseconds()
                     + std::max(1u, g_settings_get_uint(m_keyboardSettings, "delay"));

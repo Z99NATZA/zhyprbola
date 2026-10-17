@@ -1274,23 +1274,28 @@ test('Wi-Fi signal changes rerender the dock icon', () => {
 });
 
 
-test('key counter falls back to Shell presses and avoids duplicates with a ready helper', () => {
+test('key counter fallback suppresses held repeats and avoids a ready helper', () => {
     const {dock, context} = fixture();
     context.Clutter.EventType = {KEY_PRESS: 1, KEY_RELEASE: 2};
     context.Clutter.EVENT_PROPAGATE = 0;
     let count = 0;
     dock._recordKeyPress = () => count++;
-    const press = {type: () => 1};
-    const release = {type: () => 2};
+    dock._keyCountPressed = new Set();
+    const press = {type: () => 1, get_key_code: () => 38};
+    const release = {type: () => 2, get_key_code: () => 38};
     assert.equal(dock._onKeyCountEvent(press), 0);
+    dock._onKeyCountEvent(press);
+    assert.equal(count, 1);
     dock._onKeyCountEvent(release);
     assert.equal(count, 1);
     dock._setKeyCounterReady(true);
     dock._onKeyCountEvent(press);
     assert.equal(count, 1);
+    dock._onKeyCountEvent(release);
     dock._setKeyCounterReady(false);
     dock._onKeyCountEvent(press);
     assert.equal(count, 2);
+    dock._onKeyCountEvent(release);
     dock._disabling = true;
     dock._onKeyCountEvent(press);
     assert.equal(count, 2);
