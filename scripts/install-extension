@@ -20,6 +20,7 @@ gnome-extensions pack "$ROOT_DIR/gnome-extension" \
   --extra-source="$PACK_DIR/panel-command.sh" \
   --extra-source="$PACK_DIR/key-count-command.sh" \
   --extra-source="$ROOT_DIR/scripts/key-count-capture.js" \
+  --extra-source="$ROOT_DIR/scripts/grant-key-capture" \
   --extra-source="$ROOT_DIR/gnome-extension/soundMenu.js" \
   --extra-source="$ROOT_DIR/gnome-extension/brightnessMenu.js" \
   --extra-source="$ROOT_DIR/gnome-extension/batteryMenu.js" \

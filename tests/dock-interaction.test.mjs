@@ -60,7 +60,7 @@ class Actor {
     set_style() { this.live(); }
     set_pivot_point(x, y) { Object.assign(this, {pivotX: x, pivotY: y}); }
     set_rotation_angle(axis, angle) { Object.assign(this, {rotationAxis: axis, angle}); }
-    add_style_class_name() { this.live(); }
+    add_style_class_name(name) { this.live(); (this.styleClasses ??= []).push(name); }
     remove_style_class_name() { this.live(); }
     add_style_pseudo_class() { this.live(); }
     remove_style_pseudo_class() { this.live(); }
@@ -102,6 +102,7 @@ class StaticPopupMenu {
 }
 
 class StaticPopupMenuItem extends Actor {
+    setSensitive(value) { this.sensitive = value; }
     constructor(props = {}) {
         assert.equal(Object.hasOwn(props, 'track_hover'), false,
             'PopupBaseMenuItem does not accept track_hover');
@@ -1295,17 +1296,23 @@ test('key counter falls back to Shell presses and avoids duplicates with a ready
     assert.equal(count, 2);
 });
 
-test('key count menu explains limited access and opens the existing authorization panel', () => {
+test('key count access uses existing choice styling and hides when ready', () => {
     const {dock} = fixture();
     dock._keyCountDays = {};
     dock._openKeyCountMenu(new Actor());
     assert.match(dock._keyCountStatusLabel.text, /Limited to GNOME/);
+    const access = dock._keyCountAccessItem;
+    assert.ok(access.styleClasses.includes('zhyprbola-key-count-choice'));
+    assert.equal(access.visible, true);
+    let requested = false;
+    dock._grantKeyCountAccess = () => { requested = true; };
+    access.emit('activate');
+    assert.equal(requested, true);
     dock._setKeyCounterReady(true);
     assert.equal(dock._keyCountStatusLabel.text, 'Counting across applications');
-    let opened;
-    dock._openPanel = name => { opened = name; };
-    dock._keyCountMenu.items.at(-1).emit('activate');
-    assert.equal(opened, 'key-visualizer');
+    assert.equal(access.visible, false);
+    dock._setKeyCounterReady(false);
+    assert.equal(access.visible, true);
     dock._keyCountMenu.destroy();
     assert.equal(dock._keyCountStatusLabel, null);
 });
@@ -1330,4 +1337,65 @@ test('helper readiness switches counting and stale helper output is ignored', ()
     dock._keyCountProcess = {};
     dock._readKeyCounterLine(process, stream, {});
     assert.equal(count, 1);
+});
+
+
+test('direct keyboard authorization waits, retries after denial, and reconnects on success', () => {
+    const {dock, context} = fixture();
+    dock.path = '/extension';
+    dock._keyCountDays = {};
+    dock._openKeyCountMenu(new Actor());
+    context.GLib.build_filenamev = parts => parts.join('/');
+    context.GLib.source_remove = () => {};
+    let callback;
+    let success = false;
+    let launches = 0;
+    const process = {
+        wait_async(_cancel, cb) { callback = cb; },
+        wait_finish() {}, get_successful: () => success,
+    };
+    context.Gio = {
+        SubprocessFlags: {STDOUT_SILENCE: 1, STDERR_SILENCE: 2},
+        Subprocess: {new(args) {
+            assert.deepEqual(Array.from(args), ['pkexec', '/extension/grant-key-capture']);
+            launches++;
+            return process;
+        }},
+    };
+    dock._grantKeyCountAccess();
+    assert.equal(dock._keyCountStatusLabel.text, 'Waiting for permission…');
+    assert.equal(dock._keyCountAccessItem.sensitive, false);
+    dock._grantKeyCountAccess();
+    assert.equal(launches, 1);
+    callback(process, {});
+    assert.match(dock._keyCountStatusLabel.text, /cancelled or unavailable/);
+    assert.equal(dock._keyCountAccessItem.sensitive, true);
+    let restarted = false;
+    dock._startKeyCounter = evdev => { restarted = evdev; };
+    dock._keyCountRetryId = 123;
+    success = true;
+    dock._grantKeyCountAccess();
+    callback(process, {});
+    assert.equal(restarted, true);
+    assert.equal(dock._keyCountRetryId, 0);
+    dock._setKeyCounterReady(true);
+    dock._grantKeyCountAccess();
+    assert.equal(launches, 2);
+});
+
+test('authorization spawn errors remain retryable and late callbacks are ignored', () => {
+    const {dock, context} = fixture();
+    dock._keyCountDays = {};
+    dock._openKeyCountMenu(new Actor());
+    context.GLib.build_filenamev = parts => parts.join('/');
+    context.Gio = {SubprocessFlags: {}, Subprocess: {new() { throw Error('missing'); }}};
+    dock._grantKeyCountAccess();
+    assert.match(dock._keyCountStatusLabel.text, /Could not request permission/);
+    assert.equal(dock._keyCountAccessItem.sensitive, true);
+    let callback;
+    context.Gio.Subprocess.new = () => ({wait_async(_cancel, cb) { callback = cb; }});
+    dock._grantKeyCountAccess();
+    dock._keyCountGrantProcess = null;
+    dock._disabling = true;
+    callback({wait_finish() { assert.fail('stale callback'); }}, {});
 });

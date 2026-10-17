@@ -165,6 +165,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._keyCountSaveId = 0;
         this._keyCountStageId = 0;
         this._keyCountReady = false;
+        this._keyCountGrantProcess = null;
+        this._keyCountAccessMessage = null;
         this._keyCountRetryId = 0;
         this._themePath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'theme']);
@@ -1386,10 +1388,69 @@ export default class ZhyprbolaExtension extends Extension {
 
     _setKeyCounterReady(ready) {
         this._keyCountReady = ready;
+        if (ready)
+            this._keyCountAccessMessage = null;
+        this._refreshKeyCountAccess();
+    }
+
+    _refreshKeyCountAccess() {
         if (this._keyCountStatusLabel)
-            this._keyCountStatusLabel.text = ready
+            this._keyCountStatusLabel.text = this._keyCountReady
                 ? 'Counting across applications'
-                : 'Limited to GNOME events — allow access for other apps';
+                : this._keyCountGrantProcess ? 'Waiting for permission…'
+                : this._keyCountAccessMessage ?? 'Limited to GNOME events — allow access for other apps';
+        if (this._keyCountAccessItem) {
+            this._keyCountAccessItem.visible = !this._keyCountReady;
+            this._keyCountAccessItem.setSensitive(!this._keyCountGrantProcess);
+        }
+    }
+
+    _grantKeyCountAccess() {
+        if (this._disabling || this._keyCountReady || this._keyCountGrantProcess)
+            return;
+        const script = GLib.build_filenamev([this.path, 'grant-key-capture']);
+        try {
+            const process = Gio.Subprocess.new(['pkexec', script],
+                Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
+            this._keyCountGrantProcess = process;
+            this._keyCountAccessMessage = null;
+            this._refreshKeyCountAccess();
+            process.wait_async(null, (source, result) => {
+                if (this._keyCountGrantProcess !== process)
+                    return;
+                this._keyCountGrantProcess = null;
+                let success = false;
+                try {
+                    source.wait_finish(result);
+                    success = source.get_successful();
+                } catch (_) {
+                    // Leave a retryable status for authorization failures.
+                }
+                if (this._disabling)
+                    return;
+                this._keyCountAccessMessage = success
+                    ? 'Access allowed — connecting…'
+                    : 'Permission cancelled or unavailable — try again';
+                this._refreshKeyCountAccess();
+                if (!success || this._keyCountReady)
+                    return;
+                if (this._keyCountRetryId) {
+                    GLib.source_remove(this._keyCountRetryId);
+                    this._keyCountRetryId = 0;
+                }
+                const previous = this._keyCountProcess;
+                this._keyCountProcess = null;
+                this._keyCountCancellable?.cancel();
+                this._keyCountCancellable = null;
+                this._keyCountStream = null;
+                previous?.force_exit();
+                this._startKeyCounter(true);
+            });
+        } catch (_) {
+            this._keyCountGrantProcess = null;
+            this._keyCountAccessMessage = 'Could not request permission — try again';
+            this._refreshKeyCountAccess();
+        }
     }
 
     _readKeyCounterLine(process, stream, cancellable) {
@@ -1449,6 +1510,7 @@ export default class ZhyprbolaExtension extends Extension {
                 if (this._keyCountProcess !== process)
                     return;
                 cancellable.cancel();
+                this._keyCountAccessMessage = null;
                 this._setKeyCounterReady(false);
                 this._keyCountProcess = null;
                 this._keyCountStream = null;
@@ -1476,6 +1538,11 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _stopKeyCounter() {
+        const grant = this._keyCountGrantProcess;
+        this._keyCountGrantProcess = null;
+        grant?.force_exit();
+        this._keyCountAccessItem = null;
+        this._keyCountAccessMessage = null;
         if (this._keyCountStageId) {
             global.stage.disconnect(this._keyCountStageId);
             this._keyCountStageId = 0;
@@ -2844,21 +2911,25 @@ export default class ZhyprbolaExtension extends Extension {
         }
         const status = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
         const statusLabel = new St.Label({text: '', style_class: 'zhyprbola-key-count-name'});
+        status.add_style_class_name('zhyprbola-key-count-choice');
         status.add_child(statusLabel);
         menu.addMenuItem(status);
         this._keyCountStatusLabel = statusLabel;
         this._setKeyCounterReady(this._keyCountReady);
         menu.actor.connect('destroy', () => {
-            if (this._keyCountStatusLabel === statusLabel)
+            if (this._keyCountStatusLabel === statusLabel) {
                 this._keyCountStatusLabel = null;
+                this._keyCountAccessItem = null;
+            }
         });
         const access = new PopupMenu.PopupBaseMenuItem({reactive: true, can_focus: true});
-        access.add_child(new St.Label({text: 'Keyboard access…'}));
-        access.connect('activate', () => {
-            menu.close(BoxPointer.PopupAnimation.NONE);
-            this._openPanel('key-visualizer');
-        });
+        access.add_style_class_name('zhyprbola-key-count-choice');
+        access.add_child(new St.Label({text: 'Allow keyboard access…',
+            style_class: 'zhyprbola-key-count-name'}));
+        access.connect('activate', () => this._grantKeyCountAccess());
         menu.addMenuItem(access);
+        this._keyCountAccessItem = access;
+        this._refreshKeyCountAccess();
         Main.uiGroup.add_child(menu.actor);
         menu.actor.hide();
         this._menuManager.addMenu(menu);

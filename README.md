@@ -105,8 +105,10 @@ The dock's Daily Key Count uses the same global-access fallback but receives onl
 anonymous press markers. When global access is unavailable it falls back to
 GNOME Shell captured events, like KeyVizz; this may only count Shell interactions
 on Wayland. The statistics menu shows whether counting is global or limited.
-Choose **Keyboard access…**, then **Allow temporarily** in Key Visualizer to
-allow counting in other applications. The counter retries global access every
+When access is missing, choose **Allow keyboard access…** to authorize directly
+without opening Key Visualizer. The action hides once global counting is ready,
+shows progress while authorization is pending, and allows retry after cancellation
+or failure. Successful authorization immediately reconnects the counter. The counter retries global access every
 30 seconds and stops counting Shell events once the global helper is ready, so
 presses are not counted twice. It stores a total for each local date in
 `~/.local/state/zhyprbola/key-count.json`, starts a new total at the next local
