@@ -57,6 +57,8 @@ class Actor {
     get_preferred_width() { return [0, Array.from(this.text ?? '').length * 8]; }
     get_preferred_height() { return [14, 14]; }
     set_position(x, y) { this.live(); Object.assign(this, {x, y}); }
+    get_transformed_position() { return [this.x ?? 0, this.y ?? 0]; }
+    get_transformed_size() { return [this.width ?? 0, this.height ?? 0]; }
     set_style() { this.live(); }
     set_pivot_point(x, y) { Object.assign(this, {pivotX: x, pivotY: y}); }
     set_rotation_angle(axis, angle) { Object.assign(this, {rotationAxis: axis, angle}); }
@@ -129,6 +131,7 @@ function fixture(length = 400) {
         GLib: {PRIORITY_DEFAULT_IDLE: 0, SOURCE_REMOVE: false,
             idle_add: (_, callback) => { idles.set(++nextId, callback); return nextId; }},
         Meta: {KeyBindingFlags: {IGNORE_AUTOREPEAT: 1}},
+        Mtk: {Rectangle: class { constructor(props) { Object.assign(this, props); } }},
         Shell: {ActionMode: {NORMAL: 1}},
         Main: {layoutManager: {primaryMonitor: {x: 0, y: 0, width: length + 8, height: 900},
             removeChrome() {}}, uiGroup: new Actor(), wm: {
@@ -380,6 +383,7 @@ function desktopFixture() {
             get_stable_sequence() { return this.id; }, get_title() { return this.title; },
             get_wm_class() { return this.wmClass; }, can_minimize() { return this.minimizable; },
             located_on_workspace(value) { return this.workspace === value; },
+            set_icon_geometry(rect) { this.iconGeometry = {...rect}; },
             minimize() { this.minimized = true; this.minimizeCalls++; },
             unminimize() { this.minimized = false; this.restoreCalls++; },
             activate() { this.activateCalls++; }, ...options};
@@ -426,6 +430,30 @@ test('show desktop hides on the first click and restores only its own windows', 
     assert.equal(b.minimized, false);
     assert.equal(preMinimized.minimized, true);
     assert.equal(a.activateCalls, 1);
+});
+
+test('show desktop animates toward the dock center and follows dock moves on restore', () => {
+    const {dock, addWindow} = desktopFixture();
+    const a = addWindow(1, {
+        minimize() {
+            assert.deepEqual(this.iconGeometry, {x: 2160, y: 1167, width: 1, height: 1});
+            this.minimized = true;
+        },
+        unminimize() {
+            assert.deepEqual(this.iconGeometry, {x: 1214, y: 640, width: 1, height: 1});
+            this.minimized = false;
+        },
+    });
+    const skipped = addWindow(2, {minimized: true});
+    dock._dock.set_position(1200, 1153);
+    dock._dock.set_size(1920, 27);
+    dock._toggleDesktop();
+    assert.equal(a.minimized, true);
+    assert.equal(skipped.iconGeometry, undefined);
+    dock._dock.set_position(1200, 100);
+    dock._dock.set_size(27, 1080);
+    dock._toggleDesktop();
+    assert.equal(a.minimized, false);
 });
 
 test('a new hide restores only windows visible before that hide', () => {

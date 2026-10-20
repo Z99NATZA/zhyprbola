@@ -2,6 +2,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
+import Mtk from 'gi://Mtk';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import Pango from 'gi://Pango';
@@ -484,6 +485,25 @@ export default class ZhyprbolaExtension extends Extension {
         return title.startsWith('Zhyprbola ') || /zhyprbola/i.test(wmClass);
     }
 
+    _setDesktopAnimationTarget(window) {
+        if (!this._dock)
+            return;
+
+        const [x, y] = this._dock.get_transformed_position();
+        const [width, height] = this._dock.get_transformed_size();
+        if (width <= 0 || height <= 0)
+            return;
+
+        // Shell uses icon geometry for its minimize and restore animations.
+        // Use a small target at the dock's actual center on any screen edge.
+        window.set_icon_geometry(new Mtk.Rectangle({
+            x: Math.round(x + width / 2),
+            y: Math.round(y + height / 2),
+            width: 1,
+            height: 1,
+        }));
+    }
+
     _toggleDesktop() {
         const windows = global.display.list_all_windows();
         const workspace = global.workspace_manager.get_active_workspace();
@@ -505,8 +525,10 @@ export default class ZhyprbolaExtension extends Extension {
             ids: targets.map(window => window.get_stable_sequence()),
             focusedId: focused?.get_stable_sequence(),
         });
-        for (const window of targets)
+        for (const window of targets) {
+            this._setDesktopAnimationTarget(window);
             window.minimize();
+        }
         this._updateShowDesktopState();
     }
 
@@ -540,6 +562,7 @@ export default class ZhyprbolaExtension extends Extension {
                 if (!window || this._isComponentWindow(window) || !window.minimized ||
                     (workspace && !window.located_on_workspace(workspace)))
                     continue;
+                this._setDesktopAnimationTarget(window);
                 window.unminimize();
                 if (id === saved.focusedId && window.located_on_workspace(activeWorkspace))
                     restoreFocus = window;
