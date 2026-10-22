@@ -31,3 +31,9 @@ make build                        # Build without installing the extension
 ./scripts/run-panel settings       # Run a focused panel
 make check                        # QML lint; existing warnings may be printed
 ```
+
+## Notes
+
+```text
+commit 1 line en: https://www.conventionalcommits.org/en/v1.0.0/
+```
