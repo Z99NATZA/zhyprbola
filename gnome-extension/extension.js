@@ -140,6 +140,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._batteryMenu = null;
         this._desktopWindows = new Map();
         this._layoutIdleId = 0;
+        this._panelGeometryLaterId = 0;
         this._appRefreshId = 0;
         this._wallpaperRefreshId = 0;
         this._settingsPlacementId = 0;
@@ -483,6 +484,53 @@ export default class ZhyprbolaExtension extends Extension {
         const title = window.get_title() ?? '';
         const wmClass = window.get_wm_class() ?? '';
         return title.startsWith('Zhyprbola ') || /zhyprbola/i.test(wmClass);
+    }
+
+    _setPanelAnimationTarget(window) {
+        const title = window.get_title();
+        const panelName = Object.keys(PANEL_TITLES).find(name =>
+            PANEL_TITLES[name] === title) ?? (title === 'Zhyprbola Panel' ? 'bluetooth' : null);
+        // Screenshots has its own resident show/hide lifecycle.
+        if (!this._dock || !panelName || panelName === 'screenshots')
+            return;
+
+        const buttons = this._dockGroupsByName.get('zhyprbola')?.get_children() ?? [];
+        const inComponentRegion = this._dockComponents.visible.includes(panelName);
+        const source = buttons.find(button => button._panelName === panelName)
+            ?? (inComponentRegion ? buttons.find(button => button._dockOverflow) : null)
+            ?? buttons.find(button => button._panelName === 'components')
+            ?? buttons.find(button => button._panelName === 'settings');
+        if (!source) {
+            this._setDesktopAnimationTarget(window);
+            return;
+        }
+
+        const [x, y] = source.get_transformed_position();
+        const [width, height] = source.get_transformed_size();
+        if (width <= 0 || height <= 0) {
+            this._setDesktopAnimationTarget(window);
+            return;
+        }
+        window.set_icon_geometry(new Mtk.Rectangle({
+            x: Math.round(x),
+            y: Math.round(y),
+            width: Math.max(1, Math.round(width)),
+            height: Math.max(1, Math.round(height)),
+        }));
+    }
+
+    _queuePanelAnimationTargets() {
+        if (this._panelGeometryLaterId || !this._dock || this._disabling)
+            return;
+        // St allocates buttons after layout. Read their final stage coordinates
+        // before painting, also covering windows minimized by their QML button.
+        this._panelGeometryLaterId = global.compositor.get_laters().add(
+            Meta.LaterType.BEFORE_REDRAW, () => {
+                this._panelGeometryLaterId = 0;
+                for (const window of global.display.list_all_windows())
+                    this._setPanelAnimationTarget(window);
+                return GLib.SOURCE_REMOVE;
+            });
     }
 
     _setDesktopAnimationTarget(window) {
@@ -1951,6 +1999,11 @@ export default class ZhyprbolaExtension extends Extension {
         if (!this._dock)
             return;
 
+        if (this._panelGeometryLaterId) {
+            global.compositor.get_laters().remove(this._panelGeometryLaterId);
+            this._panelGeometryLaterId = 0;
+        }
+
         this._soundMenu?.destroy();
         this._soundMenu = null;
         this._keyCountMenu?.destroy();
@@ -2700,6 +2753,7 @@ export default class ZhyprbolaExtension extends Extension {
                 track_hover: true,
                 accessible_name: `More ${name}`,
             });
+            more._dockOverflow = true;
             more.connect('clicked', () =>
                 this._showOverflow(more,
                     (this._dockItems.get(name) ?? []).slice(visibleCount)));
@@ -3088,6 +3142,7 @@ export default class ZhyprbolaExtension extends Extension {
                 (panelName === 'bluetooth' && window.get_title() === 'Zhyprbola Panel')));
 
         if (existingWindow) {
+            this._setPanelAnimationTarget(existingWindow);
             if (fromSettings && !existingWindow.minimized &&
                 global.display.focus_window?.get_title() === PANEL_TITLES.settings &&
                 this._windowBeforeSettings === existingWindow)
@@ -3286,5 +3341,6 @@ export default class ZhyprbolaExtension extends Extension {
             vertical ? x : monitor.x + monitor.width - SHOW_DESKTOP_SIZE,
             vertical ? monitor.y + monitor.height - SHOW_DESKTOP_SIZE : y);
         this._layoutEdgeSpectrum();
+        this._queuePanelAnimationTargets();
     }
 }

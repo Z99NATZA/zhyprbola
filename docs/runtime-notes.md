@@ -20,6 +20,20 @@ Running item replaces it with Close Window scoped to that item's window. Pin to
 Dash is omitted because Zhyprbola owns its launcher configuration.
 ```
 
+## Component Minimize Animation
+
+```text
+Component panels use normal frameless windows so GNOME animates minimize and
+restore using its standard animation and the system's motion preferences.
+The animation targets the component's current dock button. Overflowed components
+target More; Quick/hidden components target Components, then Settings. If those
+buttons are unavailable, the dock center is used.
+
+Targets update after dock layout and before dock/Settings toggles, including
+after moving the dock to another edge. Panel close buttons use the same target
+through the native minimize lifecycle. Screenshots keeps its resident lifecycle.
+```
+
 ## Show Desktop
 
 ```text

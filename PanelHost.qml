@@ -69,7 +69,8 @@ Window {
     minimumHeight: panelHeight
     maximumWidth: resizablePanel ? 640 : panelWidth
     maximumHeight: resizablePanel ? 720 : panelHeight
-    flags: Qt.FramelessWindowHint | Qt.Tool
+    // Normal windows participate in the compositor's minimize/restore animation.
+    flags: Qt.FramelessWindowHint | Qt.Window
     color: "transparent"
     title: panelTitle
 

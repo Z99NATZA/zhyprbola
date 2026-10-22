@@ -130,7 +130,14 @@ function fixture(length = 400) {
         DND: {makeDraggable: actor => (actor.draggable = new Actor())},
         GLib: {PRIORITY_DEFAULT_IDLE: 0, SOURCE_REMOVE: false,
             idle_add: (_, callback) => { idles.set(++nextId, callback); return nextId; }},
-        Meta: {KeyBindingFlags: {IGNORE_AUTOREPEAT: 1}},
+        Meta: {KeyBindingFlags: {IGNORE_AUTOREPEAT: 1}, LaterType: {BEFORE_REDRAW: 1}},
+        global: {
+            display: {list_all_windows: () => []},
+            compositor: {get_laters: () => ({
+                add: (_, callback) => { idles.set(++nextId, callback); return nextId; },
+                remove: id => idles.delete(id),
+            })},
+        },
         Mtk: {Rectangle: class { constructor(props) { Object.assign(this, props); } }},
         Shell: {ActionMode: {NORMAL: 1}},
         Main: {layoutManager: {primaryMonitor: {x: 0, y: 0, width: length + 8, height: 900},
@@ -393,6 +400,92 @@ function desktopFixture() {
     return {dock, display, windows, workspace, otherWorkspace, addWindow,
         switchWorkspace(value) { activeWorkspace = value; }};
 }
+
+test('component minimize and restore use their dock button on every screen edge', () => {
+    const {dock, context} = fixture();
+    const group = new Actor();
+    dock._dockGroupsByName.set('zhyprbola', group);
+    const button = new Actor({_panelName: 'todo', width: 27, height: 27});
+    group.add_child(button);
+    const window = {
+        get_title: () => 'Zhyprbola Tasks',
+        set_icon_geometry(rect) { this.geometry = {...rect}; },
+        has_focus() { return this.focused; },
+        minimize() { this.minimized = true; },
+        unminimize() { this.minimized = false; },
+        activate() { this.focused = true; },
+    };
+    Object.assign(context.global.display, {list_all_windows: () => [window]});
+    context.global.get_current_time = () => 1;
+    for (const [side, x, y] of [
+        ['bottom', 2100, 1160], ['left', 1200, 800],
+        ['right', 3090, 800], ['top', 2100, 100],
+    ]) {
+        dock._dockPosition = side;
+        button.set_position(x, y);
+        window.focused = true;
+        dock._openPanel('todo');
+        assert.equal(window.minimized, true);
+        assert.deepEqual(window.geometry, {x, y, width: 27, height: 27});
+        window.focused = false;
+        dock._openPanel('todo');
+        assert.equal(window.minimized, false);
+        assert.deepEqual(window.geometry, {x, y, width: 27, height: 27});
+    }
+});
+
+test('component animation targets follow overflow, quick menu, Settings and dock fallback', () => {
+    const {dock} = fixture();
+    const group = new Actor();
+    dock._dockGroupsByName.set('zhyprbola', group);
+    dock._dock.set_position(1200, 1153);
+    dock._dock.set_size(1920, 27);
+    const settings = new Actor({_panelName: 'settings', x: 1300, y: 1153, width: 27, height: 27});
+    const quick = new Actor({_panelName: 'components', x: 1400, y: 1153, width: 27, height: 27});
+    const overflow = new Actor({_dockOverflow: true, x: 1500, y: 1153, width: 27, height: 27});
+    for (const button of [settings, quick, overflow])
+        group.add_child(button);
+    const window = {get_title: () => 'Zhyprbola Calendar',
+        set_icon_geometry(rect) { this.geometry = {...rect}; }};
+    dock._dockComponents.visible = ['calendar'];
+    dock._setPanelAnimationTarget(window);
+    assert.equal(window.geometry.x, 1500);
+    dock._dockComponents.visible = [];
+    dock._setPanelAnimationTarget(window);
+    assert.equal(window.geometry.x, 1400);
+    quick.destroy();
+    dock._setPanelAnimationTarget(window);
+    assert.equal(window.geometry.x, 1300);
+    settings.destroy();
+    dock._setPanelAnimationTarget(window);
+    assert.deepEqual(window.geometry, {x: 2160, y: 1167, width: 1, height: 1});
+    for (const title of ['Example', 'Zhyprbola Screenshots']) {
+        window.get_title = () => title;
+        window.set_icon_geometry = () => assert.fail('unrelated lifecycle');
+        dock._setPanelAnimationTarget(window);
+    }
+});
+
+test('layout publishes final geometry for QML minimize and cancels pending work on teardown', () => {
+    const {dock, context, flush, idles} = fixture();
+    const group = new Actor();
+    dock._dockGroupsByName.set('zhyprbola', group);
+    const button = new Actor({_panelName: 'bluetooth', width: 27, height: 27});
+    group.add_child(button);
+    const window = {get_title: () => 'Zhyprbola Panel',
+        set_icon_geometry(rect) { this.geometry = {...rect}; }};
+    context.global.display.list_all_windows = () => [window];
+    dock._layoutDock();
+    dock._queuePanelAnimationTargets();
+    assert.equal(idles.size, 1, 'coalesce geometry updates');
+    button.set_position(2345, 873);
+    flush();
+    assert.deepEqual(window.geometry, {x: 2345, y: 873, width: 27, height: 27});
+    dock._queuePanelAnimationTargets();
+    dock._destroyDock();
+    assert.equal(idles.size, 0);
+    assert.equal(dock._panelGeometryLaterId, 0);
+});
 
 test('show desktop shortcut registers, invokes the toggle, and unregisters', () => {
     const {dock, keybindings} = fixture();
@@ -1004,7 +1097,7 @@ function orderedRunningFixture() {
     const setup = fixture();
     const windows = [item(1, 'TikTok'), item(2, 'Monkeytype'), item(3, 'Translate')];
     const live = windows.map(candidate => candidate.window);
-    setup.context.global = {display: {list_all_windows: () => live}};
+    setup.context.global.display = {list_all_windows: () => live};
     setup.dock._appSystem = {get_running: () => windows.map(candidate => candidate.app)};
     setup.dock._windowTracker = {get_window_app: window =>
         windows.find(candidate => candidate.window === window)?.app};
