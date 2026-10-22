@@ -2,6 +2,8 @@
 
 ## Reading Order
 
+- [Development](development.md): building, running panels, spectrum, and checks.
+- [Key Capture and Security](key-capture.md): keyboard access, daily counts, and authorization.
 - [Current Behavior](current-behavior.md): UI, defaults, settings, and commands.
 - [Architecture](architecture.md): ownership and communication between layers.
 - [Runtime Notes](runtime-notes.md): lifecycle, input, fallback, and layout details.

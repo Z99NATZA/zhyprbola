@@ -73,89 +73,11 @@ Removing the dock keeps the project files and settings in ~/.config/zhyprbola.
 Run make dock to build, reinstall, and enable it again.
 ```
 
-## Development
-
-```text
-Panels
-==========
-
-Build without installing the GNOME extension, or run a focused panel directly.
-```
-
-```bash
-make build
-make run-panel
-./scripts/run-panel bluetooth
-./scripts/run-panel wifi
-./scripts/run-panel clock-weather
-./scripts/run-panel key-visualizer
-./scripts/run-panel system-status
-```
-
-```text
-Key Capture
-==========
-
-Key visualizer settings are under Settings > Keys. While its bubble is visible,
-the panel shows keys typed in other applications only when GNOME grants keyboard
-monitoring or keyboard-device read access. On GNOME Wayland, use the
-"Allow temporarily" button in Key visualizer when prompted.
-
-The dock's Daily Key Count uses the same global-access fallback but receives only
-anonymous press markers. When global access is unavailable it falls back to
-GNOME Shell captured events, like KeyVizz; this may only count Shell interactions
-on Wayland. The statistics menu shows whether counting is global or limited.
-When access is missing, choose **Allow keyboard access…** to authorize directly
-without opening Key Visualizer. The action hides once global counting is ready,
-shows progress while authorization is pending, and allows retry after cancellation
-or failure. Successful authorization immediately reconnects the counter. The counter retries global access every
-30 seconds and stops counting Shell events once the global helper is ready, so
-presses are not counted twice. It stores a total for each local date in
-`~/.local/state/zhyprbola/key-count.json`, starts a new total at the next local
-day, and never stores key names or typed text. Clicking the dock text opens
-statistics for today, 7/15 days, this month, rolling 3/6 months, this year, the
-best day, and all time. Selecting a range changes the dock text, for example
-`keys:7d:1,234`; hovering a range changes only its text color.
-
-Authorization
-----------
-
-If the desktop cannot show the authorization dialog, grant temporary read access
-from a terminal and reopen Key visualizer.
-```
-
-```bash
-./scripts/grant-key-capture
-```
-
-```text
-Security
-----------
-
-The button opens system authentication; the terminal command prompts for sudo.
-Access lasts until reboot or device reconnect and allows other programs running
-as your user to read those devices too. Do not use it on a shared account.
-Minimize Key visualizer before entering passwords.
-
-Spectrum
-==========
-
-Edge spectrum is managed by the GNOME dock extension. Enable it and choose an
-edge in Settings -> Spectrum; the original spectrum bubble remains available.
-
-Checks
-==========
-
-QML lint currently exits successfully but may print existing qmllint warnings.
-```
-
-```bash
-make check
-```
-
 ## Documentation
 
 - [Documentation](docs/README.md)
+- [Development](docs/development.md)
+- [Key Capture and Security](docs/key-capture.md)
 - [v0.1.0](docs/release/v0.1.0.md)
 
 ## MIT [License](LICENSE)
