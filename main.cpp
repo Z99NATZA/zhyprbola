@@ -3,6 +3,7 @@
 #include "components/ScreenshotBackend.h"
 
 #include <QGuiApplication>
+#include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QDir>
@@ -25,6 +26,8 @@ int main(int argc, char *argv[]) {
     app.setOrganizationName(QStringLiteral("zhyprbola"));
     app.setApplicationName(QStringLiteral("Zhyprbola Desktop"));
     app.setApplicationVersion(QStringLiteral(ZHYPRBOLA_VERSION));
+    app.setDesktopFileName(QStringLiteral("org.zhyprbola.Zhyprbola"));
+    app.setWindowIcon(QIcon(QStringLiteral(":/assets/zhyprbola-icon.png")));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Zhyprbola desktop and panel host"));

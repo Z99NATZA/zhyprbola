@@ -1,4 +1,4 @@
-.PHONY: run run-panel dock dock-enable dock-disable dock-remove check build
+.PHONY: run run-panel install-app dock dock-enable dock-disable dock-remove check build
 
 QMLLINT := $(shell command -v qmllint || command -v /usr/lib/qt6/bin/qmllint)
 
@@ -10,13 +10,17 @@ build/key-capture-evdev: scripts/key-capture-evdev.cpp
 	@mkdir -p build
 	$(CXX) -std=c++17 -O2 -Wall -Wextra -DQT_NO_KEYWORDS $(shell pkg-config --cflags Qt6Core gio-2.0 xkbcommon) $< -o $@ $(shell pkg-config --libs Qt6Core gio-2.0 xkbcommon)
 
-run: build
+install-app: build
+	./scripts/install-app
+
+run: install-app
 	./build/zhyprbola
 
-run-panel: build
+run-panel: install-app
 	./scripts/run-panel bluetooth
 
 dock: build
+	./scripts/install-app
 	./scripts/install-extension
 	./scripts/enable-dock
 
