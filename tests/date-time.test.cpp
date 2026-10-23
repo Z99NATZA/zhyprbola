@@ -447,6 +447,81 @@ private slots:
             QStringLiteral("5"));
     }
 
+    void edgeHandleDragScrollsAndCancelsWithoutSaving() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        qputenv("XDG_CONFIG_HOME", directory.path().toUtf8());
+        Backend backend;
+        ScreenshotSettingsStub screenshots;
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty("backend", &backend);
+        engine.rootContext()->setContextProperty("screenshots", &screenshots);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(
+            QFINDTESTDATA("../components/SettingsPanel.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> settings(component.create());
+        QVERIFY2(settings, qPrintable(component.errorString()));
+        settings->setProperty("section", "show-desktop");
+        auto *panel = qobject_cast<QQuickItem *>(settings.data());
+        QVERIFY(panel);
+        QQuickWindow window;
+        window.resize(660, qRound(panel->height()));
+        panel->setParentItem(window.contentItem());
+        window.show();
+        QTRY_VERIFY(window.isExposed());
+        auto *scroll = findItem(panel, "edge-handles-settings-scroll");
+        auto *card = findItem(panel, "edge-handle-card-show-desktop-left-3-show-desktop");
+        auto *firstZone = findItem(panel, "edge-handle-zone-show-desktop-left-1");
+        auto *overlay = findItem(panel, "edge-handle-drag-overlay");
+        QVERIFY(scroll && card && firstZone && overlay);
+        scroll->setProperty("contentY", 290);
+        const auto saved = backend.showDesktopEdgeSettings();
+        auto start = card->mapToScene(QPointF(card->width() / 2, card->height() / 2)).toPoint();
+        auto target = firstZone->mapToScene(QPointF(firstZone->width() / 4,
+            firstZone->height() / 2)).toPoint();
+        QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, start);
+        QTest::mouseMove(&window, target, 20);
+        QTRY_COMPARE(settings->property("edgeHandleDropAlignment").toString(), QStringLiteral("1"));
+        QVERIFY(overlay->isVisible());
+        QCOMPARE(backend.showDesktopEdgeSettings(), saved);
+        QVERIFY(QMetaObject::invokeMethod(settings.data(), "finishEdgeHandleDrag", Q_ARG(QVariant, false)));
+        QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, target);
+        QCOMPARE(backend.showDesktopEdgeSettings(), saved);
+        QVERIFY(!overlay->isVisible());
+        QVERIFY(!settings->property("draggingEdgeHandle").toBool());
+
+        // Releasing over another settings control must not hit a clipped zone.
+        QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, start);
+        const QPoint outside(start.x(), 60);
+        QTest::mouseMove(&window, outside, 20);
+        QTRY_VERIFY(settings->property("draggingEdgeHandle").toBool());
+        QCOMPARE(settings->property("edgeHandleDropAlignment").toString(), QString());
+        QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, outside);
+        QCOMPARE(backend.showDesktopEdgeSettings(), saved);
+
+        scroll->setProperty("contentY", 290);
+        start = card->mapToScene(QPointF(card->width() / 2, card->height() / 2)).toPoint();
+        target = scroll->mapToScene(QPointF(scroll->width() / 2, scroll->height() - 10)).toPoint();
+        QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, start);
+        QTest::mouseMove(&window, target, 20);
+        QTRY_VERIFY(scroll->property("contentY").toReal() > 290);
+        QCOMPARE(backend.showDesktopEdgeSettings(), saved);
+        QVERIFY(QMetaObject::invokeMethod(settings.data(), "finishEdgeHandleDrag", Q_ARG(QVariant, false)));
+        QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, target);
+        QCOMPARE(backend.showDesktopEdgeSettings(), saved);
+        const qreal stoppedAt = scroll->property("contentY").toReal();
+        QTest::qWait(100);
+        QCOMPARE(scroll->property("contentY").toReal(), stoppedAt);
+
+        const QString screenshot = qEnvironmentVariable("ZHYPRBOLA_TEST_EDGE_LAYOUT_SCREENSHOT");
+        if (!screenshot.isEmpty()) {
+            backend.setThemeName("one-half-gray");
+            scroll->setProperty("contentY", scroll->property("contentHeight").toReal() - scroll->height());
+            QTest::qWait(50);
+            QVERIFY(window.grabWindow().save(screenshot));
+        }
+    }
+
     void loadsDateTimeSettings() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -508,7 +583,7 @@ private slots:
         QVERIFY(topZone);
         auto *edgeScroll = findItem(settingsItem, QStringLiteral("edge-handles-settings-scroll"));
         QVERIFY(edgeScroll);
-        edgeScroll->setProperty("contentY", 180);
+        edgeScroll->setProperty("contentY", 260);
         const QPoint dragStart = showDesktopCard->mapToScene(QPointF(
             showDesktopCard->width() / 2, showDesktopCard->height() / 2)).toPoint();
         const QPoint dragEnd = topZone->mapToScene(QPointF(

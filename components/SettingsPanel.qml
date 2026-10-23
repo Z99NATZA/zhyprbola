@@ -97,6 +97,7 @@ Item {
     property var edgeHandlePreviews: [[], [], [], [], []]
     property real edgeHandleDragStartX: 0
     property real edgeHandleDragStartY: 0
+    property point edgeHandleDragPoint: Qt.point(0, 0)
     property string draggedOpacityComponent: ""
     property bool draggingOpacityComponent: false
     property string opacityDropZone: ""
@@ -276,6 +277,7 @@ Item {
         edgeHandleDragSide = side
         edgeHandleDragStartX = point.x
         edgeHandleDragStartY = point.y
+        edgeHandleDragPoint = point
         const layout = edgeHandleLayout(side)
         edgeHandlePreviews = edgeHandleSlots.map(slot => layout[slot].slice())
     }
@@ -283,6 +285,7 @@ Item {
     function updateEdgeHandleDrag(point) {
         if (!draggedEdgeHandle)
             return
+        edgeHandleDragPoint = point
         if (!draggingEdgeHandle) {
             const dx = point.x - edgeHandleDragStartX
             const dy = point.y - edgeHandleDragStartY
@@ -300,9 +303,9 @@ Item {
         edgeHandleBeforeKey = ""
 
         const layout = edgeHandleLayout(edgeHandleDragSide)
-        for (const alignment of edgeHandleSlots)
-            layout[alignment] = layout[alignment].filter(key => key !== draggedEdgeHandle)
         if (destination) {
+            for (const alignment of edgeHandleSlots)
+                layout[alignment] = layout[alignment].filter(key => key !== draggedEdgeHandle)
             const target = layout[destination.slotKey]
             const local = destination.mapFromItem(panel, point.x, point.y)
             const position = local.x < destination.width / 2 ? 0 : target.length
@@ -312,11 +315,11 @@ Item {
         edgeHandlePreviews = edgeHandleSlots.map(slot => layout[slot].slice())
     }
 
-    function finishEdgeHandleDrag() {
+    function finishEdgeHandleDrag(commit) {
         const key = draggedEdgeHandle
         const alignment = edgeHandleDropAlignment
         const beforeKey = edgeHandleBeforeKey
-        const commit = draggingEdgeHandle && alignment !== ""
+        const shouldMove = commit && draggingEdgeHandle && alignment !== ""
         const editor = activeEdgeHandleEditor()
         draggedEdgeHandle = ""
         draggingEdgeHandle = false
@@ -325,10 +328,29 @@ Item {
         edgeHandleBeforeKey = ""
         edgeHandlePreviews = [[], [], [], [], []]
         editor.setDropAlignment("")
-        if (commit) {
+        if (shouldMove) {
             backend.moveEdgeHandle(key, alignment, beforeKey)
             if (key === "screenshots")
                 screenshots.refresh()
+        }
+    }
+
+    Timer {
+        interval: 40
+        repeat: true
+        running: panel.draggingEdgeHandle
+        onTriggered: {
+            const point = edgeHandlesScroll.mapFromItem(panel,
+                panel.edgeHandleDragPoint.x, panel.edgeHandleDragPoint.y)
+            if (point.x < 0 || point.x > edgeHandlesScroll.width) return
+            const step = point.y < 30 ? -12 : point.y > edgeHandlesScroll.height - 30 ? 12 : 0
+            if (!step) return
+            const next = Math.max(0, Math.min(edgeHandlesScroll.contentHeight - edgeHandlesScroll.height,
+                edgeHandlesScroll.contentY + step))
+            if (next !== edgeHandlesScroll.contentY) {
+                edgeHandlesScroll.contentY = next
+                panel.updateEdgeHandleDrag(panel.edgeHandleDragPoint)
+            }
         }
     }
 
@@ -649,6 +671,7 @@ Item {
     }
 
     Flickable {
+        id: edgeHandlesScroll
         objectName: "edge-handles-settings-scroll"
         x: panel.contentX
         y: 76
@@ -819,9 +842,13 @@ Item {
         required property string editorKey
         required property string editorSide
         width: panel.contentWidth
-        spacing: 8
+        spacing: panel.contentSectionGap
 
         function zoneAt(point) {
+            const viewport = edgeHandlesScroll.mapFromItem(panel, point.x, point.y)
+            if (viewport.x < 0 || viewport.x >= edgeHandlesScroll.width
+                || viewport.y < 0 || viewport.y >= edgeHandlesScroll.height)
+                return null
             for (let index = 0; index < edgeZoneRepeater.count; ++index) {
                 const zone = edgeZoneRepeater.itemAt(index)
                 const local = zone.mapFromItem(panel, point.x, point.y)
@@ -864,11 +891,11 @@ Item {
         property bool dropHovered: false
         readonly property var displayOrder:
             panel.edgeHandleItems(editorSide, slotKey)
-        readonly property real cardWidth: (width - 32) / 2
+        readonly property real cardWidth: (width - 30) / 2
         objectName: "edge-handle-zone-" + editorKey + "-" + editorSide + "-" + slotKey
 
         width: panel.contentWidth
-        height: 72
+        height: 90
         radius: 12
         color: dropHovered ? Theme.selected : Theme.control
         border.width: dropHovered ? 2 : 0
@@ -876,35 +903,43 @@ Item {
 
         Text {
             x: 12
-            y: 7
+            y: 12
             text: edgeZone.label
             color: Theme.text
             font.family: Qt.application.font.family
-            font.pixelSize: 12
+            font.pixelSize: 13
             font.weight: Font.DemiBold
         }
 
         Text {
             anchors.right: parent.right
             anchors.rightMargin: 12
-            y: 7
+            y: 13
             text: edgeZone.items.length
             color: Theme.mutedText
             font.family: Qt.application.font.family
+            font.pixelSize: 12
+        }
+
+        Text {
+            x: 12; y: 52
+            visible: edgeZone.displayOrder.length === 0
+            text: "Drop items here"
+            color: Theme.mutedText
             font.pixelSize: 11
         }
 
         Rectangle {
             x: 12 + Math.max(0, edgeZone.displayOrder.indexOf(
-                panel.draggedEdgeHandle)) * (edgeZone.cardWidth + 8)
-            y: 30
+                panel.draggedEdgeHandle)) * (edgeZone.cardWidth + 6)
+            y: 44
             width: edgeZone.cardWidth
-            height: 32
-            radius: 9
+            height: 34
+            radius: 7
             visible: panel.draggingEdgeHandle
                 && edgeZone.displayOrder.includes(panel.draggedEdgeHandle)
             color: Theme.selected
-            border.width: 2
+            border.width: 1
             border.color: Theme.accent
         }
 
@@ -921,39 +956,42 @@ Item {
                 objectName: "edge-handle-card-" + edgeZone.editorKey + "-"
                     + edgeZone.editorSide + "-" + edgeZone.slotKey + "-" + handleKey
                 x: 12 + (previewIndex < 0 ? index : previewIndex)
-                    * (edgeZone.cardWidth + 8)
-                y: 30
+                    * (edgeZone.cardWidth + 6)
+                y: 44
                 width: edgeZone.cardWidth
-                height: 32
-                radius: 9
-                color: edgeCardMouse.containsMouse ? Theme.controlHover : Theme.accent
+                height: 34
+                radius: 7
+                color: edgeCardMouse.containsMouse ? Theme.controlHover : Theme.cardSurface
+                border.width: 1
+                border.color: edgeCardMouse.containsMouse ? Theme.accent : "transparent"
                 opacity: panel.draggingEdgeHandle
                     && panel.draggedEdgeHandle === handleKey ? 0 : 1
 
                 Behavior on x {
                     enabled: panel.draggingEdgeHandle
-                    NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: 120 }
+                }
+
+                Rectangle {
+                    x: 5; anchors.verticalCenter: parent.verticalCenter
+                    width: 24; height: 24; radius: 5; color: Theme.accent
+                    Image {
+                        anchors.centerIn: parent
+                        width: 17; height: 17
+                        source: Qt.resolvedUrl("../gnome-extension/icons/"
+                            + edgeHandleCard.handleKey + ".svg")
+                        fillMode: Image.PreserveAspectFit
+                    }
                 }
 
                 Text {
-                    anchors.centerIn: parent
-                    text: panel.edgeHandleLabel(edgeHandleCard.handleKey)
-                    color: edgeCardMouse.containsMouse
-                        ? Theme.text : Theme.accentText
-                    font.family: Qt.application.font.family
-                    font.pixelSize: 12
-                    font.weight: Font.DemiBold
-                }
-
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: 8
+                    x: 35; width: parent.width - 40
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "⋮⋮"
-                    color: edgeCardMouse.containsMouse
-                        ? Theme.text : Theme.accentText
+                    text: panel.edgeHandleLabel(edgeHandleCard.handleKey)
+                    color: Theme.text
                     font.family: Qt.application.font.family
-                    font.pixelSize: 12
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
                 }
 
                 MouseArea {
@@ -973,8 +1011,8 @@ Item {
                             panel.updateEdgeHandleDrag(
                                 edgeCardMouse.mapToItem(panel, mouse.x, mouse.y))
                     }
-                    onReleased: panel.finishEdgeHandleDrag()
-                    onCanceled: panel.finishEdgeHandleDrag()
+                    onReleased: panel.finishEdgeHandleDrag(true)
+                    onCanceled: panel.finishEdgeHandleDrag(false)
                 }
             }
         }
@@ -1755,29 +1793,30 @@ Item {
         id: floatingEdgeHandle
         objectName: "edge-handle-drag-overlay"
         z: 100
-        width: (panel.contentWidth - 32) / 2
-        height: 32
+        width: (panel.contentWidth - 30) / 2
+        height: 34
         radius: 9
         visible: panel.draggingEdgeHandle
         color: Theme.accent
 
-        Text {
-            anchors.centerIn: parent
-            text: panel.edgeHandleLabel(panel.draggedEdgeHandle)
-            color: Theme.accentText
-            font.family: Qt.application.font.family
-            font.pixelSize: 12
-            font.weight: Font.DemiBold
+        Image {
+            x: 7
+            anchors.verticalCenter: parent.verticalCenter
+            width: 20; height: 20
+            source: panel.draggedEdgeHandle
+                ? Qt.resolvedUrl("../gnome-extension/icons/"
+                    + panel.draggedEdgeHandle + ".svg") : ""
+            fillMode: Image.PreserveAspectFit
         }
 
         Text {
-            anchors.right: parent.right
-            anchors.rightMargin: 8
+            x: 34; width: parent.width - 39
             anchors.verticalCenter: parent.verticalCenter
-            text: "⋮⋮"
+            text: panel.edgeHandleLabel(panel.draggedEdgeHandle)
             color: Theme.accentText
             font.family: Qt.application.font.family
-            font.pixelSize: 12
+            font.pixelSize: 11
+            elide: Text.ElideRight
         }
     }
 

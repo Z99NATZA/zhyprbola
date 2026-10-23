@@ -133,7 +133,10 @@ the dock button and Super+0. It supports every screen edge and sm/md/lg width
 and height. Both handles can be distributed across three position zones. Drag
 either card between Top/Center/Bottom on a
 vertical edge or Left/Center/Right on a horizontal edge; dragging within one
-zone changes their order. Items in the same zone form a centered group with an
+zone changes their order. The editor uses the Dock Layout card colors, icon tiles,
+hover borders, and drag placeholders. Dragging near the viewport edge scrolls the
+list; canceling or dropping outside it keeps the saved layout.
+Items in the same zone form a centered group with an
 8 px gap. On the Dock
 edge both handles sit against the Dock's inner boundary.
 Click: select; Ctrl-click: toggle; Shift-click: range; drag: covered thumbnails.
