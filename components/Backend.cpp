@@ -408,6 +408,11 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     connect(&m_dateTimeWatcher, &QFileSystemWatcher::fileChanged,
         this, &Backend::refreshDateTimeSettings);
     refreshDateTimeSettings();
+    connect(&m_edgeSpectrumSizeWatcher, &QFileSystemWatcher::directoryChanged,
+        this, &Backend::refreshEdgeSpectrumSize);
+    connect(&m_edgeSpectrumSizeWatcher, &QFileSystemWatcher::fileChanged,
+        this, &Backend::refreshEdgeSpectrumSize);
+    refreshEdgeSpectrumSize();
     connect(&m_showDesktopEdgeWatcher, &QFileSystemWatcher::directoryChanged,
         this, &Backend::refreshShowDesktopEdgeSettings);
     connect(&m_showDesktopEdgeWatcher, &QFileSystemWatcher::fileChanged,
@@ -1156,6 +1161,35 @@ void Backend::setEdgeSpectrumPosition(const QString &position) {
     if (!positions.contains(position) || position == m_edgeSpectrumPosition) return;
     if (!writeDockConfig(QStringLiteral("edge-spectrum-position"), position)) return;
     m_edgeSpectrumPosition = position;
+    emit edgeSpectrumSettingsChanged();
+}
+
+void Backend::refreshEdgeSpectrumSize() {
+    const QString path = dockConfigPath(QStringLiteral("edge-spectrum-size"));
+    const QString directory = QFileInfo(path).absolutePath();
+    if (QDir().mkpath(directory) && !m_edgeSpectrumSizeWatcher.directories().contains(directory))
+        m_edgeSpectrumSizeWatcher.addPath(directory);
+    if (QFileInfo::exists(path) && !m_edgeSpectrumSizeWatcher.files().contains(path))
+        m_edgeSpectrumSizeWatcher.addPath(path);
+    QFile file(path);
+    QString size = QStringLiteral("lg");
+    if (file.open(QIODevice::ReadOnly)) {
+        const QString saved = QString::fromUtf8(file.readAll()).trimmed();
+        if (saved == QLatin1String("sm") || saved == QLatin1String("md")
+            || saved == QLatin1String("lg"))
+            size = saved;
+    }
+    if (size == m_edgeSpectrumSize) return;
+    m_edgeSpectrumSize = size;
+    emit edgeSpectrumSettingsChanged();
+}
+
+void Backend::setEdgeSpectrumSize(const QString &size) {
+    if (size != QLatin1String("sm") && size != QLatin1String("md")
+        && size != QLatin1String("lg")) return;
+    if (size == m_edgeSpectrumSize) return;
+    if (!writeDockConfig(QStringLiteral("edge-spectrum-size"), size)) return;
+    m_edgeSpectrumSize = size;
     emit edgeSpectrumSettingsChanged();
 }
 

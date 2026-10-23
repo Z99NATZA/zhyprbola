@@ -6,6 +6,7 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QJsonDocument>
+#include <QLineF>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QFile>
@@ -51,6 +52,105 @@ private:
 class DateTimeTest : public QObject {
     Q_OBJECT
 private slots:
+    void spectrumBarLengthsPersistAndKeepTheirBaselineOnEveryEdge() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        qputenv("XDG_CONFIG_HOME", directory.path().toUtf8());
+        Backend settings;
+        Backend observer;
+        QCOMPARE(settings.edgeSpectrumSize(), QStringLiteral("lg"));
+
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &observer);
+        engine.rootContext()->setContextProperty(QStringLiteral("edgeScreenWidth"), 800);
+        engine.rootContext()->setContextProperty(QStringLiteral("edgeScreenHeight"), 600);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(
+            QFINDTESTDATA("../EdgeSpectrum.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> edge(component.create());
+        QVERIFY2(edge, qPrintable(component.errorString()));
+        auto *window = qobject_cast<QQuickWindow *>(edge.data());
+        QVERIFY(window);
+        auto *bars = findItem(window->contentItem(), QStringLiteral("edge-spectrum-bars"));
+        QVERIFY(bars);
+
+        for (const QString &side : {QStringLiteral("bottom"), QStringLiteral("top"),
+                 QStringLiteral("left"), QStringLiteral("right")}) {
+            observer.setEdgeSpectrumPosition(side);
+            const int count = bars->property("barCount").toInt();
+            const qreal thickness = bars->property("inwardBarWidth").toReal();
+            for (const QString &size : {QStringLiteral("sm"), QStringLiteral("md"),
+                     QStringLiteral("lg")}) {
+                settings.setEdgeSpectrumSize(size);
+                QTRY_COMPARE(observer.edgeSpectrumSize(), size);
+                const int length = size == QLatin1String("sm") ? 54
+                    : size == QLatin1String("md") ? 108 : 161;
+                QTRY_COMPARE(bars->height(), qreal(length));
+                QCOMPARE(bars->property("barCount").toInt(), count);
+                QCOMPARE(bars->property("inwardBarWidth").toReal(), thickness);
+                QCOMPARE(bars->property("gap").toInt(), 4);
+                const QPointF baseline = bars->mapToScene(
+                    QPointF(bars->width() / 2, bars->height()));
+                const QPointF expected = side == QLatin1String("bottom")
+                    ? QPointF(window->width() / 2.0, window->height())
+                    : side == QLatin1String("top") ? QPointF(window->width() / 2.0, 0)
+                    : side == QLatin1String("left") ? QPointF(0, window->height() / 2.0)
+                    : QPointF(window->width(), window->height() / 2.0);
+                QVERIFY2(QLineF(baseline, expected).length() < 0.1,
+                    qPrintable(QStringLiteral("%1/%2: baseline (%3,%4), expected (%5,%6)")
+                        .arg(side, size).arg(baseline.x()).arg(baseline.y())
+                        .arg(expected.x()).arg(expected.y())));
+                Backend reopened;
+                QCOMPARE(reopened.edgeSpectrumSize(), size);
+            }
+        }
+        settings.setEdgeSpectrumSize(QStringLiteral("invalid"));
+        QCOMPARE(settings.edgeSpectrumSize(), QStringLiteral("lg"));
+        QFile saved(directory.filePath(QStringLiteral("zhyprbola/edge-spectrum-size")));
+        QVERIFY(saved.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        saved.write("invalid\n");
+        saved.close();
+        Backend invalid;
+        QCOMPARE(invalid.edgeSpectrumSize(), QStringLiteral("lg"));
+    }
+
+    void spectrumSettingsOfferClickableLengthChoices() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        qputenv("XDG_CONFIG_HOME", directory.path().toUtf8());
+        Backend backend;
+        ScreenshotSettingsStub screenshots;
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        engine.rootContext()->setContextProperty(QStringLiteral("screenshots"), &screenshots);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(
+            QFINDTESTDATA("../components/SettingsPanel.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> panel(component.create());
+        QVERIFY2(panel, qPrintable(component.errorString()));
+        panel->setProperty("section", QStringLiteral("spectrum"));
+        auto *item = qobject_cast<QQuickItem *>(panel.data());
+        QVERIFY(item);
+        QQuickWindow window;
+        window.resize(item->width(), item->height());
+        item->setParentItem(window.contentItem());
+        window.show();
+        QTRY_VERIFY(window.isExposed());
+        for (const QString &size : {QStringLiteral("sm"), QStringLiteral("md"),
+                 QStringLiteral("lg")}) {
+            auto *choice = findItem(item, QStringLiteral("spectrum-size-") + size);
+            QVERIFY(choice);
+            QVERIFY(choice->isVisible());
+            const QPointF center = choice->mapToScene(QPointF(
+                choice->width() / 2, choice->height() / 2));
+            QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center.toPoint());
+            QCOMPARE(backend.edgeSpectrumSize(), size);
+            auto *check = findItem(item, QStringLiteral("spectrum-size-check-") + size);
+            QVERIFY(check);
+            QVERIFY(check->isVisible());
+        }
+    }
+
     void formatsAndPersistsIndependentSettings() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());

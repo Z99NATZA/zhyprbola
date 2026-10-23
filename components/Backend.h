@@ -65,6 +65,7 @@ class Backend : public QObject {
         NOTIFY showDesktopEdgeSettingsChanged)
     Q_PROPERTY(bool edgeSpectrumEnabled READ edgeSpectrumEnabled NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QString edgeSpectrumPosition READ edgeSpectrumPosition NOTIFY edgeSpectrumSettingsChanged)
+    Q_PROPERTY(QString edgeSpectrumSize READ edgeSpectrumSize NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QVariantList tasks READ tasks NOTIFY tasksChanged)
     Q_PROPERTY(QVariantMap keyVisualizerSettings READ keyVisualizerSettings NOTIFY keyVisualizerSettingsChanged)
     Q_PROPERTY(QVariantMap dateTimeSettings READ dateTimeSettings NOTIFY dateTimeSettingsChanged)
@@ -127,6 +128,7 @@ public:
     QVariantMap showDesktopEdgeSettings() const { return m_showDesktopEdgeSettings; }
     bool edgeSpectrumEnabled() const { return m_edgeSpectrumEnabled; }
     QString edgeSpectrumPosition() const { return m_edgeSpectrumPosition; }
+    QString edgeSpectrumSize() const { return m_edgeSpectrumSize; }
     QVariantList tasks() const { return m_tasks; }
     QVariantMap keyVisualizerSettings() const { return m_keyVisualizerSettings; }
     QVariantMap dateTimeSettings() const { return m_dateTimeSettings; }
@@ -173,6 +175,7 @@ public:
         const QString &beforeKey);
     Q_INVOKABLE void setEdgeSpectrumEnabled(bool enabled);
     Q_INVOKABLE void setEdgeSpectrumPosition(const QString &position);
+    Q_INVOKABLE void setEdgeSpectrumSize(const QString &size);
     Q_INVOKABLE void addTask(const QString &text);
     Q_INVOKABLE void toggleTask(const QString &id);
     Q_INVOKABLE void renameTask(const QString &id, const QString &text);
@@ -231,6 +234,7 @@ private:
     void refreshTheme();
     void refreshKeyVisualizerSettings();
     void refreshDateTimeSettings();
+    void refreshEdgeSpectrumSize();
     void refreshShowDesktopEdgeSettings();
     void refreshSettingsSectionRequest();
     void readKeyCapture();
@@ -308,6 +312,8 @@ private:
     QVariantMap m_showDesktopEdgeSettings;
     bool m_edgeSpectrumEnabled = false;
     QString m_edgeSpectrumPosition = QStringLiteral("bottom");
+    QFileSystemWatcher m_edgeSpectrumSizeWatcher;
+    QString m_edgeSpectrumSize = QStringLiteral("lg");
     QVariantList m_tasks;
     QFileSystemWatcher m_keyVisualizerWatcher;
     QVariantMap m_keyVisualizerSettings;

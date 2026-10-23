@@ -91,6 +91,14 @@ shown on the dock; hovering a popup row changes its text color without a
 background or animation.
 ```
 
+## Spectrum
+
+```text
+Settings -> Spectrum: enable the edge spectrum, choose its edge and bar length.
+Bar length: sm (54 px), md (108 px), lg (161 px; original default).
+Changes apply live and persist. Bar width, spacing, and the edge baseline stay fixed.
+```
+
 ## Tasks
 
 ```text

@@ -2033,6 +2033,68 @@ Item {
 
         Column {
             width: panel.contentWidth
+            spacing: 6
+
+            Text {
+                text: "Bar length"
+                color: Theme.mutedText
+                font.family: Qt.application.font.family
+                font.pixelSize: 12
+            }
+
+            Row {
+                width: parent.width
+                spacing: 8
+
+                Repeater {
+                    model: ["sm", "md", "lg"]
+
+                    delegate: Rectangle {
+                        id: spectrumSizeChoice
+                        required property string modelData
+                        width: (panel.contentWidth - 16) / 3
+                        height: 42
+                        radius: 8
+                        color: backend.edgeSpectrumSize === spectrumSizeChoice.modelData
+                            ? Theme.selected : (spectrumSizeMouse.containsMouse
+                                ? Theme.controlHover : Theme.control)
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: spectrumSizeChoice.modelData
+                            color: Theme.text
+                            font.family: Qt.application.font.family
+                            font.pixelSize: 14
+                        }
+
+                        Text {
+                            objectName: "spectrum-size-check-" + spectrumSizeChoice.modelData
+                            anchors.right: parent.right
+                            anchors.rightMargin: 11
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: backend.edgeSpectrumSize === spectrumSizeChoice.modelData
+                            text: "✓"
+                            color: Theme.accent
+                            font.family: Qt.application.font.family
+                            font.pixelSize: 15
+                            font.weight: Font.Bold
+                        }
+
+                        MouseArea {
+                            id: spectrumSizeMouse
+                            objectName: "spectrum-size-" + spectrumSizeChoice.modelData
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: backend.setEdgeSpectrumSize(spectrumSizeChoice.modelData)
+                        }
+                    }
+                }
+            }
+        }
+
+        Column {
+            width: panel.contentWidth
             spacing: panel.contentItemGap
 
             Repeater {
