@@ -228,6 +228,182 @@ function workspaceFixture(side = 'bottom') {
     return {...setup, manager};
 }
 
+function mixedRegionFixture(regions, side = 'bottom') {
+    const setup = workspaceFixture(side);
+    const {dock} = setup;
+    dock._dockLayout = {version: 1, regions, hidden: [], quick: []};
+    dock._dockComponents = dock._componentsForLayout(dock._dockLayout);
+    dock._dockGroupOrder = ['apps', 'running', 'zhyprbola'];
+    dock._dockGroupsByName = new Map();
+    dock._dockRegions = new Map();
+    for (const name of dock._regionNames()) {
+        const group = new Actor();
+        dock._dock.add_child(group);
+        dock._dockGroupsByName.set(name, group);
+        dock._dockRegions.set(name, new Actor());
+    }
+    dock._dateTimeLabels = new Map();
+    dock._keyCountLabels = new Set();
+    dock._keyCountText = () => 'keys:1d:42';
+    dock._dateTimeItemLength = () => 80;
+    dock._formatDockDate = () => '2026-10-23';
+    dock._formatDockTime = () => '21:00';
+    dock._panelGicon = name => name;
+    return setup;
+}
+
+test('shared regions migrate legacy order and normalize duplicate/invalid placement', () => {
+    const {dock, context} = fixture();
+    const legacy = {visible: ['workspaces', 'settings', 'wifi'], hidden: ['todo'], quick: ['sound']};
+    const layout = dock._readDockLayout(legacy, ['zhyprbola', 'running'], ['zhyprbola', 'apps', 'running']);
+    assert.deepEqual(JSON.parse(JSON.stringify(layout.regions)),
+        [['workspaces', 'settings', 'wifi'], [], ['running']]);
+    assert.equal(layout.hidden.includes('apps'), true);
+    context.TextDecoder = TextDecoder;
+    context.GLib.file_get_contents = () => [true, new TextEncoder().encode(JSON.stringify({
+        regions: [['running', 'settings', 'wifi', 'wifi'], ['running', 'apps', 'bogus'], []],
+        hidden: ['settings', 'wifi', 'workspaces'], quick: ['running', 'workspaces', 'sound'],
+    }))];
+    const normalized = dock._readDockLayout(legacy, ['zhyprbola', 'running'], ['apps', 'running', 'zhyprbola']);
+    assert.deepEqual(JSON.parse(JSON.stringify(normalized.regions)), [['running', 'settings', 'wifi'], ['apps'], []]);
+    assert.deepEqual(JSON.parse(JSON.stringify(normalized.hidden)), ['workspaces', 'todo']);
+    assert.deepEqual(JSON.parse(JSON.stringify(normalized.quick)), ['sound']);
+});
+
+test('components and app blocks render together on every edge and retain live controls during app changes', () => {
+    for (const side of ['bottom', 'top', 'left', 'right']) {
+        const {dock} = mixedRegionFixture([['workspaces', 'running', 'time-display'], ['settings'], ['key-count']], side);
+        dock._dockItems.set('running', [item(1)]);
+        dock._composeDockRegions();
+        const group = dock._dockGroupsByName.get('region-1');
+        const vertical = side === 'left' || side === 'right';
+        dock._renderDockRegion('region-1', 400, vertical, 0);
+        dock._renderDockRegion('region-2', 150, vertical, 1);
+        dock._renderDockRegion('region-3', 150, vertical, 2);
+        const pager = group.children[0];
+        const clock = group.children[2];
+        const label = dock._dateTimeLabels.get('time-display');
+        assert.equal(group.children[1]._delegate.groupName, 'running');
+        assert.equal(group.children[1]._delegate.item.window, dock._dockItems.get('running')[0].window);
+        assert.equal(dock._keyCountLabels.size, 1);
+        dock._dockItems.set('running', [item(1), item(2)]);
+        dock._composeDockRegions();
+        dock._renderDockRegion('region-1', 400, vertical, 0);
+        assert.equal(group.children[0], pager);
+        assert.equal(group.children[3], clock);
+        assert.equal(dock._dateTimeLabels.get('time-display'), label);
+        assert.equal(label.destroyed, undefined);
+        assert.equal(dock._keyCountLabels.size, 1, 'another region retains its key-count label');
+    }
+});
+
+test('pinned and running instances of the same app keep distinct buttons in a shared region', () => {
+    const {dock} = mixedRegionFixture([['apps', 'running'], [], ['settings']]);
+    const app = item(1);
+    dock._dockItems.set('apps', [app]);
+    dock._dockItems.set('running', [app]);
+    dock._composeDockRegions();
+    dock._renderDockRegion('region-1', 300, false, 0);
+    const group = dock._dockGroupsByName.get('region-1');
+    const buttons = group.get_children();
+    assert.equal(buttons[0]._delegate.groupName, 'apps');
+    assert.equal(buttons[1]._delegate.groupName, 'running');
+    assert.notEqual(buttons[0], buttons[1]);
+    dock._renderDockRegion('region-1', 300, false, 0);
+    assert.deepEqual(group.get_children(), buttons);
+});
+
+test('dragging running apps in a mixed region preserves surrounding components and commits only app order', () => {
+    const {dock} = mixedRegionFixture([['workspaces', 'running', 'time-display'], [], ['settings']]);
+    const a = item(1), b = item(2);
+    dock._dockItems.set('running', [a, b]);
+    dock._composeDockRegions();
+    dock._renderDockRegion('region-1', 400, false, 0);
+    const group = dock._dockGroupsByName.get('region-1');
+    const [pager, first, second, clock] = group.get_children();
+    first.x = 64;
+    second.x = 95;
+    assert.equal(dock._previewDockItemDrag('running', group, first._delegate, 120), true);
+    assert.deepEqual(group.get_children(), [pager, second, first, clock]);
+    dock._commitDockItemOrder('running', [second._delegate.key, first._delegate.key]);
+    assert.equal(dock._dockItems.get('running')[0], b);
+    assert.equal(dock._dockItems.get('running')[1], a);
+    assert.deepEqual(Array.from(dock._dockItems.get('region-1'), value => value.kind),
+        ['workspaces', 'app', 'app', 'date-time']);
+});
+
+test('component animation and popup anchors follow the component into its shared region', () => {
+    const {dock} = mixedRegionFixture([['sound', 'todo'], ['running'], ['settings', 'components']]);
+    const group = dock._dockGroupsByName.get('region-1');
+    dock._composeDockRegions();
+    dock._renderDockRegion('region-1', 300, false, 0);
+    const [sound, todo] = group.get_children();
+    todo.set_position(120, 900);
+    todo.set_size(27, 27);
+    let rect;
+    dock._setPanelAnimationTarget({get_title: () => 'Zhyprbola Tasks', set_icon_geometry: value => { rect = value; }});
+    assert.equal(rect?.x, 120);
+    let source;
+    dock._openSoundMenu = button => { source = button; };
+    dock._openPanel('sound');
+    assert.equal(source, sound);
+    dock._renderDockRegion('region-1', 30, false, 0);
+    const overflow = group.children[0];
+    overflow.set_position(150, 900);
+    overflow.set_size(27, 27);
+    rect = null;
+    dock._setPanelAnimationTarget({get_title: () => 'Zhyprbola Tasks', set_icon_geometry: value => { rect = value; }});
+    assert.equal(rect?.x, 150);
+});
+
+test('canceling an app drag restores its block position without crossing surrounding components', () => {
+    const {dock} = mixedRegionFixture([['workspaces', 'running', 'time-display'], [], ['settings']]);
+    dock._dockItems.set('running', [item(1), item(2)]);
+    dock._composeDockRegions();
+    dock._renderDockRegion('region-1', 400, false, 0);
+    const group = dock._dockGroupsByName.get('region-1');
+    const original = group.get_children();
+    const first = original[1];
+    first.x = 64;
+    original[2].x = 95;
+    first.draggable.emit('drag-begin');
+    assert.equal(first._delegate.originalIndex, 0);
+    dock._previewDockItemDrag('running', group, first._delegate, 120);
+    assert.equal(group.children[2], first);
+    first.draggable.emit('drag-cancelled');
+    assert.deepEqual(group.get_children(), original);
+    first.draggable.emit('drag-end');
+    assert.equal(dock._dockInteractions.size, 0);
+});
+
+test('date/time format changes resize inline labels after moving them to another region', () => {
+    const {dock, flush} = mixedRegionFixture([['time-display'], [], ['settings']]);
+    Object.assign(dock, {_dockBgOpacity: 50, _dockUngroupWindows: false,
+        _useWallpaper: false, _edgeEnabled: false, _edgePosition: 'bottom',
+        _dockGroups: ['zhyprbola', 'running'], _dateTimeSettings: {}, _pinnedApps: null,
+        _connectionRefreshToken: ''});
+    const reads = {Theme: '_themeName', DockPosition: '_dockPosition', DockBgOpacity: '_dockBgOpacity',
+        DockUngroupWindows: '_dockUngroupWindows', UseWallpaper: '_useWallpaper', EdgeEnabled: '_edgeEnabled',
+        EdgePosition: '_edgePosition', DockGroups: '_dockGroups', DockGroupOrder: '_dockGroupOrder',
+        DockComponents: '_dockComponents', PinnedApps: '_pinnedApps', ConnectionRefreshToken: '_connectionRefreshToken'};
+    for (const [reader, field] of Object.entries(reads)) dock[`_read${reader}`] = () => dock[field];
+    dock._handlePanelRequest = () => {};
+    dock._refreshDateTimeLabels = () => {};
+    let length = 52;
+    dock._dateTimeItemLength = () => length;
+    dock._formatDockTime = () => length === 52 ? '21:00' : '21:00:00';
+    dock._composeDockRegions();
+    dock._layoutDock();
+    const group = dock._dockGroupsByName.get('region-1');
+    assert.equal(group.children[0].width, 52);
+    length = 78;
+    dock._readDateTimeSettings = () => ({showSeconds: true});
+    dock._syncSettings();
+    flush();
+    assert.equal(group.children[0].width, 78);
+    assert.equal(dock._dateTimeLabels.get('time-display').text, '21:00:00');
+});
+
 test('Workspaces defaults to Show and respects Hidden while rejecting Quick', () => {
     const {dock, context} = fixture();
     assert.equal(dock._readDockComponents().visible[0], 'workspaces');

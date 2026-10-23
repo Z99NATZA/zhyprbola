@@ -305,6 +305,46 @@ QStringList dockComponentKeys() {
         QStringLiteral("key-visualizer")};
 }
 
+bool dockQuickAllowed(const QString &key) {
+    return key != QLatin1String("apps") && key != QLatin1String("running")
+        && key != QLatin1String("settings") && key != QLatin1String("components")
+        && key != QLatin1String("workspaces") && key != QLatin1String("date-display")
+        && key != QLatin1String("time-display") && key != QLatin1String("key-count");
+}
+
+QVariantMap normalizedDockLayout(const QVariantMap &saved, const QVariantMap &fallback) {
+    const QVariantList input = saved.value("regions").toList();
+    if (input.size() != 3) return fallback;
+    QStringList known = dockComponentKeys();
+    known << QStringLiteral("apps") << QStringLiteral("running");
+    QSet<QString> seen;
+    QVariantList regions;
+    const auto take = [&seen, &known](const QVariant &value, const QString &zone) {
+        QStringList result;
+        for (const QVariant &entry : value.toList()) {
+            const QString key = entry.toString();
+            if (!known.contains(key) || seen.contains(key)
+                || (zone != QLatin1String("region") && key == QLatin1String("settings"))
+                || (zone == QLatin1String("quick") && !dockQuickAllowed(key))) continue;
+            seen.insert(key);
+            result.append(key);
+        }
+        return result;
+    };
+    for (const QVariant &region : input) regions.append(take(region, QStringLiteral("region")));
+    QStringList hidden = take(saved.value("hidden"), QStringLiteral("hidden"));
+    QStringList quick = take(saved.value("quick"), QStringLiteral("quick"));
+    const QVariantList defaults = fallback.value("regions").toList();
+    for (int index = 0; index < 3; ++index) {
+        QStringList items = regions[index].toStringList();
+        items.append(take(defaults[index], QStringLiteral("region")));
+        regions[index] = items;
+    }
+    hidden.append(take(fallback.value("hidden"), QStringLiteral("hidden")));
+    quick.append(take(fallback.value("quick"), QStringLiteral("quick")));
+    return {{"version", 1}, {"regions", regions}, {"hidden", hidden}, {"quick", quick}};
+}
+
 QStringList defaultOpacityEnabledComponents() {
     return {QStringLiteral("settings"), QStringLiteral("bluetooth"),
         QStringLiteral("wifi"), QStringLiteral("clock-weather"),
@@ -565,6 +605,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     m_dockQuickComponents.removeAll(QStringLiteral("settings"));
     if (!m_dockVisibleComponents.contains(QStringLiteral("settings")))
         m_dockVisibleComponents.append(QStringLiteral("settings"));
+    loadDockLayout();
     QFile wallpaperFile(dockConfigPath(QStringLiteral("use-wallpaper")));
     if (wallpaperFile.open(QIODevice::ReadOnly))
         m_useWallpaper = wallpaperFile.readAll().trimmed() == "true";
@@ -743,12 +784,19 @@ void Backend::setDockGroupEnabled(const QString &group, bool enabled) {
         QStringLiteral("zhyprbola")};
     if (!names.contains(group) || (group == QLatin1String("zhyprbola") && !enabled)
         || m_dockGroups.contains(group) == enabled) return;
+    if (QFileInfo::exists(dockConfigPath(QStringLiteral("dock-layout")))) {
+        moveDockLayoutItem(group, enabled
+            ? QStringLiteral("region-%1").arg(m_dockGroupOrder.indexOf(group) + 1)
+            : QStringLiteral("hidden"), {});
+        return;
+    }
 
     QStringList next = m_dockGroups;
     if (enabled) next.append(group);
     else next.removeAll(group);
     if (!writeDockConfig(QStringLiteral("dock-groups"), next.join(QLatin1Char(',')))) return;
     m_dockGroups = next;
+    loadDockLayout();
     emit dockSettingsChanged();
 }
 
@@ -759,13 +807,36 @@ void Backend::moveDockGroup(const QString &source, int targetIndex) {
     QStringList next = m_dockGroupOrder;
     next.removeAt(from);
     next.insert(targetIndex, source);
+    if (QFileInfo::exists(dockConfigPath(QStringLiteral("dock-layout")))) {
+        QVariantMap layout = m_dockLayout;
+        QVariantList regions = layout.value("regions").toList();
+        regions.move(from, targetIndex);
+        layout.insert("regions", regions);
+        if (!saveDockLayout(layout)) return;
+        if (writeDockConfig(QStringLiteral("dock-group-order"), next.join(QLatin1Char(','))))
+            m_dockGroupOrder = next;
+        return;
+    }
     if (!writeDockConfig(QStringLiteral("dock-group-order"), next.join(QLatin1Char(',')))) return;
     m_dockGroupOrder = next;
+    if (!QFileInfo::exists(dockConfigPath(QStringLiteral("dock-layout")))) loadDockLayout();
     emit dockSettingsChanged();
 }
 
 void Backend::moveDockComponent(const QString &key, const QString &destination,
     const QString &beforeKey) {
+    if (QFileInfo::exists(dockConfigPath(QStringLiteral("dock-layout")))) {
+        QString zone = destination;
+        if (destination == QLatin1String("visible")) {
+            int index = 2;
+            const QVariantList regions = m_dockLayout.value("regions").toList();
+            for (int i = 0; i < regions.size(); ++i)
+                if (regions[i].toStringList().contains(beforeKey.isEmpty() ? key : beforeKey)) index = i;
+            zone = QStringLiteral("region-%1").arg(index + 1);
+        }
+        moveDockLayoutItem(key, zone, beforeKey);
+        return;
+    }
     if (!dockComponentKeys().contains(key) || beforeKey == key
         || (destination != QLatin1String("visible")
             && destination != QLatin1String("hidden")
@@ -801,7 +872,89 @@ void Backend::moveDockComponent(const QString &key, const QString &destination,
     m_dockVisibleComponents = visible;
     m_dockHiddenComponents = hidden;
     m_dockQuickComponents = quick;
+    loadDockLayout();
     emit dockSettingsChanged();
+}
+
+void Backend::loadDockLayout() {
+    QVariantList regions;
+    QStringList hidden = m_dockHiddenComponents;
+    for (const QString &group : m_dockGroupOrder) {
+        QStringList items;
+        if (group == QLatin1String("zhyprbola")) items = m_dockVisibleComponents;
+        else if (m_dockGroups.contains(group)) items.append(group);
+        else hidden.append(group);
+        regions.append(items);
+    }
+    hidden.removeDuplicates();
+    const QVariantMap fallback{{"version", 1}, {"regions", regions},
+        {"hidden", hidden}, {"quick", m_dockQuickComponents}};
+    QFile file(dockConfigPath(QStringLiteral("dock-layout")));
+    m_dockLayout = fallback;
+    if (file.open(QIODevice::ReadOnly))
+        m_dockLayout = normalizedDockLayout(QJsonDocument::fromJson(file.readAll()).toVariant().toMap(), fallback);
+    syncDockLayout();
+}
+
+void Backend::syncDockLayout() {
+    m_dockVisibleComponents.clear();
+    m_dockGroups = {QStringLiteral("zhyprbola")};
+    for (const QVariant &region : m_dockLayout.value("regions").toList()) {
+        for (const QString &key : region.toStringList()) {
+            if (key == QLatin1String("apps") || key == QLatin1String("running"))
+                m_dockGroups.append(key);
+            else m_dockVisibleComponents.append(key);
+        }
+    }
+    m_dockHiddenComponents = m_dockLayout.value("hidden").toStringList();
+    m_dockQuickComponents = m_dockLayout.value("quick").toStringList();
+}
+
+bool Backend::saveDockLayout(const QVariantMap &layout) {
+    if (layout == m_dockLayout) return true;
+    if (!writeDockConfig(QStringLiteral("dock-layout"),
+        QString::fromUtf8(QJsonDocument::fromVariant(layout).toJson(QJsonDocument::Compact)))) return false;
+    m_dockLayout = layout;
+    syncDockLayout();
+    emit dockSettingsChanged();
+    return true;
+}
+
+void Backend::moveDockLayoutItem(const QString &key, const QString &destination,
+    const QString &beforeKey) {
+    QStringList known = dockComponentKeys();
+    known << QStringLiteral("apps") << QStringLiteral("running");
+    const int region = destination.startsWith(QLatin1String("region-"))
+        ? destination.mid(7).toInt() - 1 : -1;
+    const bool onDock = region >= 0 && region < 3;
+    if (!known.contains(key) || beforeKey == key
+        || (!onDock && destination != QLatin1String("hidden") && destination != QLatin1String("quick"))
+        || (key == QLatin1String("settings") && !onDock)
+        || (destination == QLatin1String("quick") && !dockQuickAllowed(key))) return;
+    QVariantMap next = m_dockLayout;
+    QVariantList regions = next.value("regions").toList();
+    if (regions.size() != 3) return;
+    for (QVariant &value : regions) {
+        QStringList items = value.toStringList();
+        items.removeAll(key);
+        value = items;
+    }
+    QStringList hidden = next.value("hidden").toStringList();
+    QStringList quick = next.value("quick").toStringList();
+    hidden.removeAll(key);
+    quick.removeAll(key);
+    QStringList target = onDock ? regions[region].toStringList()
+        : destination == QLatin1String("hidden") ? hidden : quick;
+    const int index = beforeKey.isEmpty() ? target.size() : target.indexOf(beforeKey);
+    if (index < 0) return;
+    target.insert(index, key);
+    if (onDock) regions[region] = target;
+    else if (destination == QLatin1String("hidden")) hidden = target;
+    else quick = target;
+    next.insert("regions", regions);
+    next.insert("hidden", hidden);
+    next.insert("quick", quick);
+    saveDockLayout(next);
 }
 
 void Backend::refreshKeyVisualizerSettings() {

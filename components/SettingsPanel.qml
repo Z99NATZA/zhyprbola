@@ -25,22 +25,13 @@ Item {
     readonly property int dockPositionGap: 8
     readonly property int dockPositionWidth:
         Math.floor((contentWidth - dockPositionGap * 3) / 4)
-    readonly property int dockGroupCardGap: 8
-    readonly property int dockGroupFramePadding: 1
-    readonly property int dockGroupContentWidth: contentWidth - dockGroupFramePadding * 2
-    readonly property int dockGroupCardWidth:
-        Math.floor((dockGroupContentWidth - dockGroupCardGap * 2) / 3)
-    readonly property int dockGroupStep: dockGroupCardWidth + dockGroupCardGap
-    readonly property int dockToggleWidth:
-        Math.floor((contentWidth - contentItemGap) / 2)
-
     readonly property var sections: [
-        {key: "components", label: "Components"},
         {key: "date-time", label: "Date & Time"},
         {key: "dock", label: "Dock"},
+        {key: "components", label: "Dock Layout"},
+        {key: "edge-handles", label: "Edge Handles"},
         {key: "keys", label: "Keys"},
         {key: "opacity", label: "Opacity"},
-        {key: "edge-handles", label: "Edge Handles"},
         {key: "spectrum", label: "Spectrum"},
         {key: "themes", label: "Themes"},
         {key: "wallpaper", label: "Wallpaper"}
@@ -88,21 +79,13 @@ Item {
     readonly property var groupLabels: ({
         apps: "Apps", running: "Running", zhyprbola: "Zhyprbola"
     })
-    property string draggedGroup: ""
-    property bool draggingGroup: false
-    property int groupDropIndex: -1
-    property var groupPreviewOrder: []
-    property real groupDragStartX: 0
-    property real groupDragStartY: 0
-    property real groupDragOffsetX: 0
-    property real groupDragOffsetY: 0
     property string draggedComponent: ""
     property bool draggingComponent: false
     property string componentDropZone: ""
     property string componentBeforeKey: ""
-    property var componentPreviewShow: []
-    property var componentPreviewHidden: []
-    property var componentPreviewQuick: []
+    property var componentPreviewZones: ({})
+    property point componentDragPoint: Qt.point(0, 0)
+    property string selectedDockItem: ""
     property real dragStartX: 0
     property real dragStartY: 0
     property string draggedEdgeHandle: ""
@@ -123,19 +106,13 @@ Item {
     property real opacityDragStartX: 0
     property real opacityDragStartY: 0
 
-    function dockRegionLabel(groupName) {
-        const order = groupPreviewOrder.length > 0
-            ? groupPreviewOrder : backend.dockGroupOrder
-        const index = order.indexOf(groupName)
-        return "Region " + (index < 0 ? 1 : index + 1)
-    }
-
     function openableComponents() {
         return backend.dockVisibleComponents
             .concat(backend.dockHiddenComponents)
             .concat(backend.dockQuickComponents)
             .filter(key => key !== "settings"
                 && key !== "workspaces"
+                && key !== "apps" && key !== "running"
                 && key !== "input-source"
                 && key !== "power"
                 && key !== "components"
@@ -144,154 +121,122 @@ Item {
                 && key !== "key-count")
     }
 
-    function beginGroupDrag(name, point, offsetX, offsetY) {
-        draggedGroup = name
-        groupDragStartX = point.x
-        groupDragStartY = point.y
-        groupDragOffsetX = offsetX
-        groupDragOffsetY = offsetY
-        groupPreviewOrder = backend.dockGroupOrder.slice()
-        groupDropIndex = -1
+    function dockItemLabel(key) {
+        const labels = {apps: "Pinned apps", running: "Running apps", workspaces: "Workspaces",
+            "date-display": "Date", "time-display": "Time", "key-count": "Key count",
+            settings: "Settings", bluetooth: "Bluetooth", wifi: "Wi-Fi",
+            "clock-weather": "Clock/weather", "system-status": "System status",
+            "audio-spectrum": "Spectrum", music: "Music", sound: "Sound",
+            brightness: "Brightness", battery: "Battery", todo: "Tasks", calendar: "Calendar",
+            "input-source": "Language", power: "Power", components: "Quick menu",
+            "key-visualizer": "Keys"}
+        return labels[key] || key
     }
 
-    function updateGroupDrag(point) {
-        if (!draggedGroup)
-            return
-        if (!draggingGroup) {
-            const dx = point.x - groupDragStartX
-            const dy = point.y - groupDragStartY
-            if (dx * dx + dy * dy < 36)
-                return
-            draggingGroup = true
-        }
-
-        floatingGroup.x = point.x - groupDragOffsetX
-        floatingGroup.y = point.y - groupDragOffsetY
-        const local = groupSlotContent.mapFromItem(panel, point.x, point.y)
-        const inside = local.x >= 0 && local.x < groupSlotContent.width
-            && local.y >= 0 && local.y < groupSlotContent.height
-        const order = backend.dockGroupOrder.slice()
-        if (inside) {
-            groupDropIndex = Math.max(0, Math.min(order.length - 1,
-                Math.floor(local.x / panel.dockGroupStep)))
-            const preview = order.filter(name => name !== draggedGroup)
-            preview.splice(groupDropIndex, 0, draggedGroup)
-            if (preview.join(',') !== groupPreviewOrder.join(','))
-                groupPreviewOrder = preview
-        } else {
-            groupDropIndex = -1
-            if (order.join(',') !== groupPreviewOrder.join(','))
-                groupPreviewOrder = order
-        }
+    function regionLabel(index) {
+        const vertical = backend.dockPosition === "left" || backend.dockPosition === "right"
+        return "Region " + (index + 1) + " · " + (index === 1 ? "Center"
+            : index === 0 ? (vertical ? "Top" : "Left") : (vertical ? "Bottom" : "Right"))
     }
 
-    function finishGroupDrag(commit) {
-        const name = draggedGroup
-        const index = groupDropIndex
-        const shouldCommit = commit && draggingGroup && index >= 0
-        draggedGroup = ""
-        draggingGroup = false
-        groupDropIndex = -1
-        groupPreviewOrder = []
-        if (shouldCommit)
-            backend.moveDockGroup(name, index)
+    function dockZoneItems() {
+        const layout = backend.dockLayout
+        return {"region-1": layout.regions[0].slice(), "region-2": layout.regions[1].slice(),
+            "region-3": layout.regions[2].slice(), hidden: layout.hidden.slice(), quick: layout.quick.slice()}
+    }
+
+    function canPlaceDockItem(key, destination) {
+        if (key === "settings" && (destination === "hidden" || destination === "quick")) return false
+        return destination !== "quick" || !["apps", "running", "components", "workspaces",
+            "date-display", "time-display", "key-count"].includes(key)
+    }
+
+    function dockItemZone(key) {
+        for (let i = 0; i < 3; i++)
+            if (backend.dockLayout.regions[i].includes(key)) return "region-" + (i + 1)
+        return backend.dockLayout.hidden.includes(key) ? "hidden" : "quick"
+    }
+
+    function componentZones() {
+        return [region1Zone, region2Zone, region3Zone, hiddenZone, quickZone]
     }
 
     function beginComponentDrag(key, point) {
         draggedComponent = key
         dragStartX = point.x
         dragStartY = point.y
-        componentPreviewShow = backend.dockVisibleComponents.slice()
-        componentPreviewHidden = backend.dockHiddenComponents.slice()
-        componentPreviewQuick = backend.dockQuickComponents.slice()
+        componentDragPoint = point
+        componentPreviewZones = dockZoneItems()
     }
 
     function updateComponentDrag(point) {
-        if (!draggedComponent)
-            return
+        if (!draggedComponent) return
+        componentDragPoint = point
         if (!draggingComponent) {
             const dx = point.x - dragStartX
             const dy = point.y - dragStartY
-            if (dx * dx + dy * dy < 36)
-                return
+            if (dx * dx + dy * dy < 36) return
             draggingComponent = true
         }
-
         floatingComponent.x = point.x - floatingComponent.width / 2
         floatingComponent.y = point.y - floatingComponent.height / 2
         let destination = null
         let localPoint = null
-        for (const zone of [showZone, hiddenZone, quickZone]) {
+        for (const zone of componentZones()) {
             const local = zone.mapFromItem(panel, point.x, point.y)
-            if (local.x >= 0 && local.x < zone.width
-                && local.y >= 0 && local.y < zone.height
-                && (draggedComponent !== "settings" || zone.zoneKey === "visible")
-                && (zone.zoneKey !== "quick" || (draggedComponent !== "components"
-                    && draggedComponent !== "workspaces"
-                    && draggedComponent !== "date-display"
-                    && draggedComponent !== "time-display"
-                    && draggedComponent !== "key-count"))) {
+            if (local.x >= 0 && local.x < zone.width && local.y >= 0 && local.y < zone.height
+                && canPlaceDockItem(draggedComponent, zone.zoneKey)) {
                 destination = zone
                 localPoint = local
-                break
             }
         }
-        showZone.dropHovered = destination === showZone
-        hiddenZone.dropHovered = destination === hiddenZone
-        quickZone.dropHovered = destination === quickZone
+        for (const zone of componentZones()) zone.dropHovered = zone === destination
         componentDropZone = destination ? destination.zoneKey : ""
         componentBeforeKey = ""
-
-        const show = backend.dockVisibleComponents.slice()
-            .filter(key => key !== draggedComponent)
-        const hidden = backend.dockHiddenComponents.slice()
-            .filter(key => key !== draggedComponent)
-        const quick = backend.dockQuickComponents.slice()
-            .filter(key => key !== draggedComponent)
+        const preview = dockZoneItems()
         if (destination) {
-            const target = destination.zoneKey === "visible" ? show
-                : destination.zoneKey === "hidden" ? hidden : quick
-            const row = Math.max(0, Math.floor((localPoint.y - 45 + 18.5) / 37))
-            const column = Math.max(0, Math.floor((localPoint.x - 12 + 18.5) / 37))
-            const position = Math.max(0, Math.min(target.length, row * 9 + column))
+            for (const zone of Object.keys(preview)) preview[zone] = preview[zone].filter(key => key !== draggedComponent)
+            const target = preview[destination.zoneKey]
+            const row = Math.max(0, Math.floor((localPoint.y - 44 + 17) / 40))
+            const column = Math.max(0, Math.min(2, Math.floor((localPoint.x - 12) / (destination.tileWidth + 6))))
+            const position = Math.max(0, Math.min(target.length, row * 3 + column))
             componentBeforeKey = target[position] || ""
             target.splice(position, 0, draggedComponent)
-        } else if (backend.dockVisibleComponents.includes(draggedComponent)) {
-            show.splice(backend.dockVisibleComponents.indexOf(draggedComponent),
-                0, draggedComponent)
-        } else {
-            const original = backend.dockHiddenComponents.includes(draggedComponent)
-                ? hidden : quick
-            const index = backend.dockHiddenComponents.includes(draggedComponent)
-                ? backend.dockHiddenComponents.indexOf(draggedComponent)
-                : backend.dockQuickComponents.indexOf(draggedComponent)
-            original.splice(index, 0, draggedComponent)
         }
-        if (show.join(',') !== componentPreviewShow.join(','))
-            componentPreviewShow = show
-        if (hidden.join(',') !== componentPreviewHidden.join(','))
-            componentPreviewHidden = hidden
-        if (quick.join(',') !== componentPreviewQuick.join(','))
-            componentPreviewQuick = quick
+        componentPreviewZones = preview
     }
 
-    function finishComponentDrag() {
+    function finishComponentDrag(commit) {
         const key = draggedComponent
         const destination = componentDropZone
-        const beforeKey = componentBeforeKey
-        const commit = draggingComponent && destination !== ""
+        const before = componentBeforeKey
+        const wasDragging = draggingComponent
         draggedComponent = ""
         draggingComponent = false
         componentDropZone = ""
         componentBeforeKey = ""
-        componentPreviewShow = []
-        componentPreviewHidden = []
-        componentPreviewQuick = []
-        showZone.dropHovered = false
-        hiddenZone.dropHovered = false
-        quickZone.dropHovered = false
-        if (commit)
-            backend.moveDockComponent(key, destination, beforeKey)
+        componentPreviewZones = ({})
+        for (const zone of componentZones()) zone.dropHovered = false
+        if (commit && wasDragging && destination) backend.moveDockLayoutItem(key, destination, before)
+        else if (commit && !wasDragging) selectedDockItem = key
+    }
+
+    Timer {
+        interval: 40
+        repeat: true
+        running: panel.draggingComponent
+        onTriggered: {
+            const point = dockComponentsScroll.mapFromItem(panel, panel.componentDragPoint.x, panel.componentDragPoint.y)
+            if (point.x < 0 || point.x > dockComponentsScroll.width) return
+            const step = point.y < 30 ? -12 : point.y > dockComponentsScroll.height - 30 ? 12 : 0
+            if (!step) return
+            const next = Math.max(0, Math.min(dockComponentsScroll.contentHeight - dockComponentsScroll.height,
+                dockComponentsScroll.contentY + step))
+            if (next !== dockComponentsScroll.contentY) {
+                dockComponentsScroll.contentY = next
+                panel.updateComponentDrag(panel.componentDragPoint)
+            }
+        }
     }
 
     function edgeHandleLayout(side) {
@@ -602,7 +547,7 @@ Item {
             : panel.section === "themes" ? "Themes"
             : panel.section === "opacity" ? "Opacity"
             : (panel.section === "dock" ? "Dock"
-            : (panel.section === "components" ? "Components"
+            : (panel.section === "components" ? "Dock layout"
             : (panel.section === "spectrum" ? "Edge spectrum"
             : (panel.section === "keys" ? "Key visualizer"
             : (panel.section === "date-time" ? "Date & Time" : "Wallpaper")))))
@@ -1096,191 +1041,31 @@ Item {
         }
 
         Rectangle {
-            id: groupSlots
+            objectName: "open-dock-layout"
             width: panel.contentWidth
-            height: 92
+            height: panel.contentRowHeight
             radius: 11
-            color: "transparent"
-
-            DashedBorder {
-                anchors.fill: parent
-                lineColor: Theme.track
-                lineWidth: 1
-                dash: 7
-                gap: 5
-                opacity: 0.9
+            color: layoutLinkMouse.containsMouse ? Theme.controlHover : Theme.control
+            Text {
+                x: 14; anchors.verticalCenter: parent.verticalCenter
+                text: "Arrange dock items   →"
+                color: Theme.text
+                font.family: Qt.application.font.family
+                font.pixelSize: 14
             }
-
-            Item {
-                id: groupSlotContent
-                x: panel.dockGroupFramePadding
-                y: panel.dockGroupFramePadding
-                width: parent.width - panel.dockGroupFramePadding * 2
-                height: parent.height - panel.dockGroupFramePadding * 2
-
-                Rectangle {
-                    width: panel.dockGroupCardWidth
-                    height: 90
-                    radius: 10
-                    x: panel.groupPreviewOrder.indexOf(panel.draggedGroup)
-                        * panel.dockGroupStep
-                    visible: panel.draggingGroup && panel.groupDropIndex >= 0
-                    color: Theme.selected
-                }
-
-                Repeater {
-                    model: backend.dockGroupOrder
-
-                    delegate: Rectangle {
-                        id: groupCard
-                        required property string modelData
-                        required property int index
-                        readonly property string groupName: modelData
-                        readonly property bool groupActive:
-                            backend.dockGroups.includes(groupName)
-                        objectName: "dock-group-" + groupName
-                        x: {
-                            const position = panel.groupPreviewOrder.indexOf(groupName)
-                            return (position < 0 ? index : position) * panel.dockGroupStep
-                        }
-                        width: panel.dockGroupCardWidth
-                        height: 90
-                        radius: 10
-                        color: dragArea.containsMouse ? Theme.controlHover : Theme.control
-                        opacity: panel.draggingGroup && panel.draggedGroup === groupName
-                            ? 0 : 1
-
-                        Behavior on x {
-                            enabled: panel.draggingGroup
-                            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
-                        }
-
-                        Text {
-                            x: 10
-                            y: 9
-                            text: panel.dockRegionLabel(groupCard.groupName)
-                            color: groupCard.groupActive ? Theme.secondary : Theme.track
-                            font.family: Qt.application.font.family
-                            font.pixelSize: 12
-                        }
-
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            y: 35
-                            text: panel.groupLabels[groupCard.groupName]
-                            color: groupCard.groupActive ? Theme.text : Theme.mutedText
-                            font.family: Qt.application.font.family
-                            font.pixelSize: 13
-                            font.weight: Font.DemiBold
-                        }
-
-                        Text {
-                            anchors.right: parent.right
-                            anchors.rightMargin: 9
-                            y: 7
-                            text: "⋮⋮"
-                            color: groupCard.groupActive ? Theme.secondary : Theme.track
-                            font.pixelSize: 13
-                        }
-
-                        MouseArea {
-                            id: dragArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            preventStealing: true
-                            cursorShape: panel.draggingGroup
-                                ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-                            onPressed: function(mouse) {
-                                panel.beginGroupDrag(groupCard.groupName,
-                                    dragArea.mapToItem(panel, mouse.x, mouse.y),
-                                    mouse.x, mouse.y)
-                            }
-                            onPositionChanged: function(mouse) {
-                                if (pressed)
-                                    panel.updateGroupDrag(
-                                        dragArea.mapToItem(panel, mouse.x, mouse.y))
-                            }
-                            onReleased: panel.finishGroupDrag(true)
-                            onCanceled: panel.finishGroupDrag(false)
-                        }
-                    }
-                }
+            MouseArea {
+                id: layoutLinkMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: panel.section = "components"
             }
         }
-
-        Grid {
-            width: panel.contentWidth
-            columns: 2
-            columnSpacing: panel.contentItemGap
-            rowSpacing: panel.contentItemGap
-
-            Repeater {
-                model: [
-                    {key: "apps", label: panel.groupLabels.apps,
-                        active: backend.dockGroups.includes("apps"), locked: false},
-                    {key: "zhyprbola", label: panel.groupLabels.zhyprbola,
-                        active: backend.dockGroups.includes("zhyprbola"), locked: true},
-                    {key: "running", label: panel.groupLabels.running,
-                        active: backend.dockGroups.includes("running"), locked: false},
-                    {key: "ungroup-windows", label: "Ungroup Windows",
-                        active: backend.dockUngroupWindows, locked: false}
-                ]
-
-                delegate: Rectangle {
-                    required property var modelData
-                    required property int index
-                    readonly property string itemKey: modelData.key
-                    readonly property bool active: modelData.active
-                    objectName: itemKey === "ungroup-windows"
-                        ? "dock-ungroup-windows" : "dock-group-toggle-" + itemKey
-
-                    width: panel.dockToggleWidth
-                    height: panel.contentRowHeight
-                    radius: 11
-                    color: active ? Theme.selected : Theme.control
-
-                    Text {
-                        x: 16
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: modelData.label
-                        color: Theme.text
-                        font.family: Qt.application.font.family
-                        font.pixelSize: 14
-                        font.weight: active ? Font.DemiBold : Font.Normal
-                    }
-
-                    Rectangle {
-                        anchors.right: parent.right
-                        anchors.rightMargin: 14
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 44
-                        height: 26
-                        radius: 13
-                        color: active ? Theme.accent : Theme.track
-
-                        Rectangle {
-                            x: active ? 21 : 3
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 20
-                            height: 20
-                            radius: 10
-                            color: "#ffffff"
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            enabled: !modelData.locked
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (itemKey === "ungroup-windows")
-                                    backend.setDockUngroupWindows(!active)
-                                else
-                                    backend.setDockGroupEnabled(itemKey, !active)
-                            }
-                        }
-                    }
-                }
-            }
+        DateTimeToggle {
+            objectName: "dock-ungroup-windows"
+            title: "Ungroup windows"
+            active: backend.dockUngroupWindows
+            onToggled: backend.setDockUngroupWindows(!active)
         }
 
         Rectangle {
@@ -1575,126 +1360,108 @@ Item {
     component DockComponentZone: Rectangle {
         id: zone
         required property string zoneKey
+        required property string label
         required property var items
         property bool dropHovered: false
         readonly property var displayOrder: panel.draggingComponent
-            ? (zoneKey === "visible" ? panel.componentPreviewShow
-                : zoneKey === "hidden" ? panel.componentPreviewHidden
-                : panel.componentPreviewQuick) : items
-        readonly property int rowCount: Math.max(2, Math.ceil(displayOrder.length / 9))
+            ? (panel.componentPreviewZones[zoneKey] || []) : items
+        readonly property int columns: 3
+        readonly property real tileWidth: (width - 24 - 12) / columns
+        readonly property int rowCount: Math.max(1, Math.ceil(displayOrder.length / columns))
         objectName: "dock-zone-" + zoneKey
-
         width: panel.contentWidth
-        height: 62 + rowCount * 37
+        height: 50 + rowCount * 40
         radius: 12
         color: dropHovered ? Theme.selected : Theme.control
         border.width: dropHovered ? 2 : 0
         border.color: Theme.accent
 
         Text {
-            x: 13
-            y: 12
-            text: zone.zoneKey === "visible" ? "Show"
-                : zone.zoneKey === "hidden" ? "Hidden" : "Quick"
+            x: 12; y: 12
+            text: zone.label
             color: Theme.text
             font.family: Qt.application.font.family
-            font.pixelSize: 14
+            font.pixelSize: 13
             font.weight: Font.DemiBold
         }
-
         Text {
             anchors.right: parent.right
-            anchors.rightMargin: 13
+            anchors.rightMargin: 12
             y: 13
             text: zone.items.length
             color: Theme.mutedText
-            font.family: Qt.application.font.family
             font.pixelSize: 12
         }
-
+        Text {
+            x: 12; y: 52
+            visible: zone.displayOrder.length === 0
+            text: zone.zoneKey === "quick" ? "Quick menu items" : "Drop items here"
+            color: Theme.mutedText
+            font.pixelSize: 11
+        }
         Item {
-            id: componentRow
-            x: 12
-            y: 45
+            x: 12; y: 44
             width: parent.width - 24
-            height: 72
-
+            height: zone.rowCount * 40
             Rectangle {
-                width: 34
-                height: 34
-                radius: 9
-                x: (zone.displayOrder.indexOf(panel.draggedComponent) % 9) * 37
-                y: Math.floor(zone.displayOrder.indexOf(panel.draggedComponent) / 9) * 37
-                visible: panel.draggingComponent
-                    && zone.displayOrder.includes(panel.draggedComponent)
+                width: zone.tileWidth; height: 34; radius: 7
+                x: (zone.displayOrder.indexOf(panel.draggedComponent) % zone.columns) * (zone.tileWidth + 6)
+                y: Math.floor(zone.displayOrder.indexOf(panel.draggedComponent) / zone.columns) * 40
+                visible: panel.draggingComponent && zone.displayOrder.includes(panel.draggedComponent)
                 color: Theme.selected
-                border.width: 2
-                border.color: Theme.accent
+                border.width: 1; border.color: Theme.accent
             }
-
             Repeater {
                 model: zone.items
-
                 delegate: Rectangle {
                     id: tile
                     required property string modelData
                     required property int index
                     readonly property string componentKey: modelData
+                    readonly property int previewIndex: Math.max(0, zone.displayOrder.indexOf(componentKey))
                     objectName: "dock-component-" + zone.zoneKey + "-" + componentKey
-                    x: {
-                        const position = zone.displayOrder.indexOf(componentKey)
-                        return ((position < 0 ? index : position) % 9) * 37
+                    x: (previewIndex % zone.columns) * (zone.tileWidth + 6)
+                    y: Math.floor(previewIndex / zone.columns) * 40
+                    width: zone.tileWidth; height: 34; radius: 7
+                    color: dragArea.containsMouse ? Theme.controlHover : Theme.cardSurface
+                    border.width: 1
+                    border.color: dragArea.containsMouse ? Theme.accent : "transparent"
+                    opacity: panel.draggingComponent && panel.draggedComponent === componentKey ? 0 : 1
+                    Behavior on x { enabled: panel.draggingComponent; NumberAnimation { duration: 120 } }
+                    Behavior on y { enabled: panel.draggingComponent; NumberAnimation { duration: 120 } }
+                    Rectangle {
+                        x: 5; anchors.verticalCenter: parent.verticalCenter
+                        width: 24; height: 24; radius: 5; color: Theme.accent
+                        Image {
+                            anchors.centerIn: parent
+                            width: 17; height: 17
+                            source: Qt.resolvedUrl("../gnome-extension/icons/" + tile.componentKey + ".svg")
+                            fillMode: Image.PreserveAspectFit
+                        }
                     }
-                    y: {
-                        const position = zone.displayOrder.indexOf(componentKey)
-                        return Math.floor((position < 0 ? index : position) / 9) * 37
+                    Text {
+                        x: 35; width: parent.width - 40
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: panel.dockItemLabel(tile.componentKey)
+                        color: Theme.text
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 11
+                        elide: Text.ElideRight
                     }
-                    width: 34
-                    height: 34
-                    radius: 9
-                    color: zone.zoneKey === "visible" ? Theme.accent
-                        : zone.zoneKey === "quick" ? Theme.accent : Theme.mutedText
-                    opacity: panel.draggingComponent && panel.draggedComponent === componentKey
-                        ? 0 : 1
-
-                    Behavior on x {
-                        enabled: panel.draggingComponent
-                        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
-                    }
-                    Behavior on y {
-                        enabled: panel.draggingComponent
-                        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
-                    }
-
-                    Image {
-                        anchors.centerIn: parent
-                        width: 20
-                        height: 20
-                        source: Qt.resolvedUrl("../gnome-extension/icons/"
-                            + tile.componentKey + ".svg")
-                        asynchronous: true
-                        sourceSize: Qt.size(width, height)
-                        fillMode: Image.PreserveAspectFit
-                    }
-
                     MouseArea {
                         id: dragArea
                         anchors.fill: parent
                         hoverEnabled: true
                         preventStealing: true
-                        cursorShape: panel.draggingComponent
-                            ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                        cursorShape: panel.draggingComponent ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                         onPressed: function(mouse) {
-                            panel.beginComponentDrag(tile.componentKey,
-                                dragArea.mapToItem(panel, mouse.x, mouse.y))
+                            panel.beginComponentDrag(tile.componentKey, dragArea.mapToItem(panel, mouse.x, mouse.y))
                         }
                         onPositionChanged: function(mouse) {
-                            if (pressed)
-                                panel.updateComponentDrag(
-                                    dragArea.mapToItem(panel, mouse.x, mouse.y))
+                            if (pressed) panel.updateComponentDrag(dragArea.mapToItem(panel, mouse.x, mouse.y))
                         }
-                        onReleased: panel.finishComponentDrag()
-                        onCanceled: panel.finishComponentDrag()
+                        onReleased: panel.finishComponentDrag(true)
+                        onCanceled: panel.finishComponentDrag(false)
                     }
                 }
             }
@@ -1779,6 +1546,7 @@ Item {
     }
 
     Flickable {
+        id: dockComponentsScroll
         objectName: "dock-components-scroll"
         x: panel.contentX
         y: 76
@@ -1790,6 +1558,20 @@ Item {
         boundsBehavior: Flickable.DragAndOvershootBounds
         flickableDirection: Flickable.VerticalFlick
         visible: panel.section === "components"
+
+        Rectangle {
+            parent: dockComponentsScroll
+            anchors.right: parent.right
+            width: 3
+            height: Math.max(28, parent.height * parent.height / Math.max(1, dockComponentsScroll.contentHeight))
+            y: Math.max(0, Math.min(parent.height - height,
+                dockComponentsScroll.contentY / Math.max(1, dockComponentsScroll.contentHeight - parent.height)
+                    * (parent.height - height)))
+            visible: dockComponentsScroll.contentHeight > dockComponentsScroll.height
+            z: 2
+            radius: 2
+            color: Theme.track
+        }
 
         rebound: Transition {
             NumberAnimation {
@@ -1809,21 +1591,24 @@ Item {
             layer.smooth: true
 
             DockComponentZone {
-                id: showZone
-                zoneKey: "visible"
-                items: backend.dockVisibleComponents
+                id: region1Zone; zoneKey: "region-1"; label: panel.regionLabel(0)
+                items: backend.dockLayout.regions[0]
             }
-
             DockComponentZone {
-                id: hiddenZone
-                zoneKey: "hidden"
-                items: backend.dockHiddenComponents
+                id: region2Zone; zoneKey: "region-2"; label: panel.regionLabel(1)
+                items: backend.dockLayout.regions[1]
             }
-
             DockComponentZone {
-                id: quickZone
-                zoneKey: "quick"
-                items: backend.dockQuickComponents
+                id: region3Zone; zoneKey: "region-3"; label: panel.regionLabel(2)
+                items: backend.dockLayout.regions[2]
+            }
+            DockComponentZone {
+                id: hiddenZone; zoneKey: "hidden"; label: "Hidden"
+                items: backend.dockLayout.hidden
+            }
+            DockComponentZone {
+                id: quickZone; zoneKey: "quick"; label: "Quick menu"
+                items: backend.dockLayout.quick
             }
 
             DockComponentLauncherBox {
@@ -1859,57 +1644,78 @@ Item {
         }
     }
 
-    Rectangle {
-        id: floatingGroup
-        objectName: "dock-group-drag-overlay"
-        z: 100
-        width: panel.dockGroupCardWidth
-        height: 90
-        radius: 11
-        visible: panel.draggingGroup
-        color: "transparent"
-
-        DashedBorder {
-            anchors.fill: parent
-            lineColor: Theme.accent
-            lineWidth: 2
-            dash: 8
-            gap: 5
-            opacity: 0.85
-        }
-
+    Item {
+        id: moveDockItemPopup
+        objectName: "move-dock-item-popup"
+        anchors.fill: parent
+        z: 120
+        visible: panel.selectedDockItem !== ""
+        focus: visible
+        onVisibleChanged: if (visible) forceActiveFocus()
+        Keys.onEscapePressed: panel.selectedDockItem = ""
+        Rectangle { anchors.fill: parent; color: "#33000000" }
+        MouseArea { anchors.fill: parent; onClicked: panel.selectedDockItem = "" }
         Rectangle {
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: 8
-            color: Theme.control
-        }
-
-        Text {
-            x: 10
-            y: 9
-            text: panel.draggedGroup ? panel.dockRegionLabel(panel.draggedGroup) : ""
-            color: Theme.secondary
-            font.family: Qt.application.font.family
-            font.pixelSize: 12
-        }
-
-        Text {
-            anchors.centerIn: parent
-            text: panel.groupLabels[panel.draggedGroup] || ""
-            color: Theme.text
-            font.family: Qt.application.font.family
-            font.pixelSize: 13
-            font.weight: Font.DemiBold
-        }
-
-        Text {
-            anchors.right: parent.right
-            anchors.rightMargin: 9
-            y: 7
-            text: "⋮⋮"
-            color: Theme.secondary
-            font.pixelSize: 13
+            x: panel.contentX
+            y: 76
+            width: panel.contentWidth
+            height: moveDockChoices.height + 28
+            radius: 12
+            color: Theme.cardSurface
+            border.width: 1
+            border.color: Theme.track
+            Column {
+                id: moveDockChoices
+                x: 14; y: 14
+                width: parent.width - 28
+                spacing: 8
+                Text {
+                    width: parent.width
+                    height: 32
+                    text: "Move " + panel.dockItemLabel(panel.selectedDockItem) + " to"
+                    color: Theme.text
+                    font.family: Qt.application.font.family
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                }
+                Repeater {
+                    model: ["region-1", "region-2", "region-3", "hidden", "quick"]
+                        .filter(zone => panel.canPlaceDockItem(panel.selectedDockItem, zone))
+                    delegate: Rectangle {
+                        id: moveChoice
+                        required property string modelData
+                        readonly property bool current: panel.selectedDockItem !== ""
+                            && panel.dockItemZone(panel.selectedDockItem) === modelData
+                        objectName: "move-dock-item-" + modelData
+                        width: moveDockChoices.width
+                        height: 40
+                        radius: 8
+                        color: current ? Theme.selected
+                            : moveChoiceMouse.containsMouse ? Theme.controlHover : Theme.control
+                        Text {
+                            x: 12; anchors.verticalCenter: parent.verticalCenter
+                            text: (moveChoice.modelData.startsWith("region-")
+                                ? panel.regionLabel(Number(moveChoice.modelData.slice(7)) - 1)
+                                : moveChoice.modelData === "hidden" ? "Hidden" : "Quick menu")
+                                + (moveChoice.current ? "   ✓" : "")
+                            color: Theme.text
+                            font.family: Qt.application.font.family
+                            font.pixelSize: 13
+                        }
+                        MouseArea {
+                            id: moveChoiceMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (!moveChoice.current)
+                                    backend.moveDockLayoutItem(panel.selectedDockItem, moveChoice.modelData, "")
+                                panel.selectedDockItem = ""
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1917,20 +1723,31 @@ Item {
         id: floatingComponent
         objectName: "dock-component-drag-overlay"
         z: 100
-        width: 34
+        width: (panel.contentWidth - 36) / 3
         height: 34
         radius: 9
         visible: panel.draggingComponent
         color: Theme.accent
 
         Image {
-            anchors.centerIn: parent
+            x: 7
+            anchors.verticalCenter: parent.verticalCenter
             width: 20
             height: 20
             source: panel.draggedComponent
                 ? Qt.resolvedUrl("../gnome-extension/icons/"
                     + panel.draggedComponent + ".svg") : ""
             fillMode: Image.PreserveAspectFit
+        }
+        Text {
+            x: 34
+            width: parent.width - 39
+            anchors.verticalCenter: parent.verticalCenter
+            text: panel.dockItemLabel(panel.draggedComponent)
+            color: Theme.accentText
+            font.family: Qt.application.font.family
+            font.pixelSize: 11
+            elide: Text.ElideRight
         }
     }
 

@@ -52,6 +52,123 @@ private:
 class DateTimeTest : public QObject {
     Q_OBJECT
 private slots:
+    void sharedDockRegionsMigrateAndPersistMixedItems() {
+        QTemporaryDir directory;
+        qputenv("XDG_CONFIG_HOME", directory.path().toUtf8());
+        Backend backend;
+        auto region = [&backend](int index) {
+            return backend.dockLayout().value("regions").toList()[index].toStringList();
+        };
+        QVERIFY(region(0).isEmpty());
+        QCOMPARE(region(1), QStringList{QStringLiteral("running")});
+        QVERIFY(region(2).contains(QStringLiteral("settings")));
+        QVERIFY(backend.dockLayout().value("hidden").toStringList().contains(QStringLiteral("apps")));
+        backend.moveDockLayoutItem("workspaces", "region-1", {});
+        backend.moveDockLayoutItem("running", "region-1", {});
+        backend.moveDockLayoutItem("time-display", "region-1", "running");
+        QCOMPARE(region(0), (QStringList{"workspaces", "time-display", "running"}));
+        QVERIFY(region(1).isEmpty());
+        backend.moveDockLayoutItem("settings", "region-2", {});
+        QCOMPARE(region(1), QStringList{"settings"});
+        const auto layout = backend.dockLayout();
+        backend.moveDockLayoutItem("settings", "hidden", {});
+        backend.moveDockLayoutItem("settings", "quick", {});
+        backend.moveDockLayoutItem("running", "quick", {});
+        backend.moveDockLayoutItem("workspaces", "quick", {});
+        backend.moveDockLayoutItem("wifi", "region-1", "missing");
+        QCOMPARE(backend.dockLayout(), layout);
+        Backend reopened;
+        QCOMPARE(reopened.dockLayout(), layout);
+        backend.moveDockComponent("time-display", "hidden", {});
+        QVERIFY(!region(0).contains("time-display"));
+        backend.moveDockComponent("time-display", "visible", "running");
+        QCOMPARE(region(0), (QStringList{"workspaces", "time-display", "running"}));
+        backend.moveDockLayoutItem("apps", "region-1", {});
+        QVERIFY(region(0).contains("apps") && region(0).contains("running"));
+        backend.moveDockLayoutItem("running", "hidden", {});
+        QVERIFY(!backend.dockGroups().contains("running"));
+        backend.setDockGroupEnabled("running", true);
+        QVERIFY(backend.dockGroups().contains("running"));
+    }
+
+    void sharedDockLayoutRejectsDuplicatesAndRestoresMissingItems() {
+        QTemporaryDir directory;
+        qputenv("XDG_CONFIG_HOME", directory.path().toUtf8());
+        QVERIFY(QDir().mkpath(directory.filePath("zhyprbola")));
+        QFile file(directory.filePath("zhyprbola/dock-layout"));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(R"({"regions":[["running","settings","wifi","wifi"],["running","apps","bogus"],[]],"hidden":["settings","wifi","workspaces"],"quick":["running","workspaces","sound"]})");
+        file.close();
+        Backend backend;
+        const auto layout = backend.dockLayout();
+        const auto regions = layout.value("regions").toList();
+        QCOMPARE(regions[0].toStringList(), (QStringList{"running", "settings", "wifi"}));
+        QCOMPARE(regions[1].toStringList(), QStringList{"apps"});
+        QCOMPARE(layout.value("hidden").toStringList(), QStringList{"workspaces"});
+        QVERIFY(layout.value("quick").toStringList().contains("sound"));
+        QStringList all;
+        for (const QVariant &value : regions) all.append(value.toStringList());
+        all.append(layout.value("hidden").toStringList());
+        all.append(layout.value("quick").toStringList());
+        QCOMPARE(all.count("running"), 1);
+        QCOMPARE(all.count("settings"), 1);
+        QCOMPARE(all.count("wifi"), 1);
+        QVERIFY(all.contains("date-display") && !all.contains("bogus"));
+    }
+
+    void dockLayoutSettingsSupportsClickAndDragPlacement() {
+        QTemporaryDir directory;
+        qputenv("XDG_CONFIG_HOME", directory.path().toUtf8());
+        Backend backend;
+        backend.moveDockLayoutItem("workspaces", "region-1", {});
+        ScreenshotSettingsStub screenshots;
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty("backend", &backend);
+        engine.rootContext()->setContextProperty("screenshots", &screenshots);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QFINDTESTDATA("../components/SettingsPanel.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        object->setProperty("section", "components");
+        auto *panel = qobject_cast<QQuickItem *>(object.data());
+        QVERIFY(panel);
+        QQuickWindow window;
+        window.resize(660, qRound(panel->height()));
+        panel->setParentItem(window.contentItem());
+        window.show();
+        QTRY_VERIFY(window.isExposed());
+        auto center = [&panel](const QString &name) {
+            auto *item = findItem(panel, name);
+            return item ? item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint() : QPoint(-1, -1);
+        };
+        auto region = [&backend](int index) { return backend.dockLayout().value("regions").toList()[index].toStringList(); };
+        const QPoint running = center("dock-component-region-2-running");
+        QVERIFY(running.x() >= 0);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, running);
+        QTRY_COMPARE(object->property("selectedDockItem").toString(), QStringLiteral("running"));
+        QVERIFY(!findItem(panel, "move-dock-item-quick"));
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center("move-dock-item-region-1"));
+        QTRY_COMPARE(region(0), (QStringList{"workspaces", "running"}));
+        const QPoint date = center("dock-component-region-3-date-display");
+        const QPoint first = center("dock-component-region-1-workspaces");
+        QVERIFY(date.x() >= 0 && first.x() >= 0);
+        QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, date);
+        QTest::mouseMove(&window, first, 30);
+        QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, first);
+        QTRY_COMPARE(region(0), (QStringList{"date-display", "workspaces", "running"}));
+        const QPoint settings = center("dock-component-region-3-settings");
+        QVERIFY(settings.x() >= 0);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, settings);
+        QTRY_COMPARE(object->property("selectedDockItem").toString(), QStringLiteral("settings"));
+        QVERIFY(!findItem(panel, "move-dock-item-hidden"));
+        QTRY_VERIFY(findItem(panel, "move-dock-item-region-2"));
+        QTest::qWait(60);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center("move-dock-item-region-2"));
+        QTRY_COMPARE(region(1), QStringList{"settings"});
+        const QString screenshot = qEnvironmentVariable("ZHYPRBOLA_LAYOUT_SCREENSHOT");
+        if (!screenshot.isEmpty()) QVERIFY(window.grabWindow().save(screenshot));
+    }
+
     void workspaceComponentPersistsPlacementAndCannotEnterQuick() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());

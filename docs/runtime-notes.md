@@ -4,6 +4,19 @@
 Read this when changing lifecycle, input, fallback, or layout code.
 ```
 
+## Dock Activation
+
+```text
+GNOME can set org.gnome.shell disable-user-extensions=true after a Shell failure.
+The dock then stays INITIALIZED even when its UUID is in enabled-extensions;
+logging in again or enabling the individual extension does not clear this switch.
+make dock and make dock-enable re-enable user extensions before activating the dock.
+This also restores the user's other enabled extensions.
+
+Activation checks use the C locale. ERROR and OUT OF DATE states fail immediately
+and print the extension state with the command for inspecting Shell logs.
+```
+
 ## Running Windows
 
 ```text
@@ -15,6 +28,9 @@ entry and both SVG/PNG icons; make dock, make run, and make run-panel include th
 GNOME uses the desktop entry for the Overview, app switcher, and running app icon.
 
 Running apps remain visible even when the same app exists in Apps.
+Pinned apps and Running apps are movable blocks. Their ordered source items
+expand into whichever region contains the block, alongside normal components.
+Pinned and running instances of the same app retain separate buttons and menus.
 
 In ungrouped mode, dragged order survives focus changes, title changes, and
 temporary app-tracker omissions. A slot is removed only after its window closes.
@@ -37,7 +53,9 @@ target More; Quick/hidden components target Components, then Settings. If those
 buttons are unavailable, the dock center is used.
 
 Targets update after dock layout and before dock/Settings toggles, including
-after moving the dock to another edge. Panel close buttons use the same target
+after moving the dock to another edge or moving the component to another region.
+Overflow targets More in the component's own region; popup sources are resolved
+across all regions. Panel close buttons use the same target
 through the native minimize lifecycle. Screenshots keeps its resident lifecycle.
 ```
 
@@ -174,8 +192,8 @@ Disabling the extension stops only the browser and its handle.
 See [Settings ordering](current-behavior.md#settings) when adding or renaming sections.
 
 ```text
-New Settings windows open beside the trailing end of dock region 3 in the
-current region order, with a 12 px gap and 12 px work-area margin.
+New Settings windows open beside the trailing end of the region containing
+Settings, with a 12 px gap and 12 px work-area margin. Legacy layouts use region 3.
 With the default bottom dock, Settings opens above its right-hand end.
 Reopening an existing Settings window preserves its position.
 

@@ -59,6 +59,7 @@ class Backend : public QObject {
     Q_PROPERTY(QStringList dockVisibleComponents READ dockVisibleComponents NOTIFY dockSettingsChanged)
     Q_PROPERTY(QStringList dockHiddenComponents READ dockHiddenComponents NOTIFY dockSettingsChanged)
     Q_PROPERTY(QStringList dockQuickComponents READ dockQuickComponents NOTIFY dockSettingsChanged)
+    Q_PROPERTY(QVariantMap dockLayout READ dockLayout NOTIFY dockSettingsChanged)
     Q_PROPERTY(bool dockUngroupWindows READ dockUngroupWindows NOTIFY dockSettingsChanged)
     Q_PROPERTY(bool useWallpaper READ useWallpaper NOTIFY dockSettingsChanged)
     Q_PROPERTY(QVariantMap showDesktopEdgeSettings READ showDesktopEdgeSettings
@@ -123,6 +124,7 @@ public:
     QStringList dockVisibleComponents() const { return m_dockVisibleComponents; }
     QStringList dockHiddenComponents() const { return m_dockHiddenComponents; }
     QStringList dockQuickComponents() const { return m_dockQuickComponents; }
+    QVariantMap dockLayout() const { return m_dockLayout; }
     bool dockUngroupWindows() const { return m_dockUngroupWindows; }
     bool useWallpaper() const { return m_useWallpaper; }
     QVariantMap showDesktopEdgeSettings() const { return m_showDesktopEdgeSettings; }
@@ -166,6 +168,8 @@ public:
     Q_INVOKABLE void setDockGroupEnabled(const QString &group, bool enabled);
     Q_INVOKABLE void moveDockGroup(const QString &source, int targetIndex);
     Q_INVOKABLE void moveDockComponent(const QString &key, const QString &destination,
+        const QString &beforeKey);
+    Q_INVOKABLE void moveDockLayoutItem(const QString &key, const QString &destination,
         const QString &beforeKey);
     Q_INVOKABLE void openDockComponent(const QString &key);
     Q_INVOKABLE void setDockUngroupWindows(bool enabled);
@@ -237,6 +241,9 @@ private:
     void refreshEdgeSpectrumSize();
     void refreshShowDesktopEdgeSettings();
     void refreshSettingsSectionRequest();
+    void loadDockLayout();
+    bool saveDockLayout(const QVariantMap &layout);
+    void syncDockLayout();
     void readKeyCapture();
     void startEvdevKeyCapture();
     bool playerctlAvailable() const;
@@ -306,6 +313,7 @@ private:
     QStringList m_dockVisibleComponents;
     QStringList m_dockHiddenComponents;
     QStringList m_dockQuickComponents;
+    QVariantMap m_dockLayout;
     bool m_dockUngroupWindows = false;
     bool m_useWallpaper = false;
     QFileSystemWatcher m_showDesktopEdgeWatcher;

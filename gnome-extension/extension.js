@@ -106,6 +106,27 @@ const PANEL_TITLES = Object.freeze({
     settings: 'Zhyprbola Settings',
 });
 
+function normalizedDockLayout(saved, fallback) {
+    if (!Array.isArray(saved?.regions) || saved.regions.length !== 3)
+        return fallback;
+    const known = new Set([...DOCK_COMPONENTS.map(([name]) => name), 'apps', 'running']);
+    const seen = new Set();
+    const take = (values, zone) => (Array.isArray(values) ? values : []).filter(key => {
+        if (!known.has(key) || seen.has(key) || (zone !== 'region' && key === 'settings') ||
+            (zone === 'quick' && ['apps', 'running', 'settings', 'components', ...INLINE_DOCK_COMPONENTS].includes(key)))
+            return false;
+        seen.add(key);
+        return true;
+    });
+    const regions = saved.regions.map(items => take(items, 'region'));
+    const hidden = take(saved.hidden, 'hidden');
+    const quick = take(saved.quick, 'quick');
+    fallback.regions.forEach((items, index) => regions[index].push(...take(items, 'region')));
+    hidden.push(...take(fallback.hidden, 'hidden'));
+    quick.push(...take(fallback.quick, 'quick'));
+    return {version: 1, regions, hidden, quick};
+}
+
 class ClickOnlyPopupMenuManager extends PopupMenu.PopupMenuManager {
     _changeMenu() {
         // GNOME calls this on hover and focus changes. Dock menus are opened
@@ -191,6 +212,8 @@ export default class ZhyprbolaExtension extends Extension {
             GLib.get_user_config_dir(), 'zhyprbola', 'dock-groups']);
         this._dockGroupOrderPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'dock-group-order']);
+        this._dockLayoutPath = GLib.build_filenamev([
+            GLib.get_user_config_dir(), 'zhyprbola', 'dock-layout']);
         this._dockComponentsPath = GLib.build_filenamev([
             GLib.get_user_config_dir(), 'zhyprbola', 'dock-components']);
         this._dateTimePath = GLib.build_filenamev([
@@ -215,6 +238,8 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockGroups = this._readDockGroups();
         this._dockGroupOrder = this._readDockGroupOrder();
         this._dockComponents = this._readDockComponents();
+        this._dockLayout = this._readDockLayout(this._dockComponents);
+        this._dockComponents = this._componentsForLayout(this._dockLayout);
         this._dateTimeSettings = this._readDateTimeSettings();
         this._loadKeyCount();
         this._pinnedApps = this._readPinnedApps();
@@ -419,38 +444,38 @@ export default class ZhyprbolaExtension extends Extension {
         this._keyCountLabels = new Set();
         this._workspaceIndicators = new Set();
         this._menuManager = new ClickOnlyPopupMenuManager(this._dock);
-        for (const name of this._dockGroupOrder) {
+        for (const name of this._regionNames()) {
             const region = new St.Widget({
                 style_class: `zhyprbola-dock-region zhyprbola-dock-region-${name}`,
             });
             this._dock.add_child(region);
             this._dockRegions.set(name, region);
-            if (!this._dockGroups.includes(name))
+            if (!this._dockLayout && !this._dockGroups.includes(name))
                 continue;
 
             const group = new St.BoxLayout({
                 style_class: `zhyprbola-dock-group zhyprbola-dock-group-${name}`,
                 vertical,
-                reactive: name === 'apps' || name === 'running',
+                reactive: true,
             });
-            if (name === 'apps' || name === 'running') {
+            if (this._dockLayout || name === 'apps' || name === 'running') {
                 group._delegate = {
                     handleDragOver: (source, _actor, x, y) => {
-                        if (!this._previewDockItemDrag(name, group, source,
+                        if (!this._previewDockItemDrag(source?.groupName ?? name, group, source,
                             vertical ? y : x))
                             return DND.DragMotionResult.CONTINUE;
                         return DND.DragMotionResult.MOVE_DROP;
                     },
                     acceptDrop: (source, _actor, x, y) => {
-                        if (!this._previewDockItemDrag(name, group, source,
+                        if (!this._previewDockItemDrag(source?.groupName ?? name, group, source,
                             vertical ? y : x))
                             return false;
                         const keys = group.get_children()
-                            .filter(child => child._delegate?.groupName === name)
+                            .filter(child => child._delegate?.groupName === (source?.groupName ?? name))
                             .map(child => child._delegate.key);
                         source.dropAccepted = true;
                         GLib.idle_add_once(GLib.PRIORITY_DEFAULT_IDLE, () =>
-                            this._commitDockItemOrder(name, keys));
+                            this._commitDockItemOrder(source?.groupName ?? name, keys));
                         return true;
                     },
                 };
@@ -496,10 +521,10 @@ export default class ZhyprbolaExtension extends Extension {
         if (!this._dock || !panelName || panelName === 'screenshots')
             return;
 
-        const buttons = this._dockGroupsByName.get('zhyprbola')?.get_children() ?? [];
+        const buttons = this._dockButtons();
         const inComponentRegion = this._dockComponents.visible.includes(panelName);
         const source = buttons.find(button => button._panelName === panelName)
-            ?? (inComponentRegion ? buttons.find(button => button._dockOverflow) : null)
+            ?? (inComponentRegion ? this._componentOverflow(panelName) : null)
             ?? buttons.find(button => button._panelName === 'components')
             ?? buttons.find(button => button._panelName === 'settings');
         if (!source) {
@@ -622,7 +647,87 @@ export default class ZhyprbolaExtension extends Extension {
         this._updateShowDesktopState();
     }
 
+    _regionNames() {
+        return this._dockLayout ? ['region-1', 'region-2', 'region-3'] : this._dockGroupOrder;
+    }
+
+    _readDockLayout(components, groups = this._dockGroups, order = this._dockGroupOrder) {
+        const hidden = [...components.hidden];
+        const regions = order.map(name => {
+            if (name === 'zhyprbola') return [...components.visible];
+            if (groups.includes(name)) return [name];
+            hidden.push(name);
+            return [];
+        });
+        const fallback = {version: 1, regions, hidden, quick: [...components.quick]};
+        try {
+            const [, contents] = GLib.file_get_contents(this._dockLayoutPath);
+            return normalizedDockLayout(JSON.parse(new TextDecoder().decode(contents)), fallback);
+        } catch (_) {
+            return fallback;
+        }
+    }
+
+    _componentsForLayout(layout) {
+        return {visible: layout.regions.flat().filter(key => !['apps', 'running'].includes(key)),
+            hidden: layout.hidden, quick: layout.quick};
+    }
+
+    _componentItem(name) {
+        return {name, label: new Map(DOCK_COMPONENTS).get(name),
+            kind: name === 'input-source' ? 'input-source'
+                : name === 'workspaces' ? 'workspaces'
+                : ['date-display', 'time-display'].includes(name) ? 'date-time'
+                : name === 'key-count' ? 'key-count' : 'panel'};
+    }
+
+    _composeDockRegions() {
+        if (!this._dockLayout) return;
+        this._dockLayout.regions.forEach((items, index) => {
+            this._dockItems.set(`region-${index + 1}`, items.flatMap(name =>
+                ['apps', 'running'].includes(name)
+                    ? (this._dockItems.get(name) ?? []).map(item => ({...item, appGroup: name}))
+                    : [this._componentItem(name)]));
+        });
+    }
+
+    _dockButtons() {
+        return [...this._dockGroupsByName.values()].flatMap(group => group.get_children());
+    }
+
+    _componentOverflow(name) {
+        const index = this._dockLayout?.regions.findIndex(items => items.includes(name));
+        const group = this._dockGroupsByName.get(index >= 0 ? `region-${index + 1}` : 'zhyprbola');
+        return group?.get_children().find(button => button._dockOverflow);
+    }
+
+    _trackComponentButton(button) {
+        const delegate = {button, destroyed: false, dragging: false};
+        button.connect('notify::pressed', () => this._trackDockInteraction(delegate));
+        button.connect('destroy', () => {
+            delegate.destroyed = true;
+            this._dockInteractions.delete(delegate);
+            for (const key of ['_soundMenu', '_brightnessMenu', '_batteryMenu', '_keyCountMenu',
+                '_inputSourceMenu', '_quickMenu', '_powerMenu']) {
+                if (this[key]?.sourceActor === button) {
+                    this[key].destroy();
+                    this[key] = null;
+                    if (key === '_keyCountMenu') this._keyCountStatLabels = null;
+                }
+            }
+            if (this._inputSourceButton === button) {
+                this._inputSourceButton = null;
+                this._inputSourceLabel = null;
+            }
+        });
+        return button;
+    }
+
     _createComponentButtons() {
+        if (this._dockLayout) {
+            this._composeDockRegions();
+            return;
+        }
         const group = this._dockGroupsByName.get('zhyprbola');
         if (!group)
             return;
@@ -743,7 +848,8 @@ export default class ZhyprbolaExtension extends Extension {
             delegate.dragging = true;
             this._trackDockInteraction(delegate);
             const group = button.get_parent();
-            button._delegate.originalIndex = group.get_children().indexOf(button);
+            button._delegate.originalIndex = group.get_children()
+                .filter(child => child._delegate?.groupName === delegate.groupName).indexOf(button);
             button._delegate.dropAccepted = false;
             button.reactive = false;
             content.opacity = 0;
@@ -854,7 +960,8 @@ export default class ZhyprbolaExtension extends Extension {
             child._delegate?.groupName === groupName);
         const step = DOCK_CONFIG.buttonSize + DOCK_CONFIG.groupSpacing;
         const targetIndex = buttons.filter(child => child !== source.button &&
-            position >= (buttons.indexOf(child) * step + DOCK_CONFIG.buttonSize / 2))
+            position >= ((this._dockPosition === DockPosition.LEFT || this._dockPosition === DockPosition.RIGHT
+                ? child.y : child.x) ?? buttons.indexOf(child) * step) + DOCK_CONFIG.buttonSize / 2)
             .length;
         this._moveDockDragPlaceholder(group, source.button, targetIndex);
         return true;
@@ -866,7 +973,7 @@ export default class ZhyprbolaExtension extends Extension {
             child._delegate?.groupName === button._delegate.groupName);
         if (buttons.indexOf(button) === targetIndex)
             return;
-        group.set_child_at_index(button, targetIndex);
+        group.set_child_at_index(button, group.get_children().indexOf(buttons[targetIndex]));
         const reordered = group.get_children().filter(child =>
             child._delegate?.groupName === button._delegate.groupName);
         const property = [DockPosition.LEFT, DockPosition.RIGHT]
@@ -924,6 +1031,7 @@ export default class ZhyprbolaExtension extends Extension {
             this._nextRunningOrder = this._runningOrder.size;
         }
         this._dockItems.set(groupName, reordered);
+        this._composeDockRegions();
         this._dockRenderState.delete(groupName);
         this._queueLayout();
     }
@@ -1048,6 +1156,7 @@ export default class ZhyprbolaExtension extends Extension {
                     window: app.get_windows().length === 0 ? windows[0] : null});
         }
         this._dockItems.set('running', this._orderRunningItems(running));
+        this._composeDockRegions();
         this._queueLayout();
     }
 
@@ -1742,7 +1851,11 @@ export default class ZhyprbolaExtension extends Extension {
         const edgePosition = this._readEdgePosition();
         const dockGroups = this._readDockGroups();
         const dockGroupOrder = this._readDockGroupOrder();
-        const dockComponents = this._readDockComponents();
+        let dockComponents = this._readDockComponents();
+        const dockLayout = this._dockLayoutPath
+            ? this._readDockLayout(dockComponents, dockGroups, dockGroupOrder) : this._dockLayout;
+        if (dockLayout) dockComponents = this._componentsForLayout(dockLayout);
+        const layoutChanged = JSON.stringify(dockLayout) !== JSON.stringify(this._dockLayout);
         const dateTimeSettings = this._readDateTimeSettings();
         const pinnedApps = this._readPinnedApps();
         const connectionRefreshToken = this._readConnectionRefreshToken();
@@ -1775,19 +1888,20 @@ export default class ZhyprbolaExtension extends Extension {
         this._dockGroups = dockGroups;
         this._dockGroupOrder = dockGroupOrder;
         this._dockComponents = dockComponents;
+        this._dockLayout = dockLayout;
         this._dateTimeSettings = dateTimeSettings;
         this._pinnedApps = pinnedApps;
         this._connectionRefreshToken = connectionRefreshToken;
 
         this._handlePanelRequest();
-        if (positionChanged || groupsChanged || componentsChanged || dockUngroupWindowsChanged)
+        if (positionChanged || groupsChanged || componentsChanged || dockUngroupWindowsChanged || layoutChanged)
             this._rebuildDock();
         else if (themeChanged)
             this._applyTheme();
         else if (bgOpacityChanged)
             this._applyDockBackground();
         if (dateTimeChanged) {
-            this._dockRenderState.delete('zhyprbola');
+            for (const name of this._regionNames()) this._dockRenderState.delete(name);
             this._queueLayout();
             this._refreshDateTimeLabels();
         }
@@ -2231,7 +2345,7 @@ export default class ZhyprbolaExtension extends Extension {
         button.connect('clicked', () => this._openInputSourceMenu(button));
         this._inputSourceButton = button;
         this._inputSourceLabel = label;
-        return button;
+        return this._trackComponentButton(button);
     }
 
     _openInputSourceMenu(button) {
@@ -2482,6 +2596,9 @@ export default class ZhyprbolaExtension extends Extension {
             style_class: 'zhyprbola-dock-icon',
         });
         this._panelIcons.set(statusIconName, icon);
+        icon.connect('destroy', () => {
+            if (this._panelIcons?.get(statusIconName) === icon) this._panelIcons.delete(statusIconName);
+        });
 
         const button = new St.Button({
             style_class: 'zhyprbola-dock-button',
@@ -2534,7 +2651,7 @@ export default class ZhyprbolaExtension extends Extension {
             else
                 this._openPanel(panelName);
         });
-        return button;
+        return this._trackComponentButton(button);
     }
 
     _watchWorkspaces() {
@@ -2600,6 +2717,7 @@ export default class ZhyprbolaExtension extends Extension {
                     track_hover: true,
                 });
                 button.connect('clicked', () => this._activateWorkspace(index));
+                this._trackComponentButton(button);
                 pager.add_child(button);
             }
             for (const [index, button] of pager.get_children().entries()) {
@@ -2660,6 +2778,9 @@ export default class ZhyprbolaExtension extends Extension {
         });
         label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this._dateTimeLabels.set(name, label);
+        label.connect('destroy', () => {
+            if (this._dateTimeLabels?.get(name) === label) this._dateTimeLabels.delete(name);
+        });
         let child = label;
         if (vertical) {
             label.width = length - 8;
@@ -2677,7 +2798,7 @@ export default class ZhyprbolaExtension extends Extension {
         button.set_size(vertical ? DOCK_CONFIG.buttonSize : length,
             vertical ? length : DOCK_CONFIG.buttonSize);
         button.connect('clicked', () => this._openDateTimeSettings());
-        return button;
+        return this._trackComponentButton(button);
     }
 
     _createKeyCountWidget(vertical) {
@@ -2689,6 +2810,7 @@ export default class ZhyprbolaExtension extends Extension {
         });
         label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this._keyCountLabels.add(label);
+        label.connect('destroy', () => this._keyCountLabels?.delete(label));
         let child = label;
         if (vertical) {
             label.width = KEY_COUNT_ITEM_LENGTH - 8;
@@ -2707,7 +2829,7 @@ export default class ZhyprbolaExtension extends Extension {
         button.set_size(vertical ? DOCK_CONFIG.buttonSize : KEY_COUNT_ITEM_LENGTH,
             vertical ? KEY_COUNT_ITEM_LENGTH : DOCK_CONFIG.buttonSize);
         button.connect('clicked', () => this._openKeyCountMenu(button));
-        return button;
+        return this._trackComponentButton(button);
     }
 
     _openDateTimeSettings() {
@@ -2750,15 +2872,21 @@ export default class ZhyprbolaExtension extends Extension {
         const state = `${length}:${items.length}:${vertical}:${slot}:` +
             JSON.stringify(items.map(item => item.kind === 'workspaces'
                 ? [item.name, this._workspaceCount()] : item.kind === 'app'
-                ? this._itemOrderKey(item) : [item.name, this._connectionName(item.name),
+                ? `${item.appGroup ?? name}:${this._itemOrderKey(item)}` : [item.name, this._connectionName(item.name),
                     this._connectionIconName(item.name)]));
+        const renderKey = item => `${item.appGroup ?? name}:${this._itemOrderKey(item)}`;
         const appButtons = new Map(group.get_children()
-            .filter(child => child._delegate?.groupName === name)
-            .map(child => [child._delegate.key, child]));
+            .filter(child => child._delegate?.key)
+            .map(child => [`${child._delegate.groupName}:${child._delegate.key}`, child]));
+        const componentKey = item => JSON.stringify([vertical, item.kind, item.name,
+            this._dockItemLength(item), this._connectionName(item.name), this._connectionIconName(item.name)]);
+        const componentButtons = new Map(group.get_children()
+            .filter(child => child._dockComponentKey)
+            .map(child => [child._dockComponentKey, child]));
         if (this._dockRenderState.get(name) === state) {
             for (const item of items) {
                 const button = item.kind === 'app'
-                    ? appButtons.get(this._itemOrderKey(item)) : null;
+                    ? appButtons.get(renderKey(item)) : null;
                 if (button)
                     this._updateAppButton(button, item);
             }
@@ -2767,34 +2895,6 @@ export default class ZhyprbolaExtension extends Extension {
 
         this._overflowMenu?.destroy();
         this._overflowMenu = null;
-        if (name === 'zhyprbola') {
-            this._soundMenu?.destroy();
-            this._soundMenu = null;
-            this._keyCountMenu?.destroy();
-            this._keyCountMenu = null;
-            this._keyCountStatLabels = null;
-            this._brightnessMenu?.destroy();
-            this._brightnessMenu = null;
-            this._batteryMenu?.destroy();
-            this._batteryMenu = null;
-            this._quickMenu?.destroy();
-            this._quickMenu = null;
-        }
-        if (name === 'zhyprbola') {
-            this._inputSourceMenu?.destroy();
-            this._inputSourceMenu = null;
-            if (this._inputSourceMenuCloseId) {
-                GLib.source_remove(this._inputSourceMenuCloseId);
-                this._inputSourceMenuCloseId = 0;
-            }
-            this._inputSourceButton = null;
-            this._inputSourceLabel = null;
-            this._dateTimeLabels.clear();
-            this._keyCountLabels?.clear();
-            this._powerMenu?.destroy();
-            this._powerMenu = null;
-            this._panelIcons.clear();
-        }
         const itemLengths = items.map(item => this._dockItemLength(item));
         const preferred = itemLengths.reduce((sum, size) => sum + size, 0) +
             Math.max(0, items.length - 1) * DOCK_CONFIG.groupSpacing;
@@ -2811,16 +2911,20 @@ export default class ZhyprbolaExtension extends Extension {
             visibleCount++;
         }
         const visibleKeys = new Set(items.slice(0, visibleCount)
-            .filter(item => item.kind === 'app').map(item => this._itemOrderKey(item)));
+            .filter(item => item.kind === 'app').map(renderKey));
+        const visibleComponents = new Set(items.slice(0, visibleCount)
+            .filter(item => item.kind !== 'app').map(componentKey));
         for (const child of group.get_children()) {
-            if (!visibleKeys.has(child._delegate?.key))
+            if (child._delegate
+                ? !visibleKeys.has(`${child._delegate.groupName}:${child._delegate.key}`)
+                : !visibleComponents.has(child._dockComponentKey))
                 child.destroy();
         }
         for (const item of items.slice(0, visibleCount)) {
             const existing = item.kind === 'app'
-                ? appButtons.get(this._itemOrderKey(item)) : null;
+                ? appButtons.get(renderKey(item)) : componentButtons.get(componentKey(item));
             if (existing) {
-                this._updateAppButton(existing, item);
+                if (item.kind === 'app') this._updateAppButton(existing, item);
                 group.set_child_at_index(existing, items.indexOf(item));
                 continue;
             }
@@ -2835,7 +2939,8 @@ export default class ZhyprbolaExtension extends Extension {
                 : item.kind === 'panel'
                 ? this._createPanelButton({iconName: item.name,
                     accessibleName: item.label, panelName: item.name})
-                : this._createAppButton(item, name);
+                : this._createAppButton(item, item.appGroup ?? name);
+            if (item.kind !== 'app') button._dockComponentKey = componentKey(item);
             group.insert_child_at_index(button, items.indexOf(item));
         }
         if (overflow) {
@@ -3226,7 +3331,7 @@ export default class ZhyprbolaExtension extends Extension {
             return;
         }
         if (panelName === 'sound' || panelName === 'brightness' || panelName === 'battery') {
-            const buttons = this._dockGroupsByName.get('zhyprbola')?.get_children() ?? [];
+            const buttons = this._dockButtons();
             const source = buttons.find(button => button._panelName === panelName)
                 ?? buttons.find(button => button._panelName === 'components') ?? this._dock;
             if (source) {
@@ -3319,7 +3424,8 @@ export default class ZhyprbolaExtension extends Extension {
 
         const gap = 12;
         const margin = 12;
-        const regionName = this._dockGroupOrder[2] ?? 'zhyprbola';
+        const settingsRegion = this._dockLayout?.regions.findIndex(items => items.includes('settings'));
+        const regionName = this._regionNames()[settingsRegion >= 0 ? settingsRegion : 2] ?? 'zhyprbola';
         const region = this._dockRegions?.get(regionName) ?? this._dock;
         const [regionX, regionY] = region.get_transformed_position();
         const [regionWidth, regionHeight] = region.get_transformed_size();
@@ -3381,14 +3487,15 @@ export default class ZhyprbolaExtension extends Extension {
         const width = vertical ? thickness : monitor.width;
         const height = vertical ? monitor.height : thickness;
         const available = Math.max(0, (vertical ? height : width) - 2 * DOCK_CONFIG.padding);
-        const regionCount = this._dockGroupOrder.length;
+        const regionNames = this._regionNames();
+        const regionCount = regionNames.length;
         const dateTimeIndex = this._dockGroupOrder.indexOf('zhyprbola');
         const hasDateTime = this._dockComponents.visible.some(name =>
             INLINE_DOCK_COMPONENTS.includes(name) || this._connectionName(name));
         let regionLengths = Array.from({length: regionCount}, (_, index) =>
             Math.floor(available * (index + 1) / regionCount) -
             Math.floor(available * index / regionCount));
-        if (hasDateTime && regionCount > 1 && dateTimeIndex >= 0) {
+        if (!this._dockLayout && hasDateTime && regionCount > 1 && dateTimeIndex >= 0) {
             const items = this._dockItems.get('zhyprbola') ?? [];
             const desired = items.reduce((sum, item) => sum +
                 this._dockItemLength(item), 0)
@@ -3402,12 +3509,25 @@ export default class ZhyprbolaExtension extends Extension {
                 ? target : Math.floor(remaining * ++otherIndex / (regionCount - 1)) -
                     Math.floor(remaining * (otherIndex - 1) / (regionCount - 1)));
         }
-        for (const [index, name] of this._dockGroupOrder.entries()) {
+        if (this._dockLayout) {
+            const demands = regionNames.map(name => {
+                const items = this._dockItems.get(name) ?? [];
+                const inline = items.some(item => item.kind !== 'app' &&
+                    (INLINE_DOCK_COMPONENTS.includes(item.name) || this._connectionName(item.name)));
+                const preferred = items.reduce((sum, item) => sum + this._dockItemLength(item), 0)
+                    + Math.max(0, items.length - 1) * DOCK_CONFIG.groupSpacing;
+                return inline ? Math.max(available / 3, Math.min(available * 0.68, preferred)) : available / 3;
+            });
+            const total = demands.reduce((sum, value) => sum + value, 0);
+            regionLengths = demands.map(value => total > 0 ? Math.floor(available * value / total) : 0);
+            regionLengths[2] += available - regionLengths.reduce((sum, value) => sum + value, 0);
+        }
+        for (const [index, name] of regionNames.entries()) {
             const regionLength = regionLengths[index];
             const region = this._dockRegions.get(name);
             region.set_size(vertical ? DOCK_CONFIG.buttonSize : regionLength,
                 vertical ? regionLength : DOCK_CONFIG.buttonSize);
-            const reserved = index === this._dockGroupOrder.length - 1
+            const reserved = index === regionNames.length - 1
                 ? SHOW_DESKTOP_SIZE : 0;
             this._renderDockRegion(name, Math.max(0, regionLength - reserved),
                 vertical, index);

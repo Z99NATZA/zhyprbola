@@ -1,16 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# gnome-extensions localizes its state labels; keep the checks below stable.
+export LC_ALL=C
+
 UUID="zhyprbola@znnn.local"
+
+# GNOME sets this after a Shell failure. Enabling an individual extension does
+# not clear it, so the dock otherwise stays INITIALIZED across logins.
+if [[ "$(gsettings get org.gnome.shell disable-user-extensions)" == 'true' ]]; then
+  gsettings set org.gnome.shell disable-user-extensions false
+  echo "Re-enabled GNOME user extensions (previously disabled globally)."
+fi
 
 if gnome-extensions info "$UUID" >/dev/null 2>&1; then
   gnome-extensions disable "$UUID" >/dev/null 2>&1 || true
   sleep 0.5
   gnome-extensions enable "$UUID"
   for _ in {1..20}; do
-    if [[ "$(gnome-extensions info "$UUID")" == *"State: ACTIVE"* ]]; then
+    info="$(gnome-extensions info "$UUID")"
+    if [[ "$info" == *"State: ACTIVE"* ]]; then
       echo "Enabled $UUID. Log out and back in to load updated extension code."
       exit 0
+    fi
+    if [[ "$info" == *"State: ERROR"* || "$info" == *"State: OUT OF DATE"* ]]; then
+      printf '%s\n' "$info" >&2
+      echo "GNOME could not activate $UUID. Check: journalctl --user -b _COMM=gnome-shell" >&2
+      exit 1
     fi
     sleep 0.25
   done

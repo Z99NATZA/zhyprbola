@@ -13,25 +13,38 @@ For implementation details, see [Runtime Notes](runtime-notes.md).
 
 ```text
 Position: bottom by default; supports left, right, top, and bottom.
-Regions:  Apps (configured launchers), Running (open apps), Zhyprbola (components).
-
-Apps and Running can be disabled. Zhyprbola stays enabled with Settings in Show.
-Region order is configurable; disabled regions keep their position.
+Regions: three independent areas, aligned Left/Center/Right on horizontal docks
+or Top/Center/Bottom on vertical docks.
+Each region accepts any component, Pinned apps, and Running apps in any order.
+For example, Region 1 can contain Workspaces, Running apps, and Time together.
+App blocks expand into their app/window icons; drag those icons to reorder
+within their block without moving the surrounding components.
 Ungroup windows shows one icon per window and defaults to false.
+
+Existing group visibility/order and component placement are imported when
+dock-layout is absent. The first layout edit saves the new format; the legacy
+files remain available. Each item has exactly one region or Hidden/Quick location.
 ```
 
 ## Components and Opacity
 
 ```text
-Settings -> Components:
-Show:    directly on the dock
-Hidden:  not shown
-Quick:   inside the Components popup
+Settings -> Dock Layout:
+Region 1/2/3: items directly on that part of the dock
+Hidden:       not shown
+Quick menu:   inside the Components popup
+
+Cards show icons and names. Click a card to choose its destination, or drag to
+move/reorder it. Dragging near the viewport edge scrolls the layout editor.
+Settings -> Dock also links to the layout editor, alongside position, ungrouping,
+and dock opacity. Pinned apps and Running apps can be hidden and restored like
+other items. Settings always remains on the dock, in any region.
 
 Sound, Brightness, Battery, and Key Visualizer start in Quick.
-Workspaces, Date, Time, and Daily Key Count cannot move to Quick. Settings cannot leave Show.
+Pinned apps, Running apps, Workspaces, Date, Time, Daily Key Count, and the Quick
+menu button cannot move to Quick.
 
-Workspaces starts in Show: transparent dots on the dock, with a white capsule for
+Workspaces starts on the dock: transparent dots, with a white capsule for
 the active workspace. Click a dot to switch. It follows keyboard/Overview changes,
 dynamic workspace counts, and all four dock sides. Settings can reorder or hide
 it; overflow exposes individual workspace actions when dock space is limited.
@@ -134,8 +147,8 @@ Restore never overwrites files. Trash is not purged automatically.
 ## Settings
 
 ```text
-Sidebar order: Components, Date & Time, Dock, Keys, Opacity, Screenshots,
-Show Desktop, Spectrum, Themes, Wallpaper.
+Sidebar order: Date & Time, Dock, Dock Layout, Edge Handles, Keys, Opacity,
+Spectrum, Themes, Wallpaper.
 
 When adding or renaming a section in components/SettingsPanel.qml, sort A-Z
 by displayed English label. Keep heading and page mappings synchronized.
@@ -177,11 +190,12 @@ component-opacity             QML opacity (0-100, default 100)
 component-opacity-components  surfaces using QML opacity
 dock-position                 dock edge
 dock-bg-opacity               dock background opacity (0-100, default 50)
-dock-groups                   enabled regions
-dock-group-order              region order
-dock-components               Show/Hidden/Quick layout
+dock-layout                   ordered region items, Hidden, and Quick (JSON)
+dock-groups                   legacy group visibility, imported on first use
+dock-group-order              legacy region order, imported on first use
+dock-components               legacy Show/Hidden/Quick layout, imported on first use
 dock-ungroup-windows          one icon per window (default false)
-pinned-apps                   desktop IDs, one per line; used when Apps is enabled
+pinned-apps                   desktop IDs, used by the Pinned apps block
 use-wallpaper                 wallpaper toggle
 tasks.json                    checklist
 key-visualizer                appearance JSON
