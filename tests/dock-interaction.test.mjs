@@ -123,7 +123,7 @@ function fixture(length = 400) {
             }, ButtonMask: {ONE: 1},
             Side: {LEFT: 0, RIGHT: 1, TOP: 2, BOTTOM: 3},
             DirectionType: {TAB_FORWARD: 0}},
-        Clutter: {FixedLayout: class {}, AnimationMode: {EASE_OUT_QUAD: 0},
+        Clutter: {FixedLayout: class {}, BinLayout: class {}, AnimationMode: {EASE_OUT_QUAD: 0},
             RotateAxis: {Z_AXIS: 2}, ActorAlign: {CENTER: 0, START: 1, END: 2},
             ClickGesture: Actor, BUTTON_SECONDARY: 3},
         Pango: {EllipsizeMode: {NONE: 0, END: 3}},
@@ -901,6 +901,43 @@ test('dock centers clickable date and time like the input source in both layouts
     assert.equal(opened, 3);
 });
 
+test('side dock labels keep their natural height inside a centered rotated frame', () => {
+    for (const side of ['left', 'right']) {
+        const {dock, context} = fixture();
+        dock._dockPosition = side;
+        dock._dateTimeLabels = new Map();
+        dock._keyCountLabels = new Set();
+        dock._dateTimeItemLength = name => name === 'date-display' ? 180 : 78;
+        dock._formatDockDate = () => 'ศุกร์, 23 ต.ค. 2026';
+        dock._formatDockTime = () => '19:54:42';
+        dock._keyCountText = () => 'keys:1d:8,677';
+        const buttons = [dock._createDateTimeWidget('date-display', true),
+            dock._createDateTimeWidget('time-display', true),
+            dock._createKeyCountWidget(true)];
+        for (const button of buttons) {
+            const [widget] = button.children;
+            const [frame] = widget.children;
+            const [label] = frame.children;
+            assert.ok(frame.layout_manager instanceof context.Clutter.BinLayout);
+            assert.equal(frame.angle, -90);
+            assert.equal(frame.pivotX, 0.5);
+            assert.equal(frame.pivotY, 0.5);
+            assert.equal(frame.x + frame.width / 2, widget.width / 2);
+            assert.equal(frame.y + frame.height / 2, widget.height / 2);
+            assert.equal(frame.height, button.width);
+            assert.equal(frame.width, button.height);
+            assert.equal(label.width, button.height - 8);
+            assert.equal(label.height, undefined, 'text retains its natural line height');
+            assert.equal(label.x_align, context.Clutter.ActorAlign.CENTER);
+            assert.equal(label.y_align, context.Clutter.ActorAlign.CENTER);
+            assert.equal(label.angle, undefined, 'the centered frame owns the rotation');
+        }
+        const countLabel = [...dock._keyCountLabels][0];
+        countLabel.text = 'keys:1d:9';
+        assert.equal(countLabel.height, undefined, 'live text updates retain natural height');
+    }
+});
+
 test('date and time focus Settings without minimizing an already focused window', () => {
     const {dock, context} = fixture();
     dock._settingsSectionRequestPath = '/config/settings-section-request';
@@ -1326,7 +1363,8 @@ test('connected dock buttons show an icon followed by 12 Unicode characters and 
                 accessibleName: name, panelName: name});
             const vertical = side === 'left' || side === 'right';
             const child = button.children[0];
-            const content = vertical ? child.children[0] : child;
+            const frame = vertical ? child.children[0] : null;
+            const content = vertical ? frame.children[0] : child;
             const [icon, label] = content.children;
             assert.equal(icon.gicon, name);
             assert.equal(content.vertical, false);
@@ -1341,8 +1379,11 @@ test('connected dock buttons show an icon followed by 12 Unicode characters and 
             assert.equal(vertical ? button.width : button.height, 27);
             assert.equal(vertical ? button.height : button.width, 152);
             assert.equal(dock._panelIcons.get(name), icon);
-            if (vertical)
-                assert.equal(content.angle, -90);
+            if (vertical) {
+                assert.equal(frame.angle, -90);
+                assert.equal(frame.x + frame.width / 2, child.width / 2);
+                assert.equal(frame.y + frame.height / 2, child.height / 2);
+            }
         }
     }
 });

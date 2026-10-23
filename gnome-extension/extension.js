@@ -2499,15 +2499,8 @@ export default class ZhyprbolaExtension extends Extension {
                 height: DOCK_CONFIG.buttonSize,
             });
             let child = content;
-            if (vertical) {
-                content.set_pivot_point(0.5, 0.5);
-                content.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, -90);
-                content.set_position((DOCK_CONFIG.buttonSize - length) / 2,
-                    (length - DOCK_CONFIG.buttonSize) / 2);
-                child = new St.Widget({layout_manager: new Clutter.FixedLayout(),
-                    width: DOCK_CONFIG.buttonSize, height: length});
-                child.add_child(content);
-            }
+            if (vertical)
+                child = this._createVerticalDockContent(content, length);
             button.set_child(child);
             icon.set_size(DOCK_CONFIG.iconSize, DOCK_CONFIG.iconSize);
             icon.y_align = Clutter.ActorAlign.CENTER;
@@ -2538,6 +2531,32 @@ export default class ZhyprbolaExtension extends Extension {
         return button;
     }
 
+    _createVerticalDockContent(content, length, styleClass = '') {
+        // Center the content at its natural height before rotating the frame.
+        // Giving St.Label the full dock height leaves its text at the top,
+        // which becomes a sideways offset after rotation.
+        const frame = new St.Widget({
+            layout_manager: new Clutter.BinLayout(),
+            width: length,
+            height: DOCK_CONFIG.buttonSize,
+        });
+        content.x_align = Clutter.ActorAlign.CENTER;
+        content.y_align = Clutter.ActorAlign.CENTER;
+        frame.add_child(content);
+        frame.set_pivot_point(0.5, 0.5);
+        frame.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, -90);
+        frame.set_position((DOCK_CONFIG.buttonSize - length) / 2,
+            (length - DOCK_CONFIG.buttonSize) / 2);
+        const widget = new St.Widget({
+            style_class: styleClass,
+            layout_manager: new Clutter.FixedLayout(),
+            width: DOCK_CONFIG.buttonSize,
+            height: length,
+        });
+        widget.add_child(frame);
+        return widget;
+    }
+
     _createDateTimeWidget(name, vertical) {
         const length = this._dateTimeItemLength(name);
         const label = new St.Label({
@@ -2550,19 +2569,9 @@ export default class ZhyprbolaExtension extends Extension {
         this._dateTimeLabels.set(name, label);
         let child = label;
         if (vertical) {
-            label.set_size(length - 8, DOCK_CONFIG.buttonSize);
-            const widget = new St.Widget({
-                style_class: 'zhyprbola-dock-datetime',
-                layout_manager: new Clutter.FixedLayout(),
-                width: DOCK_CONFIG.buttonSize,
-                height: length,
-            });
-            label.set_pivot_point(0.5, 0.5);
-            label.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, -90);
-            label.set_position((DOCK_CONFIG.buttonSize - length + 8) / 2,
-                (length - DOCK_CONFIG.buttonSize) / 2);
-            widget.add_child(label);
-            child = widget;
+            label.width = length - 8;
+            child = this._createVerticalDockContent(label, length,
+                'zhyprbola-dock-datetime');
         }
         const button = new St.Button({
             style_class: 'zhyprbola-dock-button zhyprbola-dock-datetime-button',
@@ -2589,19 +2598,9 @@ export default class ZhyprbolaExtension extends Extension {
         this._keyCountLabels.add(label);
         let child = label;
         if (vertical) {
-            label.set_size(KEY_COUNT_ITEM_LENGTH - 8, DOCK_CONFIG.buttonSize);
-            const widget = new St.Widget({
-                style_class: 'zhyprbola-dock-datetime zhyprbola-dock-key-count',
-                layout_manager: new Clutter.FixedLayout(),
-                width: DOCK_CONFIG.buttonSize,
-                height: KEY_COUNT_ITEM_LENGTH,
-            });
-            label.set_pivot_point(0.5, 0.5);
-            label.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, -90);
-            label.set_position((DOCK_CONFIG.buttonSize - KEY_COUNT_ITEM_LENGTH + 8) / 2,
-                (KEY_COUNT_ITEM_LENGTH - DOCK_CONFIG.buttonSize) / 2);
-            widget.add_child(label);
-            child = widget;
+            label.width = KEY_COUNT_ITEM_LENGTH - 8;
+            child = this._createVerticalDockContent(label, KEY_COUNT_ITEM_LENGTH,
+                'zhyprbola-dock-datetime zhyprbola-dock-key-count');
         }
         const button = new St.Button({
             style_class: 'zhyprbola-dock-button zhyprbola-dock-datetime-button ' +
