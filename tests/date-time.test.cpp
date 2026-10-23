@@ -52,6 +52,32 @@ private:
 class DateTimeTest : public QObject {
     Q_OBJECT
 private slots:
+    void workspaceComponentPersistsPlacementAndCannotEnterQuick() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        qputenv("XDG_CONFIG_HOME", directory.path().toUtf8());
+        const QString key = QStringLiteral("workspaces");
+        Backend backend;
+        QCOMPARE(backend.dockVisibleComponents().first(), key);
+        QVERIFY(!backend.opacityEnabledComponents().contains(key));
+        QVERIFY(!backend.opacityDisabledComponents().contains(key));
+        backend.moveDockComponent(key, QStringLiteral("hidden"), {});
+        QVERIFY(backend.dockHiddenComponents().contains(key));
+        backend.moveDockComponent(key, QStringLiteral("quick"), {});
+        QVERIFY(backend.dockHiddenComponents().contains(key));
+        QVERIFY(!backend.dockQuickComponents().contains(key));
+        Backend reopened;
+        QVERIFY(reopened.dockHiddenComponents().contains(key));
+        QVERIFY(!reopened.dockVisibleComponents().contains(key));
+        QFile file(directory.filePath(QStringLiteral("zhyprbola/dock-components")));
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(R"({"visible":["settings"],"hidden":[],"quick":["workspaces"]})");
+        file.close();
+        Backend migrated;
+        QCOMPARE(migrated.dockVisibleComponents().first(), key);
+        QVERIFY(!migrated.dockQuickComponents().contains(key));
+    }
+
     void spectrumBarLengthsPersistAndKeepTheirBaselineOnEveryEdge() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -231,7 +257,8 @@ private slots:
             QVERIFY(!backend.dockQuickComponents().contains(settings));
             backend.moveDockComponent(settings, QStringLiteral("visible"),
                 QStringLiteral("date-display"));
-            QCOMPARE(backend.dockVisibleComponents().first(), settings);
+            const QStringList order = backend.dockVisibleComponents();
+            QCOMPARE(order.indexOf(settings) + 1, order.indexOf(QStringLiteral("date-display")));
         }
     }
 

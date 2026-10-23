@@ -29,7 +29,12 @@ Hidden:  not shown
 Quick:   inside the Components popup
 
 Sound, Brightness, Battery, and Key Visualizer start in Quick.
-Date, Time, and Daily Key Count cannot move to Quick. Settings cannot leave Show.
+Workspaces, Date, Time, and Daily Key Count cannot move to Quick. Settings cannot leave Show.
+
+Workspaces starts in Show: transparent dots on the dock, with a white capsule for
+the active workspace. Click a dot to switch. It follows keyboard/Overview changes,
+dynamic workspace counts, and all four dock sides. Settings can reorder or hide
+it; overflow exposes individual workspace actions when dock space is limited.
 
 Settings -> Opacity: drag surfaces between Opacity and Default; range 0-100%.
 Settings and Screenshots can move between these lists.

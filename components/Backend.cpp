@@ -292,7 +292,7 @@ bool validComponentKey(const QString &key) {
 }
 
 QStringList dockComponentKeys() {
-    return {QStringLiteral("date-display"), QStringLiteral("time-display"),
+    return {QStringLiteral("workspaces"), QStringLiteral("date-display"), QStringLiteral("time-display"),
         QStringLiteral("key-count"),
         QStringLiteral("settings"), QStringLiteral("bluetooth"),
         QStringLiteral("wifi"), QStringLiteral("clock-weather"),
@@ -315,6 +315,7 @@ QStringList defaultOpacityEnabledComponents() {
 
 QStringList opacityComponentKeys() {
     QStringList keys = dockComponentKeys();
+    keys.removeAll(QStringLiteral("workspaces"));
     keys.append(QStringLiteral("screenshots"));
     return keys;
 }
@@ -530,6 +531,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
             for (const auto &entry : object.value(QStringLiteral("quick")).toArray()) {
                 const QString name = entry.toString();
                 if (name != QLatin1String("components")
+                    && name != QLatin1String("workspaces")
                     && name != QLatin1String("date-display")
                     && name != QLatin1String("time-display")
                     && name != QLatin1String("key-count")
@@ -540,7 +542,8 @@ Backend::Backend(QObject *parent) : QObject(parent) {
                     m_dockQuickComponents.append(name);
             }
             for (const QString &name : componentNames)
-                if (name != QLatin1String("date-display")
+                if (name != QLatin1String("workspaces")
+                    && name != QLatin1String("date-display")
                     && name != QLatin1String("time-display")
                     && name != QLatin1String("key-count")
                     && !m_dockVisibleComponents.contains(name)
@@ -551,7 +554,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
                         || name == QLatin1String("key-visualizer")
                         ? m_dockQuickComponents : m_dockVisibleComponents).append(name);
             for (const QString &name : {QStringLiteral("key-count"), QStringLiteral("time-display"),
-                     QStringLiteral("date-display")}) {
+                     QStringLiteral("date-display"), QStringLiteral("workspaces")}) {
                 if (!m_dockVisibleComponents.contains(name)
                     && !m_dockHiddenComponents.contains(name))
                     m_dockVisibleComponents.prepend(name);
@@ -769,6 +772,7 @@ void Backend::moveDockComponent(const QString &key, const QString &destination,
             && destination != QLatin1String("quick"))
         || (key == QLatin1String("settings") && destination != QLatin1String("visible"))
         || ((key == QLatin1String("components")
+                || key == QLatin1String("workspaces")
                 || key == QLatin1String("date-display")
                 || key == QLatin1String("time-display")
                 || key == QLatin1String("key-count"))

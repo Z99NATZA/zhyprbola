@@ -98,6 +98,11 @@ class StaticPopupMenu {
         this.actor.add_child(this.box);
     }
     addMenuItem(item) { this.items.push(item); this.box.add_child(item); }
+    addAction(label, callback) {
+        const action = {label, activate: callback};
+        this.items.push(action);
+        return action;
+    }
     open(animation) { this.isOpen = true; this.openAnimation = animation; }
     close(animation) { this.isOpen = false; this.closeAnimation = animation; }
     destroy() { this.close(); this.actor.destroy(); this.destroyed = true; }
@@ -198,6 +203,130 @@ function item(id, label = id) {
         get_name: () => 'Example', get_windows: () => [window]};
     return {kind: 'app', app, window, label, running: true};
 }
+
+function workspaceFixture(side = 'bottom') {
+    const setup = fixture();
+    const {dock, context} = setup;
+    const manager = new Actor({n_workspaces: 3, active: 1});
+    manager.connectObject = (...args) => {
+        for (let i = 0; i < args.length - 1; i += 2)
+            manager.connect(args[i], args[i + 1]);
+    };
+    manager.get_active_workspace_index = () => manager.active;
+    manager.activations = [];
+    manager.get_workspace_by_index = index => ({activate: time => {
+        manager.activations.push({index, time});
+        manager.active = index;
+        manager.emit('active-workspace-changed');
+    }});
+    context.global.workspace_manager = manager;
+    context.global.get_current_time = () => 123;
+    dock._dockPosition = side;
+    dock._updateShowDesktopState = () => {};
+    dock._themeName = 'current';
+    dock._watchWorkspaces();
+    return {...setup, manager};
+}
+
+test('Workspaces defaults to Show and respects Hidden while rejecting Quick', () => {
+    const {dock, context} = fixture();
+    assert.equal(dock._readDockComponents().visible[0], 'workspaces');
+    context.TextDecoder = TextDecoder;
+    for (const zone of ['hidden', 'quick']) {
+        const saved = {visible: ['settings'], hidden: [], quick: []};
+        saved[zone] = ['workspaces'];
+        context.GLib.file_get_contents = () => [true,
+            new TextEncoder().encode(JSON.stringify(saved))];
+        const layout = dock._readDockComponents();
+        assert.equal(layout.quick.includes('workspaces'), false);
+        assert.equal(layout[zone === 'quick' ? 'visible' : 'hidden'].includes('workspaces'), true);
+    }
+    dock._dockGroupsByName.set('zhyprbola', new Actor());
+    dock._dockComponents.visible = ['workspaces'];
+    dock._createComponentButtons();
+    assert.equal(dock._dockItems.get('zhyprbola')[0].kind, 'workspaces');
+});
+
+test('workspace dots switch directly and retain their buttons across active changes on every edge', () => {
+    for (const side of ['bottom', 'top', 'left', 'right']) {
+        const {dock, manager} = workspaceFixture(side);
+        const vertical = side === 'left' || side === 'right';
+        const pager = dock._createWorkspacePager(vertical);
+        const buttons = pager.get_children();
+        assert.equal(pager.vertical, vertical);
+        assert.equal(buttons.length, 3);
+        assert.equal(vertical ? pager.width : pager.height, 27);
+        assert.equal(vertical ? pager.height : pager.width, dock._dockItemLength({kind: 'workspaces'}));
+        const assertSelected = index => {
+            assert.deepEqual(pager.get_children(), buttons);
+            for (const [i, button] of buttons.entries()) {
+                assert.equal(button.checked, i === index);
+                assert.equal(vertical ? button.width : button.height, 27);
+                const dot = button.children[0];
+                assert.equal(vertical ? dot.height : dot.width, i === index ? 18 : 6);
+                assert.equal(vertical ? dot.width : dot.height, 6);
+            }
+        };
+        assertSelected(1);
+        buttons[2].emit('clicked');
+        assert.deepEqual(manager.activations, [{index: 2, time: 123}]);
+        assertSelected(2);
+        buttons[2].emit('clicked');
+        assert.equal(manager.activations.length, 1, 'active workspace does not reactivate');
+        manager.active = 0;
+        manager.emit('active-workspace-changed');
+        assertSelected(0);
+        manager.active = 1;
+        manager.emit('workspaces-reordered');
+        assertSelected(1);
+        pager.destroy();
+        assert.equal(dock._workspaceIndicators.size, 0);
+        manager.emit('active-workspace-changed');
+    }
+});
+
+test('workspace count changes update pagination length, preserve surviving buttons and queue layout', () => {
+    const {dock, manager} = workspaceFixture();
+    const pager = dock._createWorkspacePager(false);
+    const first = pager.children[0];
+    let layouts = 0;
+    dock._queueLayout = () => layouts++;
+    manager.n_workspaces = 5;
+    manager.emit('notify::n-workspaces');
+    assert.equal(pager.children.length, 5);
+    assert.equal(pager.width, 92);
+    assert.equal(pager.children[0], first);
+    const removed = pager.children[4];
+    manager.n_workspaces = 2;
+    manager.active = 0;
+    manager.emit('notify::n-workspaces');
+    assert.equal(pager.children.length, 2);
+    assert.equal(pager.width, 44);
+    assert.equal(pager.children[0], first);
+    assert.equal(removed.destroyed, true);
+    dock._activateWorkspace(4);
+    assert.equal(manager.activations.length, 0);
+    assert.equal(layouts, 2);
+});
+
+test('workspace pagination participates in dock sizing and exposes direct actions in overflow', () => {
+    const {dock, group, manager} = workspaceFixture();
+    dock._dockItems.set('running', [{kind: 'workspaces', name: 'workspaces', label: 'Workspaces'}]);
+    dock._renderDockRegion('running', 150, false, 0);
+    assert.equal(group.children[0].children.length, 3);
+    manager.n_workspaces = 4;
+    dock._renderDockRegion('running', 150, false, 0);
+    assert.equal(group.children[0].children.length, 4, 'count invalidates cached region sizing');
+    dock._renderDockRegion('running', 30, false, 0);
+    const more = group.children[0];
+    assert.equal(more._dockOverflow, true);
+    assert.equal(dock._workspaceIndicators.size, 0);
+    more.emit('clicked');
+    assert.equal(dock._overflowMenu.items.length, 4);
+    assert.equal(dock._overflowMenu.items[1].label, 'Workspace 2 (current)');
+    dock._overflowMenu.items[3].activate();
+    assert.deepEqual(manager.activations, [{index: 3, time: 123}]);
+});
 
 test('first-open Settings is placed beside region 3 on every dock side', () => {
     const {dock, context} = fixture();

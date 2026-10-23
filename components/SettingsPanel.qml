@@ -135,6 +135,7 @@ Item {
             .concat(backend.dockHiddenComponents)
             .concat(backend.dockQuickComponents)
             .filter(key => key !== "settings"
+                && key !== "workspaces"
                 && key !== "input-source"
                 && key !== "power"
                 && key !== "components"
@@ -226,6 +227,7 @@ Item {
                 && local.y >= 0 && local.y < zone.height
                 && (draggedComponent !== "settings" || zone.zoneKey === "visible")
                 && (zone.zoneKey !== "quick" || (draggedComponent !== "components"
+                    && draggedComponent !== "workspaces"
                     && draggedComponent !== "date-display"
                     && draggedComponent !== "time-display"
                     && draggedComponent !== "key-count"))) {

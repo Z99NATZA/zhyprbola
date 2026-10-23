@@ -44,6 +44,7 @@ const DOCK_GROUPS = ['apps', 'running', 'zhyprbola'];
 const DEFAULT_ENABLED_DOCK_GROUPS = ['zhyprbola', 'running'];
 const DEFAULT_DOCK_GROUP_ORDER = ['apps', 'running', 'zhyprbola'];
 const DOCK_COMPONENTS = [
+    ['workspaces', 'Workspaces'],
     ['date-display', 'Date'],
     ['time-display', 'Time'],
     ['key-count', 'Daily Key Count'],
@@ -64,7 +65,8 @@ const DOCK_COMPONENTS = [
     ['power', 'Power'],
     ['components', 'Components'],
 ];
-const INLINE_DOCK_COMPONENTS = ['date-display', 'time-display', 'key-count'];
+const INLINE_DOCK_COMPONENTS = ['workspaces', 'date-display', 'time-display', 'key-count'];
+const WORKSPACE_PAGER = Object.freeze({cellSize: 16, activeExtra: 12, dotSize: 6});
 const KEY_COUNT_ITEM_LENGTH = 124;
 const KEY_COUNT_STAT_KEYS = Object.freeze([
     'today', '7-days', '15-days', 'month', '3-months', '6-months', 'year',
@@ -280,8 +282,7 @@ export default class ZhyprbolaExtension extends Extension {
                 this._updateShowDesktopState();
                 this._queueAppRefresh();
             }, this);
-        global.workspace_manager.connectObject('active-workspace-changed',
-            () => this._updateShowDesktopState(), this);
+        this._watchWorkspaces();
         Main.layoutManager.connectObject('monitors-changed', () => {
             this._screenshotEdge?.layout();
             this._showDesktopEdge?.layout();
@@ -416,6 +417,7 @@ export default class ZhyprbolaExtension extends Extension {
         this._panelIcons = new Map();
         this._dateTimeLabels = new Map();
         this._keyCountLabels = new Set();
+        this._workspaceIndicators = new Set();
         this._menuManager = new ClickOnlyPopupMenuManager(this._dock);
         for (const name of this._dockGroupOrder) {
             const region = new St.Widget({
@@ -628,6 +630,7 @@ export default class ZhyprbolaExtension extends Extension {
         const labels = new Map(DOCK_COMPONENTS);
         this._dockItems.set('zhyprbola', this._dockComponents.visible.map(name => ({
             kind: name === 'input-source' ? 'input-source'
+                : name === 'workspaces' ? 'workspaces'
                 : name === 'date-display' || name === 'time-display' ? 'date-time'
                     : name === 'key-count' ? 'key-count' : 'panel',
             name,
@@ -1212,7 +1215,7 @@ export default class ZhyprbolaExtension extends Extension {
                         || name === 'key-visualizer'
                         ? quick : visible).push(name);
             }
-            for (const name of ['key-count', 'time-display', 'date-display']) {
+            for (const name of ['key-count', 'time-display', 'date-display', 'workspaces']) {
                 if (!visible.includes(name) && !hidden.includes(name))
                     visible.unshift(name);
             }
@@ -2045,6 +2048,7 @@ export default class ZhyprbolaExtension extends Extension {
         }
         Main.layoutManager.removeChrome(this._dock);
         this._dock.destroy();
+        this._workspaceIndicators?.clear();
         this._dock = null;
         this._dockGroupsByName = null;
         this._dockRegions = null;
@@ -2439,6 +2443,8 @@ export default class ZhyprbolaExtension extends Extension {
     }
 
     _dockItemLength(item) {
+        if (item.kind === 'workspaces')
+            return this._workspacePagerLength();
         if (item.kind === 'date-time')
             return this._dateTimeItemLength(item.name);
         if (item.kind === 'key-count')
@@ -2529,6 +2535,93 @@ export default class ZhyprbolaExtension extends Extension {
                 this._openPanel(panelName);
         });
         return button;
+    }
+
+    _watchWorkspaces() {
+        global.workspace_manager.connectObject(
+            'active-workspace-changed', () => {
+                this._updateShowDesktopState();
+                this._refreshWorkspaceIndicators();
+            },
+            'notify::n-workspaces', () => {
+                this._refreshWorkspaceIndicators();
+                this._queueLayout();
+            },
+            'workspaces-reordered', () => this._refreshWorkspaceIndicators(), this);
+    }
+
+    _workspaceCount() {
+        return Math.max(1, global.workspace_manager?.n_workspaces ?? 1);
+    }
+
+    _workspacePagerLength() {
+        return this._workspaceCount() * WORKSPACE_PAGER.cellSize + WORKSPACE_PAGER.activeExtra;
+    }
+
+    _activateWorkspace(index) {
+        const manager = global.workspace_manager;
+        if (!manager || index < 0 || index >= manager.n_workspaces ||
+            index === manager.get_active_workspace_index())
+            return;
+        manager.get_workspace_by_index(index)?.activate(global.get_current_time());
+    }
+
+    _refreshWorkspaceIndicators() {
+        for (const pager of this._workspaceIndicators ?? [])
+            pager._syncWorkspaces();
+    }
+
+    _createWorkspacePager(vertical) {
+        const pager = new St.BoxLayout({
+            style_class: 'zhyprbola-workspaces',
+            vertical,
+            accessible_name: 'Workspaces',
+        });
+        this._workspaceIndicators ??= new Set();
+        this._workspaceIndicators.add(pager);
+        pager.connect('destroy', () => this._workspaceIndicators?.delete(pager));
+        pager._syncWorkspaces = () => {
+            const count = this._workspaceCount();
+            const active = global.workspace_manager?.get_active_workspace_index() ?? 0;
+            const buttons = pager.get_children();
+            for (const button of buttons.slice(count))
+                button.destroy();
+            for (let index = buttons.length; index < count; index++) {
+                const dot = new St.Widget({
+                    style_class: 'zhyprbola-workspace-dot',
+                    x_align: Clutter.ActorAlign.CENTER,
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                const button = new St.Button({
+                    style_class: 'zhyprbola-workspace-button',
+                    child: dot,
+                    reactive: true,
+                    can_focus: true,
+                    track_hover: true,
+                });
+                button.connect('clicked', () => this._activateWorkspace(index));
+                pager.add_child(button);
+            }
+            for (const [index, button] of pager.get_children().entries()) {
+                const selected = index === active;
+                const cellLength = WORKSPACE_PAGER.cellSize +
+                    (selected ? WORKSPACE_PAGER.activeExtra : 0);
+                const dotLength = WORKSPACE_PAGER.dotSize +
+                    (selected ? WORKSPACE_PAGER.activeExtra : 0);
+                button.checked = selected;
+                button.accessible_name = `Workspace ${index + 1}${selected ? ' (current)' : ''}`;
+                button.set_size(vertical ? DOCK_CONFIG.buttonSize : cellLength,
+                    vertical ? cellLength : DOCK_CONFIG.buttonSize);
+                const [dot] = button.get_children();
+                dot.set_size(vertical ? WORKSPACE_PAGER.dotSize : dotLength,
+                    vertical ? dotLength : WORKSPACE_PAGER.dotSize);
+            }
+            const length = this._workspacePagerLength();
+            pager.set_size(vertical ? DOCK_CONFIG.buttonSize : length,
+                vertical ? length : DOCK_CONFIG.buttonSize);
+        };
+        pager._syncWorkspaces();
+        return pager;
     }
 
     _createVerticalDockContent(content, length, styleClass = '') {
@@ -2655,7 +2748,8 @@ export default class ZhyprbolaExtension extends Extension {
             return;
         const items = this._dockItems.get(name) ?? [];
         const state = `${length}:${items.length}:${vertical}:${slot}:` +
-            JSON.stringify(items.map(item => item.kind === 'app'
+            JSON.stringify(items.map(item => item.kind === 'workspaces'
+                ? [item.name, this._workspaceCount()] : item.kind === 'app'
                 ? this._itemOrderKey(item) : [item.name, this._connectionName(item.name),
                     this._connectionIconName(item.name)]));
         const appButtons = new Map(group.get_children()
@@ -2732,6 +2826,8 @@ export default class ZhyprbolaExtension extends Extension {
             }
             const button = item.kind === 'input-source'
                 ? this._createInputSourceButton()
+                : item.kind === 'workspaces'
+                ? this._createWorkspacePager(vertical)
                 : item.kind === 'date-time'
                 ? this._createDateTimeWidget(item.name, vertical)
                 : item.kind === 'key-count'
@@ -2787,6 +2883,14 @@ export default class ZhyprbolaExtension extends Extension {
         menu.actor.add_style_class_name('zhyprbola-overflow-menu');
         menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor};`);
         for (const item of items) {
+            if (item.kind === 'workspaces') {
+                const active = global.workspace_manager.get_active_workspace_index();
+                for (let index = 0; index < this._workspaceCount(); index++) {
+                    menu.addAction(`Workspace ${index + 1}${index === active ? ' (current)' : ''}`,
+                        () => this._activateWorkspace(index));
+                }
+                continue;
+            }
             if (item.kind === 'date-time') {
                 const value = item.name === 'date-display'
                     ? this._formatDockDate() : this._formatDockTime();
