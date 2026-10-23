@@ -1,4 +1,5 @@
 # Docs format
+- under is example
 
 # Header
 
@@ -30,6 +31,8 @@ detail
 ```
 
 ```bash
+# ---------- bash ---------- #
+
 # comment
 command
 
@@ -54,3 +57,6 @@ command
 |---|---|---|---|
 | Value | Value | Value | Value |
 | Value | Value | Value | Value |
+
+Example [Link](docs/README.md)
+
