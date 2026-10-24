@@ -43,6 +43,36 @@ Running item replaces it with Close Window scoped to that item's window. Pin to
 Dash is omitted because Zhyprbola owns its launcher configuration.
 ```
 
+## Dock Region Sizing
+
+```text
+Regions start with equal shares of the monitor's logical width or height.
+An overfull region borrows unused space from its closest neighbors, retaining
+each donor's measured contents, inter-region spacing, and Show Desktop reserve.
+This applies to app-only regions as well as inline text and mixed regions.
+There is no fixed percentage cap; More appears only if the combined contents
+and reserves exceed the dock's available length.
+
+The middle group's offset targets the screen center and is clamped inside its
+allocated region when neighboring groups need the space. Dock edges retain
+their start/end alignment. Geometry changes also invalidate cached centering.
+
+Overflow action labels set the theme color explicitly, as Input Source does,
+because the GNOME theme may specify a contrasting popup-item foreground.
+Overflow and Power share Input Source's row spacing and interaction colors.
+All overflow component rows use their existing SVG icons and a fixed icon
+column. A row releases pointer-acquired focus to the menu actor when hover
+ends, preventing GNOME's :focus style from retaining the highlight. Keyboard
+navigation can still focus rows without hovering.
+
+Dock, Quick, and overflow share SVG sources by icon name and immutable GIcons
+by icon name/color. Caches survive dock rebuilds and theme switches, and are
+released when the extension is disabled. Each visible location owns its own
+St.Icon actor; only the underlying icon data is shared. The wifi-strong state
+uses wifi.svg rather than a second copy of the same artwork. QML Settings
+already loads the same SVG assets directly.
+```
+
 ## Component Minimize Animation
 
 ```text

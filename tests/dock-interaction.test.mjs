@@ -20,6 +20,8 @@ class Actor {
     add_action(action) { (this.actions ??= []).push(action); }
     hide() { this.visible = false; }
     navigate_focus() { this.focusNavigated = true; }
+    grab_key_focus() { Actor.keyFocus = this; }
+    has_key_focus() { return Actor.keyFocus === this; }
     emit(name) {
         for (const callback of this.signals.get(name) ?? [])
             callback(this);
@@ -59,7 +61,7 @@ class Actor {
     set_position(x, y) { this.live(); Object.assign(this, {x, y}); }
     get_transformed_position() { return [this.x ?? 0, this.y ?? 0]; }
     get_transformed_size() { return [this.width ?? 0, this.height ?? 0]; }
-    set_style() { this.live(); }
+    set_style(style) { this.live(); this.style = style; }
     set_pivot_point(x, y) { Object.assign(this, {pivotX: x, pivotY: y}); }
     set_rotation_angle(axis, angle) { Object.assign(this, {rotationAxis: axis, angle}); }
     add_style_class_name(name) { this.live(); (this.styleClasses ??= []).push(name); }
@@ -98,11 +100,12 @@ class StaticPopupMenu {
         this.actor.add_child(this.box);
     }
     addMenuItem(item) { this.items.push(item); this.box.add_child(item); }
-    addAction(label, callback) {
-        const action = {label, activate: callback};
+    addAction(label, callback, icon) {
+        const action = new Actor({label: new Actor({text: label}), activate: callback, icon});
         this.items.push(action);
         return action;
     }
+    toggle() { this.isOpen = !this.isOpen; }
     open(animation) { this.isOpen = true; this.openAnimation = animation; }
     close(animation) { this.isOpen = false; this.closeAnimation = animation; }
     destroy() { this.close(); this.actor.destroy(); this.destroyed = true; }
@@ -295,6 +298,77 @@ test('components and app blocks render together on every edge and retain live co
         assert.equal(label.destroyed, undefined);
         assert.equal(dock._keyCountLabels.size, 1, 'another region retains its key-count label');
     }
+});
+
+test('dense regions borrow idle space on every edge and return it when their contents shrink', () => {
+    const layout = [['workspaces'], ['running'],
+        ['key-count', 'wifi', 'bluetooth', 'date-display', 'time-display',
+            'input-source', 'components', 'sound', 'brightness', 'settings', 'power']];
+    for (const side of ['bottom', 'top', 'left', 'right']) {
+        const {dock, context} = mixedRegionFixture(layout.map(items => [...items]), side);
+        const vertical = side === 'left' || side === 'right';
+        context.Main.layoutManager.primaryMonitor = {x: 100, y: 200, width: 908, height: 908};
+        dock._connectionNames = {wifi: 'Office Wi-Fi', bluetooth: 'Headphones'};
+        dock._currentInputSourceCode = () => 'en';
+        dock._dockItems.set('running', [item(1), item(2)]);
+        dock._composeDockRegions();
+        dock._layoutDock();
+        const groups = dock._regionNames().map(name => dock._dockGroupsByName.get(name));
+        for (const group of groups)
+            assert.equal(group.children.some(child => child._dockOverflow), false, side);
+        assert.equal(groups[2].children.at(-2)._panelName, 'settings');
+        assert.equal(groups[2].children.at(-1)._panelName, 'power');
+        const region = dock._dockRegions.get('region-3');
+        assert.ok((vertical ? region.height : region.width) > 600);
+        const total = [...dock._dockRegions.values()]
+            .reduce((sum, actor) => sum + (vertical ? actor.height : actor.width), 0);
+        assert.equal(total, 900, 'borrowing never expands the dock beyond the monitor');
+
+        // App-only regions also borrow; labels are not required to trigger it.
+        dock._dockLayout.regions[2] = ['settings', 'power'];
+        dock._dockItems.set('running', Array.from({length: 15}, (_, index) => item(index + 1)));
+        dock._composeDockRegions();
+        dock._layoutDock();
+        assert.equal(groups[1].children.length, 15);
+        assert.equal(groups[1].children.some(child => child._dockOverflow), false);
+
+        dock._dockItems.set('running', [item(1), item(2)]);
+        dock._composeDockRegions();
+        dock._layoutDock();
+        for (const actor of dock._dockRegions.values())
+            assert.equal(vertical ? actor.height : actor.width, 300, 'equal regions return when all contents fit');
+    }
+});
+
+test('borrowing preserves a centered middle group until neighboring contents need its space', () => {
+    const {dock, context} = mixedRegionFixture([['running'], ['settings'], []]);
+    context.Main.layoutManager.primaryMonitor.width = 908;
+    dock._dockItems.set('running', Array.from({length: 10}, (_, index) => item(index + 1)));
+    dock._composeDockRegions();
+    dock._layoutDock();
+    const start = dock._dockRegions.get('region-1').width;
+    const middle = dock._dockGroupsByName.get('region-2');
+    assert.equal(start + middle.x + middle.width / 2, 449.5);
+});
+
+test('overflow remains available when the whole dock is full and disappears after space becomes available', () => {
+    const {dock, context} = mixedRegionFixture([['running'], [], ['settings', 'power']]);
+    context.Main.layoutManager.primaryMonitor.width = 308;
+    dock._dockItems.set('running', Array.from({length: 15}, (_, index) => item(index + 1)));
+    dock._composeDockRegions();
+    dock._layoutDock();
+    const group = dock._dockGroupsByName.get('region-1');
+    const more = group.children.at(-1);
+    assert.equal(more._dockOverflow, true);
+    let hidden;
+    dock._showOverflow = (_, items) => { hidden = items; };
+    more.emit('clicked');
+    assert.equal(hidden.length + group.children.length - 1, 15);
+    assert.equal(dock._dockGroupsByName.get('region-3').children.length, 2);
+    context.Main.layoutManager.primaryMonitor.width = 908;
+    dock._layoutDock();
+    assert.equal(group.children.length, 15);
+    assert.equal(group.children.some(child => child._dockOverflow), false);
 });
 
 test('pinned and running instances of the same app keep distinct buttons in a shared region', () => {
@@ -495,11 +569,12 @@ test('workspace pagination participates in dock sizing and exposes direct action
     assert.equal(group.children[0].children.length, 4, 'count invalidates cached region sizing');
     dock._renderDockRegion('running', 30, false, 0);
     const more = group.children[0];
+    dock._panelGicon = name => name;
     assert.equal(more._dockOverflow, true);
     assert.equal(dock._workspaceIndicators.size, 0);
     more.emit('clicked');
     assert.equal(dock._overflowMenu.items.length, 4);
-    assert.equal(dock._overflowMenu.items[1].label, 'Workspace 2 (current)');
+    assert.equal(dock._overflowMenu.items[1].label.text, 'Workspace 2 (current)');
     dock._overflowMenu.items[3].activate();
     assert.deepEqual(manager.activations, [{index: 3, time: 123}]);
 });
@@ -658,6 +733,66 @@ test('overflow uses current window titles even when its button is retained', () 
     dock._showOverflow = (_, items) => { hidden = items; };
     more.emit('clicked');
     assert.equal(hidden[0].label, 'Updated hidden window');
+});
+
+test('overflow styles every action and opens Settings and Power from the same source', () => {
+    const {dock, flush} = workspaceFixture();
+    const source = new Actor();
+    dock._themeName = 'mauve';
+    dock._panelGicon = (name, color) => ({name, color});
+    dock._formatDockDate = () => '2026-10-24';
+    dock._keyCountText = () => 'keys:1d:42';
+    const opened = [];
+    dock._openPanel = name => opened.push(name);
+    dock._openDateTimeSettings = () => opened.push('date-time');
+    const items = ['workspaces', 'date-display', 'time-display', 'key-count', 'input-source', 'settings', 'power']
+        .map(name => dock._componentItem(name));
+    dock._formatDockTime = () => '23:08:35';
+    dock._showOverflow(source, items);
+    const menu = dock._overflowMenu;
+    for (const action of menu.items) {
+        assert.equal(action.label.style, 'color: #be345f;');
+        assert.ok(action.styleClasses.includes('zhyprbola-overflow-item'));
+        assert.ok(action.icon, 'every component uses its existing icon');
+    }
+    menu.items.find(action => action.label.text.startsWith('Date:')).activate();
+    menu.items.find(action => action.label.text === 'Zhyprbola settings').activate();
+    menu.items.find(action => action.label.text === 'Power').activate();
+    assert.deepEqual(opened, ['date-time', 'settings']);
+    flush();
+    assert.equal(dock._powerMenu.sourceActor, source);
+    assert.equal(dock._powerMenu.items.length, 3);
+    for (const action of dock._powerMenu.items)
+        assert.equal(action.label.style, 'color: #be345f;');
+});
+
+test('overflow and Power release pointer focus on leave while retaining keyboard focus otherwise', () => {
+    const {dock, flush} = workspaceFixture();
+    dock._panelGicon = name => name;
+    dock._showOverflow(new Actor(), [dock._componentItem('power')]);
+    const overflow = dock._overflowMenu;
+    overflow.items[0].activate();
+    flush();
+    for (const menu of [overflow, dock._powerMenu]) {
+        const action = menu.items[0];
+        action.hover = true;
+        action.active = true;
+        action.grab_key_focus();
+        action.emit('notify::hover');
+        assert.equal(action.has_key_focus(), true, 'hover still focuses the row');
+        action.hover = false;
+        action.emit('notify::hover');
+        assert.equal(action.active, false);
+        assert.equal(menu.actor.has_key_focus(), true, 'leaving removes the row focus highlight');
+
+        action.grab_key_focus();
+        action.active = true;
+        assert.equal(action.has_key_focus(), true, 'keyboard focus can return without hovering');
+        assert.equal(action.active, true);
+        menu.actor.grab_key_focus();
+        action.emit('notify::hover');
+        assert.equal(menu.actor.has_key_focus(), true, 'leaving an unfocused row does not take focus');
+    }
 });
 
 test('dock teardown cancels the drag clone while the source is still alive', () => {
@@ -1157,6 +1292,7 @@ test('dock reserves enough region width for inline date and time', () => {
     const {dock} = fixture(828);
     dock._dockGroupOrder = ['apps', 'running', 'zhyprbola'];
     dock._dockRegions = new Map(dock._dockGroupOrder.map(name => [name, new Actor()]));
+    dock._dockGroupsByName.set('zhyprbola', new Actor());
     dock._dateTimeSettings = {dateFormat: 'yyyy-MM-dd', dateLocale: 'global',
         timeFormat: '24-colon', timeLocale: 'global', showSeconds: false};
     const names = ['date-display', 'time-display', 'settings', 'bluetooth',
@@ -1168,7 +1304,7 @@ test('dock reserves enough region width for inline date and time', () => {
     dock._layoutDock();
     const componentsWidth = dock._dockRegions.get('zhyprbola').width;
     assert.ok(componentsWidth > 828 / 3);
-    assert.ok(componentsWidth <= 828 * 0.68);
+    assert.ok(componentsWidth <= 828);
 });
 
 test('dock centers clickable date and time like the input source in both layouts', () => {

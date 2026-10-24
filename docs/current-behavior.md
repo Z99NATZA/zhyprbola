@@ -16,6 +16,9 @@ Position: bottom by default; supports left, right, top, and bottom.
 Regions: three independent areas, aligned Left/Center/Right on horizontal docks
 or Top/Center/Bottom on vertical docks.
 Each region accepts any component, Pinned apps, and Running apps in any order.
+Regions borrow unused space from neighbors before moving items into More (⋮).
+Overflow remains when the dock cannot fit all items. The middle group stays
+centered on the screen while neighboring groups leave enough room.
 For example, Region 1 can contain Workspaces, Running apps, and Time together.
 App blocks expand into their app/window icons; drag those icons to reorder
 within their block without moving the surrounding components.
@@ -48,6 +51,11 @@ Workspaces starts on the dock: transparent dots, with a white capsule for
 the active workspace. Click a dot to switch. It follows keyboard/Overview changes,
 dynamic workspace counts, and all four dock sides. Settings can reorder or hide
 it; overflow exposes individual workspace actions when dock space is limited.
+More and Power use the same light surface, theme-colored text, rounded rows,
+and hover/keyboard-focus colors as Input Source.
+More shows each component's icon, including inline date/time, key count,
+workspaces, and input source, with aligned labels. Pointer highlights clear
+when the pointer leaves a row; keyboard navigation still highlights its focus.
 
 Settings -> Opacity: drag surfaces between Opacity and Default; range 0-100%.
 Settings and Screenshots can move between these lists.
