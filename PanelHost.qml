@@ -9,10 +9,12 @@ Window {
     readonly property string panelName: requestedPanel === "tasks" || requestedPanel === "task"
         ? "todo" : requestedPanel
     readonly property bool resizablePanel: panelName === "todo"
+    readonly property Item panelItem: panelLoader.item as Item
+    property bool hostInitialized: false
     readonly property int panelWidth: {
         switch (panelName) {
         case "clock-weather": return 480
-        case "key-visualizer": return keyVisualizer.implicitWidth
+        case "key-visualizer": return panelItem ? panelItem.implicitWidth : 180
         case "audio-spectrum": return 440
         case "system-status": return 528
         case "music": return 414
@@ -28,11 +30,11 @@ Window {
         case "wifi": return 576
         case "clock-weather":
         case "audio-spectrum": return 172
-        case "key-visualizer": return keyVisualizer.implicitHeight
+        case "key-visualizer": return panelItem ? panelItem.implicitHeight : 78
         case "system-status": return 195
         case "music": return 254
         case "sound": return sound.error.length > 0 ? 214 : 184
-        case "settings": return settingsPanel.implicitHeight
+        case "settings": return panelItem ? panelItem.implicitHeight : 510
         case "todo": return 360
         case "calendar": return 314
         default: return 548
@@ -62,7 +64,7 @@ Window {
         return "Zhyprbola Bluetooth"
     }
 
-    visible: true
+    visible: panelLoader.status === Loader.Ready
     width: panelWidth
     height: panelHeight
     minimumWidth: panelWidth
@@ -74,104 +76,71 @@ Window {
     color: "transparent"
     title: panelTitle
 
+    function loadPanel() {
+        const files = {
+            bluetooth: "BluetoothPanel.qml", wifi: "WifiPanel.qml",
+            "clock-weather": "ClockWeather.qml", "key-visualizer": "KeyVisualizer.qml",
+            "system-status": "SystemStatus.qml", "audio-spectrum": "AudioSpectrumBubble.qml",
+            music: "MusicPlayer.qml", sound: "SoundPanel.qml", todo: "Todo.qml",
+            calendar: "Calendar.qml", settings: "SettingsPanel.qml"
+        }
+        const radio = panelName === "wifi" || panelName === "bluetooth"
+        // Radio cards must start in standalone mode, before their anchors run.
+        // Setting it after creation can retain an off-window anchored position.
+        panelLoader.setSource(Qt.resolvedUrl("components/" + (files[panelName] || "BluetoothPanel.qml")),
+            radio ? {standalone: true, opened: true} : {})
+    }
+
     Component.onCompleted: {
-        if (panelName === "wifi") {
-            wifiPanel.opened = true
-        } else if (panelName === "bluetooth") {
-            bluetoothPanel.opened = true
-        } else if (panelName === "key-visualizer") {
-            keyVisualizer.forceActiveFocus()
-            backend.startKeyCapture()
+        hostInitialized = true
+        loadPanel()
+    }
+    onPanelNameChanged: { if (hostInitialized) loadPanel() }
+
+    function syncActivity() {
+        const showing = host.visible && host.visibility !== Window.Minimized
+        backend.setPanelActive(showing)
+        if ((panelName === "wifi" || panelName === "bluetooth") && panelLoader.item)
+            panelLoader.item.opened = showing
+        if (panelName === "key-visualizer") {
+            if (showing && panelItem) {
+                panelItem.forceActiveFocus()
+                backend.startKeyCapture()
+            } else {
+                backend.stopKeyCapture()
+            }
         }
     }
 
-    onVisibilityChanged: {
-        if (panelName !== "key-visualizer") return
-        if (host.visibility === Window.Minimized || host.visibility === Window.Hidden)
-            backend.stopKeyCapture()
-        else
-            backend.startKeyCapture()
-    }
-
+    onVisibilityChanged: syncActivity()
     onActiveChanged: {
-        if (active && panelName === "key-visualizer")
-            keyVisualizer.forceActiveFocus()
+        if (active && panelName === "key-visualizer" && panelItem)
+            panelItem.forceActiveFocus()
     }
 
-    BluetoothPanel {
-        id: bluetoothPanel
+    Loader {
+        id: panelLoader
+        objectName: "panel-loader"
         anchors.fill: parent
-        standalone: true
-        opened: false
-        onCloseRequested: host.showMinimized()
+        focus: true
+        visible: host.visible && host.visibility !== Window.Minimized
+        onLoaded: host.syncActivity()
     }
 
-    WifiPanel {
-        id: wifiPanel
-        anchors.fill: parent
-        standalone: true
-        opened: false
-        onCloseRequested: host.showMinimized()
-    }
-
-    ClockWeather {
-        anchors.centerIn: parent
-        visible: host.panelName === "clock-weather"
-    }
-
-    KeyVisualizer {
-        id: keyVisualizer
-        anchors.fill: parent
-        visible: host.panelName === "key-visualizer"
-        enabled: visible
+    Connections {
+        target: panelLoader.item
+        ignoreUnknownSignals: true
+        function onCloseRequested() { host.showMinimized() }
     }
 
     MouseArea {
-        anchors.fill: keyVisualizer
+        anchors.fill: parent
         z: -1
         visible: host.panelName === "key-visualizer"
         onClicked: {
             host.requestActivate()
-            keyVisualizer.forceActiveFocus()
+            if (host.panelItem) host.panelItem.forceActiveFocus()
         }
-    }
-
-    SystemStatus {
-        anchors.centerIn: parent
-        visible: host.panelName === "system-status"
-    }
-
-    AudioSpectrumBubble {
-        anchors.centerIn: parent
-        visible: host.panelName === "audio-spectrum"
-    }
-
-    MusicPlayer {
-        anchors.centerIn: parent
-        visible: host.panelName === "music"
-    }
-
-    SoundPanel {
-        anchors.centerIn: parent
-        visible: host.panelName === "sound"
-        onCloseRequested: host.showMinimized()
-    }
-
-    Todo {
-        anchors.fill: parent
-        visible: host.panelName === "todo"
-    }
-
-    Calendar {
-        anchors.centerIn: parent
-        visible: host.panelName === "calendar"
-    }
-
-    SettingsPanel {
-        id: settingsPanel
-        anchors.centerIn: parent
-        visible: host.panelName === "settings"
-        onCloseRequested: host.showMinimized()
     }
 
     Rectangle {

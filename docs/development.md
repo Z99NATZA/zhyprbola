@@ -35,3 +35,24 @@ QML lint currently exits successfully but may print existing qmllint warnings.
 ```bash
 make check
 ```
+
+```text
+Panel startup
+==========
+
+The benchmark measures process launch to the first rendered frame using the
+offscreen software renderer, isolated config/cache directories, one warmup,
+and three samples per panel. It excludes GNOME's window animation and is not
+a measurement of when remote device/weather data has finished loading.
+```
+
+```bash
+./scripts/benchmark-panel-startup
+./scripts/benchmark-panel-startup --runs 5 calendar settings wifi music
+
+mkdir -p build/startup-tests
+cd build/startup-tests
+qmake6 ../../tests/panel-startup.pro
+make
+QT_QPA_PLATFORM=offscreen dbus-run-session -- ../panel-startup-test
+```

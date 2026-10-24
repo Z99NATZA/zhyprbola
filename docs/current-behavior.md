@@ -5,6 +5,9 @@ Zhyprbola combines a GNOME Shell dock with focused Qt/QML panels.
 Shell handles sound, brightness, and battery popups; Screenshots is a resident QML browser.
 Other QML panels cover connections, clock/weather, keys, status, spectrum, music,
 tasks, calendar, and settings.
+Each focused host loads only its requested component and starts only its needed
+data services. Data refreshes asynchronously; hiding/minimizing pauses polling
+and spectrum while retaining the component for a quick restore.
 ```
 
 For implementation details, see [Runtime Notes](runtime-notes.md).

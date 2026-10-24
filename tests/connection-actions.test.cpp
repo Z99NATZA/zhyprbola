@@ -158,6 +158,8 @@ esac
 
     void powerTracksBusyAndActualState() {
         Backend backend;
+        QTRY_VERIFY(backend.bluetoothEnabled());
+        QTRY_VERIFY(backend.wifiEnabled());
         QVERIFY(backend.bluetoothEnabled());
         backend.setBluetoothEnabled(false);
         QVERIFY(state(backend, "bluetooth").value("busy").toBool());
@@ -181,6 +183,8 @@ esac
     void bluezFailureWithZeroExitCodeIsVisible() {
         qputenv("RADIO_TEST_FAIL", "yes");
         Backend backend;
+        QTRY_VERIFY(backend.bluetoothEnabled());
+        QTRY_VERIFY(backend.wifiEnabled());
         backend.setBluetoothEnabled(false);
         QTRY_VERIFY(!state(backend, "bluetooth").value("busy").toBool());
         QVERIFY(!state(backend, "bluetooth").value("success").toBool());
@@ -189,8 +193,8 @@ esac
     }
     void openingPanelsUsesCachedResultsWithoutScanning() {
         Backend backend;
-        QVERIFY(!backend.wifiNetworks().isEmpty());
-        QVERIFY(!backend.bluetoothDevices().isEmpty());
+        QTRY_VERIFY(!backend.wifiNetworks().isEmpty());
+        QTRY_VERIFY(!backend.bluetoothDevices().isEmpty());
         QQmlEngine engine;
         engine.rootContext()->setContextProperty("backend", &backend);
 
@@ -212,6 +216,8 @@ esac
     }
     void requestingTheCurrentPowerStateDoesNothing() {
         Backend backend;
+        QTRY_VERIFY(backend.bluetoothEnabled());
+        QTRY_VERIFY(backend.wifiEnabled());
         QVERIFY(backend.wifiEnabled());
         QVERIFY(backend.bluetoothEnabled());
 
@@ -342,6 +348,8 @@ esac
     void powerCommandMustActuallyChangeTheRadio() {
         qputenv("RADIO_TEST_NO_CHANGE", "yes");
         Backend backend;
+        QTRY_VERIFY(backend.bluetoothEnabled());
+        QTRY_VERIFY(backend.wifiEnabled());
         backend.setBluetoothEnabled(false);
         QTRY_VERIFY(!state(backend, "bluetooth").value("busy").toBool());
         QVERIFY(!state(backend, "bluetooth").value("success").toBool());

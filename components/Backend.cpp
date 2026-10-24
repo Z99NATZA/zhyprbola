@@ -24,12 +24,11 @@
 #include <QUrlQuery>
 #include <QtMath>
 #include <QDBusConnection>
-#include <QDBusConnectionInterface>
-#include <QDBusInterface>
 #include <QDBusObjectPath>
-#include <QDBusReply>
-#include <QDBusVariant>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <algorithm>
+#include <memory>
 
 namespace {
 QString dockConfigPath(const QString &name) {
@@ -397,43 +396,25 @@ QList<QByteArray> splitNetworkRow(const QByteArray &row) {
     return normalized;
 }
 
-QString runBluetoothctl(const QStringList &args, int timeoutMs = 900) {
-    if (QStandardPaths::findExecutable(QStringLiteral("bluetoothctl")).isEmpty()) return {};
-
-    QProcess process;
-    process.start(QStringLiteral("bluetoothctl"), args);
-    if (!process.waitForFinished(timeoutMs)) {
-        process.kill();
-        process.waitForFinished(100);
-        return {};
-    }
-    return process.exitCode() == 0 ? QString::fromUtf8(process.readAllStandardOutput()).trimmed() : QString();
-}
-
-void unblockBluetoothRadio() {
-    const QString rfkill = QStandardPaths::findExecutable(QStringLiteral("rfkill"));
-    if (rfkill.isEmpty()) return;
-
-    QProcess process;
-    process.start(rfkill, {QStringLiteral("unblock"), QStringLiteral("bluetooth")});
-    if (!process.waitForFinished(1000)) {
-        process.kill();
-        process.waitForFinished(100);
-    }
-}
-
 QString bluetoothInfoValue(const QString &info, const QString &key) {
     const QString prefix = key + QStringLiteral(":");
     for (const QString &line : info.split('\n')) {
         const QString trimmed = line.trimmed();
-        if (trimmed.startsWith(prefix))
-            return trimmed.mid(prefix.size()).trimmed();
+        if (trimmed.startsWith(prefix)) return trimmed.mid(prefix.size()).trimmed();
     }
     return {};
 }
 }
 
-Backend::Backend(QObject *parent) : QObject(parent) {
+Backend::Backend(QObject *parent, const QString &panelName) : QObject(parent) {
+    const bool desktop = panelName.isEmpty();
+    m_pollSystem = desktop || panelName == QLatin1String("system-status");
+    m_pollWifi = desktop || panelName == QLatin1String("wifi");
+    m_pollBluetooth = desktop || panelName == QLatin1String("bluetooth");
+    m_pollWeather = desktop || panelName == QLatin1String("clock-weather");
+    m_pollMusic = desktop || panelName == QLatin1String("music");
+    m_pollSpectrum = m_pollMusic || panelName == QLatin1String("audio-spectrum")
+        || panelName == QLatin1String("edge-spectrum");
     connect(&m_themeWatcher, &QFileSystemWatcher::directoryChanged,
         this, &Backend::refreshTheme);
     connect(&m_themeWatcher, &QFileSystemWatcher::fileChanged,
@@ -636,27 +617,109 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     if (m_cpuDetail.isEmpty()) m_cpuDetail = QStringLiteral("CPU");
 
     connect(&m_systemTimer, &QTimer::timeout, this, &Backend::refreshSystem);
-    m_systemTimer.start(2000);
-    refreshSystem();
-    // Populate Wi-Fi from NetworkManager's existing cache without starting a
-    // new discovery. Active scans are reserved for explicit refreshes and the
-    // transition from radio off to on.
-    refreshWifiNetworks();
-
+    m_systemTimer.setInterval(2000);
     connect(&m_weatherTimer, &QTimer::timeout, this, &Backend::refreshWeather);
-    m_weatherTimer.start(15 * 60 * 1000);
-    refreshWeather();
-
+    m_weatherTimer.setInterval(15 * 60 * 1000);
     connect(&m_musicTimer, &QTimer::timeout, this, &Backend::refreshMusic);
-    m_musicTimer.start(2000);
-    refreshMusic();
+    m_musicTimer.setInterval(2000);
+    connect(&m_cava, &QProcess::readyReadStandardOutput, this, &Backend::readSpectrum);
+    connect(&m_cava, &QProcess::finished, this, [this]() {
+        const bool restart = m_spectrumStopping && m_panelActive;
+        m_spectrumStopping = false;
+        if (restart) startSpectrum();
+    });
+    // The desktop/edge hosts do not use PanelHost's visibility lifecycle.
+    if (desktop || panelName == QLatin1String("edge-spectrum"))
+        QTimer::singleShot(0, this, [this]() { setPanelActive(true); });
+}
 
+void Backend::setPanelActive(bool active) {
+    if (m_panelActive == active) return;
+    m_panelActive = active;
+    if (!active) {
+        m_systemTimer.stop();
+        m_weatherTimer.stop();
+        m_musicTimer.stop();
+        if (m_cava.state() != QProcess::NotRunning) {
+            m_spectrumStopping = true;
+            m_cava.kill();
+        }
+        return;
+    }
+    if (m_pollSystem || m_pollWifi || m_pollBluetooth) {
+        m_systemTimer.start();
+        refreshSystem();
+        if (m_pollWifi) refreshWifiNetworks();
+    }
+    if (m_pollWeather) {
+        m_weatherTimer.start();
+        refreshWeather();
+    }
+    if (m_pollMusic) {
+        m_musicTimer.start();
+        refreshMusic();
+    }
+    if (m_pollSpectrum) startSpectrum();
+}
+
+void Backend::startSpectrum() {
     const QString config = QDir(QCoreApplication::applicationDirPath())
         .absoluteFilePath(QStringLiteral("../components/cava.conf"));
-    if (!QStandardPaths::findExecutable(QStringLiteral("cava")).isEmpty()
-        && QFileInfo::exists(config)) {
-        connect(&m_cava, &QProcess::readyReadStandardOutput, this, &Backend::readSpectrum);
+    if (m_cava.state() == QProcess::NotRunning && QFileInfo::exists(config)
+        && !QStandardPaths::findExecutable(QStringLiteral("cava")).isEmpty()) {
+        m_cavaBuffer.clear();
         m_cava.start(QStringLiteral("cava"), {QStringLiteral("-p"), config});
+    }
+}
+
+void Backend::query(const QString &program, const QStringList &arguments,
+    std::function<void(QueryResult)> completed, int timeoutMs) {
+    m_queryQueue.enqueue({program, arguments, std::move(completed), timeoutMs});
+    startQueries();
+}
+
+void Backend::startQueries() {
+    // Bound the number of helpers even when BlueZ returns many known devices.
+    while (!m_queryQueue.isEmpty() && m_queries.size() < 4) {
+        const auto request = m_queryQueue.dequeue();
+        auto *process = new QProcess(this);
+        m_queries.insert(process);
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+        process->setProcessEnvironment(environment);
+        auto *timeout = new QTimer(process);
+        timeout->setSingleShot(true);
+        connect(timeout, &QTimer::timeout, process, [process]() {
+            process->setProperty("timedOut", true);
+            process->kill();
+        });
+        const auto finish = [this, process, timeout, completed = request.completed](bool success) {
+            if (process->property("queryFinished").toBool()) return;
+            process->setProperty("queryFinished", true);
+            timeout->stop();
+            m_queries.remove(process);
+            const QueryResult result{success && !process->property("timedOut").toBool(),
+                process->readAllStandardOutput()};
+            process->deleteLater();
+            completed(result);
+            startQueries();
+        };
+        connect(process, &QProcess::finished, this, [finish](int code, QProcess::ExitStatus status) {
+            finish(code == 0 && status == QProcess::NormalExit);
+        });
+        connect(process, &QProcess::errorOccurred, this, [finish](QProcess::ProcessError error) {
+            if (error == QProcess::FailedToStart) finish(false);
+        });
+        timeout->start(request.timeoutMs);
+        process->start(request.program, request.arguments);
+    }
+}
+
+void Backend::refreshRadio(const QString &radio, Completion completed) {
+    if (radio == QLatin1String("wifi")) {
+        refreshWifiStatus([this, completed]() { refreshWifiNetworks(completed); });
+    } else {
+        refreshBluetoothDevices(completed);
     }
 }
 
@@ -1492,6 +1555,12 @@ void Backend::deleteTask(const QString &id) {
 }
 
 Backend::~Backend() {
+    m_panelActive = false;
+    for (QProcess *process : std::as_const(m_queries)) {
+        process->disconnect(this);
+        process->kill();
+    }
+    for (QProcess *process : std::as_const(m_queries)) process->waitForFinished(100);
     stopKeyCapture();
     if (m_keyCaptureGrant.state() != QProcess::NotRunning) {
         m_keyCaptureGrant.terminate();
@@ -1532,105 +1601,118 @@ void Backend::readSpectrum() {
 }
 
 void Backend::refreshSystem() {
-    QFile stat(QStringLiteral("/proc/stat"));
-    if (stat.open(QIODevice::ReadOnly)) {
-        const QList<QByteArray> fields = stat.readLine().simplified().split(' ');
-        if (fields.size() >= 5 && fields.first() == "cpu") {
-            quint64 total = 0;
-            for (int i = 1; i < fields.size(); ++i) total += fields.at(i).toULongLong();
-            const quint64 idle = fields.at(4).toULongLong()
-                + (fields.size() > 5 ? fields.at(5).toULongLong() : 0);
-            if (m_previousTotal && total > m_previousTotal) {
-                const double busy = 1.0 - double(idle - m_previousIdle) / double(total - m_previousTotal);
-                m_cpuPercent = qBound(0, qRound(busy * 100), 100);
-            }
-            m_previousTotal = total;
-            m_previousIdle = idle;
-        }
-    }
-
-    QFile memory(QStringLiteral("/proc/meminfo"));
-    if (memory.open(QIODevice::ReadOnly)) {
-        quint64 totalKiB = 0;
-        quint64 availableKiB = 0;
-        for (const QByteArray &line : memory.readAll().split('\n')) {
-            if (line.startsWith("MemTotal:")) totalKiB = line.mid(9).trimmed().split(' ').first().toULongLong();
-            if (line.startsWith("MemAvailable:")) availableKiB = line.mid(13).trimmed().split(' ').first().toULongLong();
-        }
-        if (totalKiB) {
-            const quint64 used = totalKiB - qMin(totalKiB, availableKiB);
-            m_ramPercent = qRound(double(used) * 100 / double(totalKiB));
-            m_ramDetail = formatGiB(used * 1024) + QStringLiteral("/")
-                + formatGiB(totalKiB * 1024) + QStringLiteral("GB");
-        }
-    }
-
-    const QStorageInfo disk = QStorageInfo::root();
-    if (disk.isValid() && disk.bytesTotal() > 0) {
-        const quint64 total = disk.bytesTotal();
-        const quint64 used = total - disk.bytesAvailable();
-        m_diskPercent = qRound(double(used) * 100 / double(total));
-        m_diskDetail = formatGiB(used) + QStringLiteral("/")
-            + formatGiB(total) + QStringLiteral("GB");
-    }
-
-    m_batteryAvailable = false;
-    const QDir power(QStringLiteral("/sys/class/power_supply"));
-    for (const QString &device : power.entryList({QStringLiteral("BAT*")}, QDir::Dirs | QDir::NoDotAndDotDot)) {
-        QFile capacity(power.filePath(device + QStringLiteral("/capacity")));
-        if (capacity.open(QIODevice::ReadOnly)) {
-            bool valid = false;
-            const int percent = capacity.readAll().trimmed().toInt(&valid);
-            if (valid) {
-                m_batteryAvailable = true;
-                m_batteryPercent = qBound(0, percent, 100);
-                break;
+    if (m_pollSystem) {
+        QFile stat(QStringLiteral("/proc/stat"));
+        if (stat.open(QIODevice::ReadOnly)) {
+            const QList<QByteArray> fields = stat.readLine().simplified().split(' ');
+            if (fields.size() >= 5 && fields.first() == "cpu") {
+                quint64 total = 0;
+                for (int i = 1; i < fields.size(); ++i) total += fields.at(i).toULongLong();
+                const quint64 idle = fields.at(4).toULongLong()
+                    + (fields.size() > 5 ? fields.at(5).toULongLong() : 0);
+                if (m_previousTotal && total > m_previousTotal) {
+                    const double busy = 1.0 - double(idle - m_previousIdle) / double(total - m_previousTotal);
+                    m_cpuPercent = qBound(0, qRound(busy * 100), 100);
+                }
+                m_previousTotal = total;
+                m_previousIdle = idle;
             }
         }
-    }
 
-    m_wifiConnected = false;
-    m_wifiEnabled = false;
-    m_wifiSsid = QStringLiteral("Wi-Fi off");
-    m_wifiSignalStrength = 0;
-    m_wifiStatusText = QStringLiteral("Wi-Fi unavailable");
-    if (!QStandardPaths::findExecutable(QStringLiteral("nmcli")).isEmpty()) {
-        QProcess radio;
-        radio.start(QStringLiteral("nmcli"), {QStringLiteral("-t"), QStringLiteral("radio"), QStringLiteral("wifi")});
-        if (radio.waitForFinished(500) && radio.exitCode() == 0) {
-            m_wifiEnabled = QString::fromUtf8(radio.readAllStandardOutput()).trimmed()
-                == QLatin1String("enabled");
+        QFile memory(QStringLiteral("/proc/meminfo"));
+        if (memory.open(QIODevice::ReadOnly)) {
+            quint64 totalKiB = 0;
+            quint64 availableKiB = 0;
+            for (const QByteArray &line : memory.readAll().split('\n')) {
+                if (line.startsWith("MemTotal:")) totalKiB = line.mid(9).trimmed().split(' ').first().toULongLong();
+                if (line.startsWith("MemAvailable:")) availableKiB = line.mid(13).trimmed().split(' ').first().toULongLong();
+            }
+            if (totalKiB) {
+                const quint64 used = totalKiB - qMin(totalKiB, availableKiB);
+                m_ramPercent = qRound(double(used) * 100 / double(totalKiB));
+                m_ramDetail = formatGiB(used * 1024) + QStringLiteral("/")
+                    + formatGiB(totalKiB * 1024) + QStringLiteral("GB");
+            }
         }
 
-        QProcess nmcli;
-        nmcli.start(QStringLiteral("nmcli"),
-            {QStringLiteral("-t"), QStringLiteral("-f"),
-             QStringLiteral("TYPE,STATE,CONNECTION"), QStringLiteral("dev"), QStringLiteral("status")});
-        if (nmcli.waitForFinished(500) && nmcli.exitCode() == 0) {
-            for (const QByteArray &row : nmcli.readAllStandardOutput().split('\n')) {
-                const QList<QByteArray> fields = row.split(':');
-                if (fields.size() < 3 || fields.at(0) != "wifi") continue;
+        const QStorageInfo disk = QStorageInfo::root();
+        if (disk.isValid() && disk.bytesTotal() > 0) {
+            const quint64 total = disk.bytesTotal();
+            const quint64 used = total - disk.bytesAvailable();
+            m_diskPercent = qRound(double(used) * 100 / double(total));
+            m_diskDetail = formatGiB(used) + QStringLiteral("/")
+                + formatGiB(total) + QStringLiteral("GB");
+        }
 
-                const QString state = QString::fromUtf8(fields.at(1)).trimmed();
-                const QString connection = QString::fromUtf8(fields.mid(2).join(":")).trimmed();
-                m_wifiConnected = state.startsWith(QStringLiteral("connected"));
-                m_wifiSsid = m_wifiConnected && !connection.isEmpty()
-                    ? connection
-                    : (m_wifiEnabled ? QStringLiteral("Wi-Fi disconnected") : QStringLiteral("Wi-Fi off"));
-                m_wifiSignalStrength = m_wifiConnected ? wifiSignalFromProc() : 0;
-                m_wifiStatusText = m_wifiConnected
-                    ? QStringLiteral("%1% signal").arg(m_wifiSignalStrength)
-                    : (m_wifiEnabled ? state : QStringLiteral("Radio disabled"));
-                break;
+        m_batteryAvailable = false;
+        const QDir power(QStringLiteral("/sys/class/power_supply"));
+        for (const QString &device : power.entryList({QStringLiteral("BAT*")}, QDir::Dirs | QDir::NoDotAndDotDot)) {
+            QFile capacity(power.filePath(device + QStringLiteral("/capacity")));
+            if (capacity.open(QIODevice::ReadOnly)) {
+                bool valid = false;
+                const int percent = capacity.readAll().trimmed().toInt(&valid);
+                if (valid) {
+                    m_batteryAvailable = true;
+                    m_batteryPercent = qBound(0, percent, 100);
+                    break;
+                }
             }
         }
     }
-
-    refreshBluetoothDevices();
+    if (m_pollWifi) refreshWifiStatus();
+    if (m_pollBluetooth) refreshBluetoothDevices();
     emit systemChanged();
 }
 
+void Backend::refreshWifiStatus(Completion completed) {
+    if (m_wifiStatusRefreshing) {
+        if (completed) QTimer::singleShot(25, this, [this, completed]() { refreshWifiStatus(completed); });
+        return;
+    }
+    m_wifiStatusRefreshing = true;
+    query(QStringLiteral("nmcli"), {QStringLiteral("-t"), QStringLiteral("radio"), QStringLiteral("wifi")},
+        [this, completed](QueryResult radio) {
+        query(QStringLiteral("nmcli"), {QStringLiteral("-t"), QStringLiteral("-f"),
+            QStringLiteral("TYPE,STATE,CONNECTION"), QStringLiteral("dev"), QStringLiteral("status")},
+            [this, completed, radio](QueryResult devices) {
+            // Preserve the last usable snapshot if a daemon temporarily fails.
+            if (radio.success) {
+                m_wifiEnabled = radio.output.trimmed() == "enabled";
+                if (devices.success) {
+                    m_wifiConnected = false;
+                    m_wifiSignalStrength = 0;
+                    m_wifiSsid = m_wifiEnabled ? QStringLiteral("Wi-Fi disconnected") : QStringLiteral("Wi-Fi off");
+                    m_wifiStatusText = m_wifiEnabled ? QStringLiteral("Disconnected") : QStringLiteral("Radio disabled");
+                    for (const QByteArray &row : devices.output.split('\n')) {
+                        const auto fields = row.split(':');
+                        if (fields.size() < 3 || fields.first() != "wifi") continue;
+                        const QString state = QString::fromUtf8(fields.at(1)).trimmed();
+                        const QString connection = QString::fromUtf8(fields.mid(2).join(":")).trimmed();
+                        m_wifiConnected = m_wifiEnabled && state.startsWith(QStringLiteral("connected"));
+                        if (m_wifiConnected && !connection.isEmpty()) m_wifiSsid = connection;
+                        m_wifiSignalStrength = m_wifiConnected ? wifiSignalFromProc() : 0;
+                        m_wifiStatusText = m_wifiConnected ? QStringLiteral("%1% signal").arg(m_wifiSignalStrength)
+                            : m_wifiEnabled ? state : QStringLiteral("Radio disabled");
+                        break;
+                    }
+                }
+                if (!m_wifiEnabled) {
+                    m_wifiConnected = false;
+                    m_wifiSignalStrength = 0;
+                    m_wifiSsid = QStringLiteral("Wi-Fi off");
+                    m_wifiStatusText = QStringLiteral("Radio disabled");
+                }
+                emit systemChanged();
+            }
+            m_wifiStatusRefreshing = false;
+            if (completed) completed();
+        }, 500);
+    }, 500);
+}
+
 void Backend::refreshWeather() {
+    if (m_weatherRefreshing || !m_panelActive) return;
+    m_weatherRefreshing = true;
     QUrl url(QStringLiteral("https://api.open-meteo.com/v1/forecast"));
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("latitude"), qEnvironmentVariable("ZHYPRBOLA_LATITUDE", "13.7563"));
@@ -1645,6 +1727,7 @@ void Backend::refreshWeather() {
     request.setTransferTimeout(10000);
     QNetworkReply *reply = m_network.get(request);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        m_weatherRefreshing = false;
         const QJsonDocument json = QJsonDocument::fromJson(reply->readAll());
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError || !json.isObject()) {
@@ -1670,138 +1753,139 @@ void Backend::refreshWeather() {
     });
 }
 
-QString Backend::playerctl(const QStringList &args) const {
-    if (!playerctlAvailable()) return {};
-    QProcess process;
-    process.start(QStringLiteral("playerctl"), args);
-    if (!process.waitForFinished(700)) {
-        process.kill();
-        process.waitForFinished(100);
-        return {};
-    }
-    return process.exitCode() == 0 ? QString::fromUtf8(process.readAllStandardOutput()).trimmed() : QString();
-}
-
 bool Backend::playerctlAvailable() const {
     return !QStandardPaths::findExecutable(QStringLiteral("playerctl")).isEmpty();
 }
 
-QStringList Backend::mprisPlayers() const {
-    QDBusConnectionInterface *interface = QDBusConnection::sessionBus().interface();
-    if (!interface) return {};
-
-    const QDBusReply<QStringList> reply = interface->registeredServiceNames();
-    if (!reply.isValid()) return {};
-
-    QStringList players;
-    for (const QString &service : reply.value()) {
-        if (service.startsWith(QStringLiteral("org.mpris.MediaPlayer2.")))
-            players.append(service);
-    }
-    return players;
-}
-
-QVariant Backend::mprisProperty(const QString &service, const QString &property) const {
-    QDBusInterface properties(service,
-        QStringLiteral("/org/mpris/MediaPlayer2"),
-        QStringLiteral("org.freedesktop.DBus.Properties"),
-        QDBusConnection::sessionBus());
-    if (!properties.isValid()) return {};
-
-    const QDBusReply<QDBusVariant> reply = properties.call(QStringLiteral("Get"),
-        QStringLiteral("org.mpris.MediaPlayer2.Player"), property);
-    return reply.isValid() ? reply.value().variant() : QVariant();
-}
-
 void Backend::refreshMusic() {
-    const QStringList players = playerctlAvailable()
-        ? playerctl({QStringLiteral("-l")}).split('\n', Qt::SkipEmptyParts)
-        : QStringList();
-    QString selected;
-    for (const QString &player : players) {
-        if (playerctl({QStringLiteral("-p"), player, QStringLiteral("status")}) == QLatin1String("Playing")) {
-            selected = player;
-            break;
-        }
-    }
-    if (selected.isEmpty() && !players.isEmpty()) selected = players.first();
+    if (m_musicRefreshing || !m_panelActive) return;
+    m_musicRefreshing = true;
+    if (!playerctlAvailable()) { refreshMpris(); return; }
+    query(QStringLiteral("playerctl"), {QStringLiteral("-l")}, [this](QueryResult result) {
+        const QStringList players = QString::fromUtf8(result.output).trimmed().split('\n', Qt::SkipEmptyParts);
+        if (!result.success || players.isEmpty()) refreshMpris();
+        else refreshPlayerctl(players);
+    }, 700);
+}
 
-    if (!selected.isEmpty()) {
-        m_player = selected;
-        m_trackId.clear();
-        m_playerUsesDbus = false;
-    } else {
-        const QStringList dbusPlayers = mprisPlayers();
-        for (const QString &player : dbusPlayers) {
-            if (mprisProperty(player, QStringLiteral("PlaybackStatus")).toString() == QLatin1String("Playing")) {
-                selected = player;
-                break;
-            }
-        }
-        if (selected.isEmpty() && !dbusPlayers.isEmpty()) selected = dbusPlayers.first();
-        m_player = selected;
-        m_playerUsesDbus = !selected.isEmpty();
-    }
+void Backend::refreshPlayerctl(const QStringList &players, int index) {
+    if (index >= players.size()) { refreshPlayerctlMetadata(players.first()); return; }
+    const QString player = players.at(index);
+    query(QStringLiteral("playerctl"), {QStringLiteral("-p"), player, QStringLiteral("status")},
+        [this, players, index, player](QueryResult result) {
+        if (result.success && result.output.trimmed() == "Playing") refreshPlayerctlMetadata(player);
+        else refreshPlayerctl(players, index + 1);
+    }, 700);
+}
 
-    if (selected.isEmpty()) {
+void Backend::refreshPlayerctlMetadata(const QString &player) {
+    query(QStringLiteral("playerctl"), {QStringLiteral("-p"), player, QStringLiteral("metadata"),
+        QStringLiteral("--format"), QStringLiteral("{{title}}\x1f{{artist}}\x1f{{mpris:length}}")},
+        [this, player](QueryResult metadata) {
+        if (!metadata.success) { m_musicRefreshing = false; return; }
+        query(QStringLiteral("playerctl"), {QStringLiteral("-p"), player, QStringLiteral("position")},
+            [this, player, metadata](QueryResult position) {
+            query(QStringLiteral("playerctl"), {QStringLiteral("-p"), player, QStringLiteral("status")},
+                [this, player, metadata, position](QueryResult status) {
+                if (position.success && status.success) {
+                    m_player = player;
+                    m_playerUsesDbus = false;
+                    m_trackId.clear();
+                    const auto fields = QString::fromUtf8(metadata.output).trimmed().split(QChar(0x1f));
+                    m_songTitle = fields.value(0).isEmpty() ? QStringLiteral("Unknown track") : fields.value(0);
+                    m_artist = fields.value(1).isEmpty() ? player.section('.', 0, 0) : fields.value(1);
+                    m_durationMs = qMax<qint64>(0, fields.value(2).toLongLong() / 1000);
+                    m_positionMs = qMax<qint64>(0, qRound64(QString::fromUtf8(position.output).trimmed().toDouble() * 1000));
+                    m_playing = status.output.trimmed() == "Playing";
+                    emit musicChanged();
+                }
+                m_musicRefreshing = false;
+            }, 700);
+        }, 700);
+    }, 700);
+}
+
+void Backend::refreshMpris() {
+    const auto message = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"),
+        QStringLiteral("/org/freedesktop/DBus"), QStringLiteral("org.freedesktop.DBus"), QStringLiteral("ListNames"));
+    auto *pending = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message, 1000), this);
+    connect(pending, &QDBusPendingCallWatcher::finished, this, [this, pending]() {
+        const QDBusPendingReply<QStringList> reply = *pending;
+        pending->deleteLater();
+        if (reply.isError()) { m_musicRefreshing = false; return; }
+        QStringList players;
+        for (const QString &name : reply.value())
+            if (name.startsWith(QLatin1String("org.mpris.MediaPlayer2."))) players.append(name);
+        refreshMprisPlayer(players, 0);
+    });
+}
+
+void Backend::refreshMprisPlayer(const QStringList &players, int index, const QString &fallback,
+    const QVariantMap &fallbackProperties) {
+    if (index >= players.size()) { applyMpris(fallback, fallbackProperties); return; }
+    const QString player = players.at(index);
+    auto message = QDBusMessage::createMethodCall(player, QStringLiteral("/org/mpris/MediaPlayer2"),
+        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("GetAll"));
+    message << QStringLiteral("org.mpris.MediaPlayer2.Player");
+    auto *pending = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message, 1000), this);
+    connect(pending, &QDBusPendingCallWatcher::finished, this,
+        [this, pending, players, index, player, fallback, fallbackProperties]() {
+        const QDBusPendingReply<QVariantMap> reply = *pending;
+        pending->deleteLater();
+        if (reply.isError()) {
+            refreshMprisPlayer(players, index + 1, fallback, fallbackProperties);
+        } else if (reply.value().value(QStringLiteral("PlaybackStatus")).toString() == QLatin1String("Playing")) {
+            applyMpris(player, reply.value());
+        } else {
+            refreshMprisPlayer(players, index + 1, fallback.isEmpty() ? player : fallback,
+                fallback.isEmpty() ? reply.value() : fallbackProperties);
+        }
+    });
+}
+
+void Backend::applyMpris(const QString &player, const QVariantMap &properties) {
+    m_player = player;
+    m_playerUsesDbus = !player.isEmpty();
+    if (player.isEmpty()) {
         m_songTitle = QStringLiteral("No music playing");
         m_artist = QStringLiteral("Open a music app");
         m_trackId.clear();
         m_positionMs = 0;
         m_durationMs = 0;
         m_playing = false;
-        emit musicChanged();
-        return;
-    }
-
-    if (m_playerUsesDbus) {
-        const QVariantMap metadata = qdbus_cast<QVariantMap>(mprisProperty(selected, QStringLiteral("Metadata")));
+    } else {
+        const QVariantMap metadata = qdbus_cast<QVariantMap>(properties.value(QStringLiteral("Metadata")));
         const QStringList artists = metadata.value(QStringLiteral("xesam:artist")).toStringList();
-        const QDBusObjectPath trackPath = metadata.value(QStringLiteral("mpris:trackid")).value<QDBusObjectPath>();
-
         m_songTitle = metadata.value(QStringLiteral("xesam:title")).toString();
         if (m_songTitle.isEmpty()) m_songTitle = QStringLiteral("Unknown track");
-        m_artist = artists.isEmpty() ? selected.section('.', -1) : artists.join(QStringLiteral(", "));
+        m_artist = artists.isEmpty() ? player.section('.', -1) : artists.join(QStringLiteral(", "));
         m_durationMs = qMax<qint64>(0, metadata.value(QStringLiteral("mpris:length")).toLongLong() / 1000);
-        m_trackId = trackPath.path();
-        m_positionMs = qMax<qint64>(0, mprisProperty(selected, QStringLiteral("Position")).toLongLong() / 1000);
-        m_playing = mprisProperty(selected, QStringLiteral("PlaybackStatus")).toString() == QLatin1String("Playing");
-        emit musicChanged();
-        return;
+        m_trackId = metadata.value(QStringLiteral("mpris:trackid")).value<QDBusObjectPath>().path();
+        m_positionMs = qMax<qint64>(0, properties.value(QStringLiteral("Position")).toLongLong() / 1000);
+        m_playing = properties.value(QStringLiteral("PlaybackStatus")).toString() == QLatin1String("Playing");
     }
-
-    const QString metadata = playerctl({QStringLiteral("-p"), selected, QStringLiteral("metadata"),
-        QStringLiteral("--format"), QStringLiteral("{{title}}\x1f{{artist}}\x1f{{mpris:length}}")});
-    const QStringList fields = metadata.split(QChar(0x1f));
-    m_songTitle = fields.value(0).isEmpty() ? QStringLiteral("Unknown track") : fields.value(0);
-    m_artist = fields.value(1).isEmpty() ? selected.section('.', 0, 0) : fields.value(1);
-    m_durationMs = qMax<qint64>(0, fields.value(2).toLongLong() / 1000);
-    m_positionMs = qMax<qint64>(0, qRound64(playerctl({QStringLiteral("-p"), selected, QStringLiteral("position")}).toDouble() * 1000));
-    m_playing = playerctl({QStringLiteral("-p"), selected, QStringLiteral("status")}) == QLatin1String("Playing");
+    m_musicRefreshing = false;
     emit musicChanged();
 }
 
 void Backend::playerCommand(const QStringList &args) {
     if (m_player.isEmpty()) return;
     if (m_playerUsesDbus) {
-        QDBusInterface player(m_player,
-            QStringLiteral("/org/mpris/MediaPlayer2"),
-            QStringLiteral("org.mpris.MediaPlayer2.Player"),
-            QDBusConnection::sessionBus());
-        if (!player.isValid()) return;
-
         const QString command = args.value(0);
-        if (command == QLatin1String("play-pause")) {
-            player.asyncCall(QStringLiteral("PlayPause"));
-        } else if (command == QLatin1String("next")) {
-            player.asyncCall(QStringLiteral("Next"));
-        } else if (command == QLatin1String("previous")) {
-            player.asyncCall(QStringLiteral("Previous"));
-        } else if (command == QLatin1String("position") && !m_trackId.isEmpty()) {
-            player.asyncCall(QStringLiteral("SetPosition"),
-                QVariant::fromValue(QDBusObjectPath(m_trackId)),
-                qlonglong(qMax(0, args.value(1).toInt()) * 1000000));
-        }
+        QString method;
+        QVariantList arguments;
+        if (command == QLatin1String("play-pause")) method = QStringLiteral("PlayPause");
+        else if (command == QLatin1String("next")) method = QStringLiteral("Next");
+        else if (command == QLatin1String("previous")) method = QStringLiteral("Previous");
+        else if (command == QLatin1String("position") && !m_trackId.isEmpty()) {
+            method = QStringLiteral("SetPosition");
+            arguments << QVariant::fromValue(QDBusObjectPath(m_trackId))
+                << QVariant::fromValue(qlonglong(qMax(0, args.value(1).toInt()) * qint64(1000000)));
+        } else return;
+        auto message = QDBusMessage::createMethodCall(m_player, QStringLiteral("/org/mpris/MediaPlayer2"),
+            QStringLiteral("org.mpris.MediaPlayer2.Player"), method);
+        message.setArguments(arguments);
+        QDBusConnection::sessionBus().asyncCall(message);
         QTimer::singleShot(350, this, &Backend::refreshMusic);
         return;
     }
@@ -1868,43 +1952,43 @@ void Backend::runConnectionCommand(const QString &radio, const QString &action,
         // panel rebuilds device details.
         if (expectedPower >= 0)
             writeDockConfig(QStringLiteral("connection-refresh"), timestamp());
-        refreshSystem();
-        if (radio == QLatin1String("wifi")) refreshWifiNetworks();
-        if (expectedPower >= 0) {
-            const bool powered = radio == QLatin1String("wifi") ? m_wifiEnabled : m_bluetoothEnabled;
-            // The observed radio state is authoritative. In particular,
-            // rfkill can finish enabling Bluetooth while bluetoothctl briefly
-            // reports Busy as the controller reinitializes.
-            success = powered == (expectedPower == 1);
-        }
-        if (success && action == QLatin1String("scan")) {
+        refreshRadio(radio, [this, process, radio, action, expectedPower, success, output, timedOut]() mutable {
+            if (expectedPower >= 0) {
+                const bool powered = radio == QLatin1String("wifi") ? m_wifiEnabled : m_bluetoothEnabled;
+                // The observed radio state is authoritative. In particular,
+                // rfkill can finish enabling Bluetooth while bluetoothctl briefly
+                // reports Busy as the controller reinitializes.
+                success = powered == (expectedPower == 1);
+            }
+            if (success && action == QLatin1String("scan")) {
+                process->deleteLater();
+                finishConnectionScan(radio);
+                return;
+            }
+            QString message;
+            if (success) {
+                message = action == QLatin1String("scan")
+                    ? QStringLiteral("Scan complete · %1 %2").arg(radio == QLatin1String("wifi")
+                        ? m_wifiNetworks.size() : m_bluetoothDevices.size())
+                        .arg(radio == QLatin1String("wifi") ? QStringLiteral("networks") : QStringLiteral("devices"))
+                    : expectedPower == 1 ? QStringLiteral("Radio is on") : QStringLiteral("Radio is off");
+            } else {
+                const auto lines = output.trimmed().split('\n', Qt::SkipEmptyParts);
+                const QString detail = lines.isEmpty() ? QString() : lines.last().trimmed().left(120);
+                message = timedOut ? QStringLiteral("Action timed out. Try again.")
+                    : action == QLatin1String("scan") ? QStringLiteral("Could not scan")
+                    : expectedPower == 1 ? QStringLiteral("Could not turn on") : QStringLiteral("Could not turn off");
+                if (!timedOut && !detail.isEmpty()) message += QStringLiteral(": ") + detail;
+            }
+            setConnectionAction(radio, action, false, message, success);
             process->deleteLater();
-            finishConnectionScan(radio);
-            return;
-        }
-        QString message;
-        if (success) {
-            message = action == QLatin1String("scan")
-                ? QStringLiteral("Scan complete · %1 %2").arg(radio == QLatin1String("wifi")
-                    ? m_wifiNetworks.size() : m_bluetoothDevices.size())
-                    .arg(radio == QLatin1String("wifi") ? QStringLiteral("networks") : QStringLiteral("devices"))
-                : expectedPower == 1 ? QStringLiteral("Radio is on") : QStringLiteral("Radio is off");
-        } else {
-            const auto lines = output.trimmed().split('\n', Qt::SkipEmptyParts);
-            const QString detail = lines.isEmpty() ? QString() : lines.last().trimmed().left(120);
-            message = timedOut ? QStringLiteral("Action timed out. Try again.")
-                : action == QLatin1String("scan") ? QStringLiteral("Could not scan")
-                : expectedPower == 1 ? QStringLiteral("Could not turn on") : QStringLiteral("Could not turn off");
-            if (!timedOut && !detail.isEmpty()) message += QStringLiteral(": ") + detail;
-        }
-        setConnectionAction(radio, action, false, message, success);
-        process->deleteLater();
-        // Powering on only enables the adapter. Discover again once it is ready,
-        // so the panel does not keep the empty list from when the radio was off.
-        if (success && expectedPower == 1) {
-            if (radio == QLatin1String("wifi")) scanWifiNetworks();
-            else scanBluetoothDevices();
-        }
+            // Powering on only enables the adapter. Discover again once it is ready,
+            // so the panel does not keep the empty list from when the radio was off.
+            if (success && expectedPower == 1) {
+                if (radio == QLatin1String("wifi")) scanWifiNetworks();
+                else scanBluetoothDevices();
+            }
+        });
     };
     connect(process, &QProcess::finished, this, [finish](int code, QProcess::ExitStatus status) {
         finish(code == 0 && status == QProcess::NormalExit);
@@ -1912,8 +1996,17 @@ void Backend::runConnectionCommand(const QString &radio, const QString &action,
     connect(process, &QProcess::errorOccurred, this, [finish](QProcess::ProcessError error) {
         if (error == QProcess::FailedToStart) finish(false);
     });
-    process->start(program, arguments);
-    timeout->start(20000);
+    const auto start = [process, program, arguments, timeout]() {
+        timeout->start(20000);
+        process->start(program, arguments);
+    };
+    if (radio == QLatin1String("bluetooth") && expectedPower == 1
+        && !QStandardPaths::findExecutable(QStringLiteral("rfkill")).isEmpty()) {
+        query(QStringLiteral("rfkill"), {QStringLiteral("unblock"), QStringLiteral("bluetooth")},
+            [start](QueryResult) { start(); });
+    } else {
+        start();
+    }
 }
 
 void Backend::finishConnectionScan(const QString &radio, int remainingChecks) {
@@ -1926,10 +2019,10 @@ void Backend::finishConnectionScan(const QString &radio, int remainingChecks) {
     // Discovery can finish before the daemon publishes its first list after
     // powering on. Keep progress visible and re-read the cache for up to 5s.
     if (powered && count == 0 && remainingChecks > 0) {
-        QTimer::singleShot(500, this, [this, radio, remainingChecks, wifi]() {
-            if (wifi) refreshWifiNetworks();
-            else refreshBluetoothDevices();
-            finishConnectionScan(radio, remainingChecks - 1);
+        QTimer::singleShot(500, this, [this, radio, remainingChecks]() {
+            refreshRadio(radio, [this, radio, remainingChecks]() {
+                finishConnectionScan(radio, remainingChecks - 1);
+            });
         });
         return;
     }
@@ -1973,85 +2066,85 @@ void Backend::setWifiEnabled(bool enabled) {
          enabled ? QStringLiteral("on") : QStringLiteral("off")}, enabled ? 1 : 0);
 }
 
-void Backend::refreshWifiNetworks() {
-    QVariantList networks;
-    if (QStandardPaths::findExecutable(QStringLiteral("nmcli")).isEmpty()) {
-        if (m_wifiNetworks != networks) {
-            m_wifiNetworks = networks;
-            emit wifiNetworksChanged();
-        }
+void Backend::refreshWifiNetworks(Completion completed) {
+    if (m_wifiNetworksRefreshing) {
+        if (completed) QTimer::singleShot(25, this, [this, completed]() { refreshWifiNetworks(completed); });
         return;
     }
-
-    QProcess nmcli;
-    nmcli.start(QStringLiteral("nmcli"),
-        {QStringLiteral("-t"), QStringLiteral("-f"),
-         QStringLiteral("ACTIVE,SSID,SIGNAL,SECURITY"),
-         QStringLiteral("dev"), QStringLiteral("wifi"), QStringLiteral("list"),
-         QStringLiteral("--rescan"), QStringLiteral("no")});
-    if (!nmcli.waitForFinished(900) || nmcli.exitCode() != 0) return;
-
-    QSet<QString> savedSsids;
-    QProcess profiles;
-    profiles.start(QStringLiteral("nmcli"),
-        {QStringLiteral("-t"), QStringLiteral("--escape"), QStringLiteral("no"),
-         QStringLiteral("-f"), QStringLiteral("NAME,TYPE"),
-         QStringLiteral("connection"), QStringLiteral("show")});
-    if (profiles.waitForFinished(900) && profiles.exitCode() == 0) {
-        for (const QByteArray &line : profiles.readAllStandardOutput().split('\n')) {
-            const int separator = line.lastIndexOf(':');
-            if (separator < 0) continue;
-            const QByteArray type = line.mid(separator + 1).trimmed();
-            if (type == "wifi" || type == "802-11-wireless")
-                savedSsids.insert(QString::fromUtf8(line.left(separator)));
+    m_wifiNetworksRefreshing = true;
+    query(QStringLiteral("nmcli"), {QStringLiteral("-t"), QStringLiteral("-f"),
+        QStringLiteral("ACTIVE,SSID,SIGNAL,SECURITY"), QStringLiteral("dev"), QStringLiteral("wifi"),
+        QStringLiteral("list"), QStringLiteral("--rescan"), QStringLiteral("no")},
+        [this, completed](QueryResult networksResult) {
+        if (!networksResult.success) {
+            m_wifiNetworksRefreshing = false;
+            if (completed) completed();
+            return;
         }
-    }
+        query(QStringLiteral("nmcli"), {QStringLiteral("-t"), QStringLiteral("--escape"), QStringLiteral("no"),
+            QStringLiteral("-f"), QStringLiteral("NAME,TYPE"), QStringLiteral("connection"), QStringLiteral("show")},
+            [this, completed, networksResult](QueryResult profiles) {
+            QVariantList networks;
+            QSet<QString> savedSsids;
+            if (profiles.success) {
+                for (const QByteArray &line : profiles.output.split('\n')) {
+                    const int separator = line.lastIndexOf(':');
+                    if (separator < 0) continue;
+                    const QByteArray type = line.mid(separator + 1).trimmed();
+                    if (type == "wifi" || type == "802-11-wireless")
+                        savedSsids.insert(QString::fromUtf8(line.left(separator)));
+                }
+            }
 
-    QMap<QString, QVariantMap> bySsid;
-    for (const QByteArray &row : nmcli.readAllStandardOutput().split('\n')) {
-        if (row.trimmed().isEmpty()) continue;
+            QMap<QString, QVariantMap> bySsid;
+            for (const QByteArray &row : networksResult.output.split('\n')) {
+                if (row.trimmed().isEmpty()) continue;
 
-        const QList<QByteArray> fields = splitNetworkRow(row);
-        if (fields.size() < 4) continue;
+                const QList<QByteArray> fields = splitNetworkRow(row);
+                if (fields.size() < 4) continue;
 
-        const QString ssid = QString::fromUtf8(fields.at(1)).trimmed();
-        if (ssid.isEmpty()) continue;
+                const QString ssid = QString::fromUtf8(fields.at(1)).trimmed();
+                if (ssid.isEmpty()) continue;
 
-        bool validSignal = false;
-        const int signal = QString::fromUtf8(fields.at(2)).trimmed().toInt(&validSignal);
-        const bool active = fields.at(0).trimmed() == "yes";
-        const QString security = QString::fromUtf8(fields.at(3)).trimmed();
-        const bool secure = !security.isEmpty() && security != QLatin1String("--");
+                bool validSignal = false;
+                const int signal = QString::fromUtf8(fields.at(2)).trimmed().toInt(&validSignal);
+                const bool active = fields.at(0).trimmed() == "yes";
+                const QString security = QString::fromUtf8(fields.at(3)).trimmed();
+                const bool secure = !security.isEmpty() && security != QLatin1String("--");
 
-        QVariantMap entry = bySsid.value(ssid);
-        const int existingSignal = entry.value(QStringLiteral("signal")).toInt();
-        if (entry.isEmpty() || active || (validSignal && signal > existingSignal)) {
-            entry.insert(QStringLiteral("ssid"), ssid);
-            entry.insert(QStringLiteral("signal"), validSignal ? qBound(0, signal, 100) : 0);
-            entry.insert(QStringLiteral("secure"), secure);
-            entry.insert(QStringLiteral("saved"), savedSsids.contains(ssid));
-            entry.insert(QStringLiteral("security"), secure ? security : QStringLiteral("Open"));
-            entry.insert(QStringLiteral("active"), active);
-            bySsid.insert(ssid, entry);
-        }
-    }
+                QVariantMap entry = bySsid.value(ssid);
+                const int existingSignal = entry.value(QStringLiteral("signal")).toInt();
+                if (entry.isEmpty() || active || (validSignal && signal > existingSignal)) {
+                    entry.insert(QStringLiteral("ssid"), ssid);
+                    entry.insert(QStringLiteral("signal"), validSignal ? qBound(0, signal, 100) : 0);
+                    entry.insert(QStringLiteral("secure"), secure);
+                    entry.insert(QStringLiteral("saved"), savedSsids.contains(ssid));
+                    entry.insert(QStringLiteral("security"), secure ? security : QStringLiteral("Open"));
+                    entry.insert(QStringLiteral("active"), active);
+                    bySsid.insert(ssid, entry);
+                }
+            }
 
-    QList<QVariantMap> sorted;
-    for (const QVariantMap &entry : bySsid)
-        sorted.append(entry);
-    std::sort(sorted.begin(), sorted.end(), [](const QVariantMap &a, const QVariantMap &b) {
-        if (a.value(QStringLiteral("active")).toBool() != b.value(QStringLiteral("active")).toBool())
-            return a.value(QStringLiteral("active")).toBool();
-        return a.value(QStringLiteral("signal")).toInt() > b.value(QStringLiteral("signal")).toInt();
-    });
+            QList<QVariantMap> sorted;
+            for (const QVariantMap &entry : bySsid)
+                sorted.append(entry);
+            std::sort(sorted.begin(), sorted.end(), [](const QVariantMap &a, const QVariantMap &b) {
+                if (a.value(QStringLiteral("active")).toBool() != b.value(QStringLiteral("active")).toBool())
+                    return a.value(QStringLiteral("active")).toBool();
+                return a.value(QStringLiteral("signal")).toInt() > b.value(QStringLiteral("signal")).toInt();
+            });
 
-    for (const QVariantMap &entry : sorted)
-        networks.append(entry);
+            for (const QVariantMap &entry : sorted)
+                networks.append(entry);
 
-    if (m_wifiNetworks != networks) {
-        m_wifiNetworks = networks;
-        emit wifiNetworksChanged();
-    }
+            if (m_wifiNetworks != networks) {
+                m_wifiNetworks = networks;
+                emit wifiNetworksChanged();
+            }
+            m_wifiNetworksRefreshing = false;
+            if (completed) completed();
+        }, 900);
+    }, 900);
 }
 
 void Backend::scanWifiNetworks() {
@@ -2079,9 +2172,9 @@ void Backend::connectWifiNetwork(const QString &ssid, bool secure, bool saved,
     connect(process, &QProcess::finished, this,
         [this, process, ssid, needsPasswordOnFailure](int exitCode, QProcess::ExitStatus status) {
         const bool success = status == QProcess::NormalExit && exitCode == 0;
-        refreshSystem();
-        refreshWifiNetworks();
-        emit wifiConnectionFinished(ssid, success, !success && needsPasswordOnFailure);
+        refreshRadio(QStringLiteral("wifi"), [this, ssid, success, needsPasswordOnFailure]() {
+            emit wifiConnectionFinished(ssid, success, !success && needsPasswordOnFailure);
+        });
         process->deleteLater();
     });
     connect(process, &QProcess::errorOccurred, this,
@@ -2102,9 +2195,9 @@ void Backend::disconnectWifiNetwork(const QString &ssid) {
     connect(process, &QProcess::finished, this,
         [this, process, ssid](int exitCode, QProcess::ExitStatus status) {
         const bool success = status == QProcess::NormalExit && exitCode == 0;
-        refreshSystem();
-        refreshWifiNetworks();
-        emit wifiDisconnectionFinished(ssid, success);
+        refreshRadio(QStringLiteral("wifi"), [this, ssid, success]() {
+            emit wifiDisconnectionFinished(ssid, success);
+        });
         process->deleteLater();
     });
     connect(process, &QProcess::errorOccurred, this,
@@ -2119,88 +2212,109 @@ void Backend::disconnectWifiNetwork(const QString &ssid) {
          QStringLiteral("id"), profileName});
 }
 
-void Backend::refreshBluetoothDevices() {
-    const bool available = !QStandardPaths::findExecutable(QStringLiteral("bluetoothctl")).isEmpty();
-    m_bluetoothAvailable = available;
-    m_bluetoothEnabled = false;
-    m_bluetoothConnected = false;
-    m_bluetoothDeviceName = QStringLiteral("Bluetooth off");
-    m_bluetoothStatusText = available ? QStringLiteral("Bluetooth off") : QStringLiteral("Bluetooth unavailable");
-
-    QVariantList devices;
-    if (!available) {
-        if (m_bluetoothDevices != devices) {
-            m_bluetoothDevices = devices;
-            emit bluetoothDevicesChanged();
-        }
+void Backend::refreshBluetoothDevices(Completion completed) {
+    if (m_bluetoothRefreshing) {
+        if (completed) QTimer::singleShot(25, this, [this, completed]() { refreshBluetoothDevices(completed); });
         return;
     }
-
-    const QString show = runBluetoothctl({QStringLiteral("show")});
-    m_bluetoothEnabled = bluetoothInfoValue(show, QStringLiteral("Powered")) == QLatin1String("yes");
-    if (!m_bluetoothEnabled) {
-        const QString powerState = bluetoothInfoValue(show, QStringLiteral("PowerState"));
-        m_bluetoothStatusText = powerState.isEmpty()
-            ? QStringLiteral("Radio disabled")
-            : powerState;
-    }
-
-    const QString output = runBluetoothctl({QStringLiteral("devices")});
-    QList<QVariantMap> parsedDevices;
-    for (const QString &line : output.split('\n')) {
-        const QString trimmed = line.trimmed();
-        if (!trimmed.startsWith(QStringLiteral("Device "))) continue;
-
-        const QString address = trimmed.section(' ', 1, 1);
-        const QString fallbackName = trimmed.section(' ', 2).trimmed();
-        if (address.isEmpty()) continue;
-
-        const QString info = runBluetoothctl({QStringLiteral("info"), address});
-        const QString name = bluetoothInfoValue(info, QStringLiteral("Name"));
-        const bool paired = bluetoothInfoValue(info, QStringLiteral("Paired")) == QLatin1String("yes");
-        const bool trusted = bluetoothInfoValue(info, QStringLiteral("Trusted")) == QLatin1String("yes");
-        const bool connected = bluetoothInfoValue(info, QStringLiteral("Connected")) == QLatin1String("yes");
-        const QString icon = bluetoothInfoValue(info, QStringLiteral("Icon"));
-
-        QVariantMap device;
-        device.insert(QStringLiteral("address"), address);
-        device.insert(QStringLiteral("name"), name.isEmpty() ? fallbackName : name);
-        device.insert(QStringLiteral("paired"), paired);
-        device.insert(QStringLiteral("trusted"), trusted);
-        device.insert(QStringLiteral("connected"), connected);
-        device.insert(QStringLiteral("icon"), icon);
-        parsedDevices.append(device);
-
-        if (connected) {
-            m_bluetoothConnected = true;
-            m_bluetoothDeviceName = device.value(QStringLiteral("name")).toString();
-            m_bluetoothStatusText = QStringLiteral("Connected");
+    m_bluetoothAvailable = !QStandardPaths::findExecutable(QStringLiteral("bluetoothctl")).isEmpty();
+    if (!m_bluetoothAvailable) {
+        m_bluetoothEnabled = false;
+        m_bluetoothConnected = false;
+        m_bluetoothDeviceName = QStringLiteral("Bluetooth off");
+        m_bluetoothStatusText = QStringLiteral("Bluetooth unavailable");
+        if (!m_bluetoothDevices.isEmpty()) {
+            m_bluetoothDevices.clear();
+            emit bluetoothDevicesChanged();
         }
+        emit systemChanged();
+        if (completed) completed();
+        return;
     }
-
-    if (m_bluetoothEnabled && !m_bluetoothConnected) {
-        m_bluetoothDeviceName = QStringLiteral("Bluetooth on");
-        m_bluetoothStatusText = parsedDevices.isEmpty()
-            ? QStringLiteral("No devices")
-            : QStringLiteral("%1 device%2").arg(parsedDevices.size()).arg(parsedDevices.size() == 1 ? QString() : QStringLiteral("s"));
-    }
-
-    std::sort(parsedDevices.begin(), parsedDevices.end(), [](const QVariantMap &a, const QVariantMap &b) {
-        if (a.value(QStringLiteral("connected")).toBool() != b.value(QStringLiteral("connected")).toBool())
-            return a.value(QStringLiteral("connected")).toBool();
-        if (a.value(QStringLiteral("paired")).toBool() != b.value(QStringLiteral("paired")).toBool())
-            return a.value(QStringLiteral("paired")).toBool();
-        return a.value(QStringLiteral("name")).toString().localeAwareCompare(
-            b.value(QStringLiteral("name")).toString()) < 0;
-    });
-
-    for (const QVariantMap &device : parsedDevices)
-        devices.append(device);
-
-    if (m_bluetoothDevices != devices) {
-        m_bluetoothDevices = devices;
-        emit bluetoothDevicesChanged();
-    }
+    m_bluetoothRefreshing = true;
+    const auto finish = [this, completed]() {
+        m_bluetoothRefreshing = false;
+        emit systemChanged();
+        if (completed) completed();
+    };
+    query(QStringLiteral("bluetoothctl"), {QStringLiteral("show")}, [this, finish](QueryResult show) {
+        if (!show.success) { finish(); return; }
+        query(QStringLiteral("bluetoothctl"), {QStringLiteral("devices")},
+            [this, finish, show](QueryResult list) {
+            if (!list.success) { finish(); return; }
+            auto devices = std::make_shared<QList<QVariantMap>>();
+            QStringList rows;
+            for (const QByteArray &line : list.output.split('\n')) {
+                const QString row = QString::fromUtf8(line).trimmed();
+                if (row.startsWith(QLatin1String("Device ")) && !row.section(' ', 1, 1).isEmpty())
+                    rows.append(row);
+            }
+            const auto publish = [this, finish, show, devices]() {
+                const QString info = QString::fromUtf8(show.output);
+                m_bluetoothEnabled = bluetoothInfoValue(info, QStringLiteral("Powered")) == QLatin1String("yes");
+                m_bluetoothConnected = false;
+                m_bluetoothDeviceName = m_bluetoothEnabled ? QStringLiteral("Bluetooth on")
+                    : QStringLiteral("Bluetooth off");
+                m_bluetoothStatusText = m_bluetoothEnabled ? QStringLiteral("Disconnected")
+                    : QStringLiteral("Radio disabled");
+                if (!m_bluetoothEnabled) {
+                    const QString state = bluetoothInfoValue(info, QStringLiteral("PowerState"));
+                    if (!state.isEmpty()) m_bluetoothStatusText = state;
+                }
+                std::sort(devices->begin(), devices->end(), [](const QVariantMap &a, const QVariantMap &b) {
+                    if (a.value(QStringLiteral("connected")).toBool() != b.value(QStringLiteral("connected")).toBool())
+                        return a.value(QStringLiteral("connected")).toBool();
+                    if (a.value(QStringLiteral("paired")).toBool() != b.value(QStringLiteral("paired")).toBool())
+                        return a.value(QStringLiteral("paired")).toBool();
+                    return a.value(QStringLiteral("name")).toString().localeAwareCompare(b.value(QStringLiteral("name")).toString()) < 0;
+                });
+                QVariantList result;
+                for (QVariantMap device : *devices) {
+                    if (!m_bluetoothEnabled) device.insert(QStringLiteral("connected"), false);
+                    if (device.value(QStringLiteral("connected")).toBool() && !m_bluetoothConnected) {
+                        m_bluetoothConnected = true;
+                        m_bluetoothDeviceName = device.value(QStringLiteral("name")).toString();
+                        m_bluetoothStatusText = QStringLiteral("Connected");
+                    }
+                    result.append(device);
+                }
+                if (m_bluetoothEnabled && !m_bluetoothConnected) {
+                    m_bluetoothStatusText = result.isEmpty() ? QStringLiteral("No devices")
+                        : QStringLiteral("%1 device%2").arg(result.size())
+                            .arg(result.size() == 1 ? QString() : QStringLiteral("s"));
+                }
+                if (m_bluetoothDevices != result) {
+                    m_bluetoothDevices = result;
+                    emit bluetoothDevicesChanged();
+                }
+                finish();
+            };
+            if (rows.isEmpty()) { publish(); return; }
+            auto pending = std::make_shared<int>(rows.size());
+            for (const QString &row : rows) {
+                const QString address = row.section(' ', 1, 1);
+                const QString fallbackName = row.section(' ', 2);
+                query(QStringLiteral("bluetoothctl"), {QStringLiteral("info"), address},
+                    [this, address, fallbackName, devices, pending, publish](QueryResult details) {
+                    if (details.success) {
+                        const QString info = QString::fromUtf8(details.output);
+                        const QString name = bluetoothInfoValue(info, QStringLiteral("Name"));
+                        devices->append(QVariantMap{{QStringLiteral("address"), address},
+                            {QStringLiteral("name"), name.isEmpty() ? fallbackName : name},
+                            {QStringLiteral("paired"), bluetoothInfoValue(info, QStringLiteral("Paired")) == QLatin1String("yes")},
+                            {QStringLiteral("trusted"), bluetoothInfoValue(info, QStringLiteral("Trusted")) == QLatin1String("yes")},
+                            {QStringLiteral("connected"), bluetoothInfoValue(info, QStringLiteral("Connected")) == QLatin1String("yes")},
+                            {QStringLiteral("icon"), bluetoothInfoValue(info, QStringLiteral("Icon"))}});
+                    } else {
+                        for (const QVariant &cached : m_bluetoothDevices)
+                            if (cached.toMap().value(QStringLiteral("address")).toString() == address)
+                                devices->append(cached.toMap());
+                    }
+                    if (--*pending == 0) publish();
+                }, 900);
+            }
+        }, 900);
+    }, 900);
 }
 
 void Backend::openBluetoothSettings() {
@@ -2215,7 +2329,6 @@ void Backend::openBluetoothSettings() {
 
 void Backend::setBluetoothEnabled(bool enabled) {
     if (enabled == m_bluetoothEnabled) return;
-    if (enabled) unblockBluetoothRadio();
     runConnectionCommand(QStringLiteral("bluetooth"),
         enabled ? QStringLiteral("power-on") : QStringLiteral("power-off"), QStringLiteral("bluetoothctl"),
         {QStringLiteral("power"), enabled ? QStringLiteral("on") : QStringLiteral("off")}, enabled ? 1 : 0);

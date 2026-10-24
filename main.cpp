@@ -46,9 +46,10 @@ int main(int argc, char *argv[]) {
     const QString panelName = parser.value(panelOption).trimmed();
     std::unique_ptr<Backend> backend;
     std::unique_ptr<SoundBackend> sound;
-    ScreenshotBackend screenshots;
+    std::unique_ptr<ScreenshotBackend> screenshots;
     QQmlApplicationEngine engine;
     if (panelName == QLatin1String("screenshots")) {
+        screenshots = std::make_unique<ScreenshotBackend>();
         app.setQuitOnLastWindowClosed(false);
         auto bus = QDBusConnection::sessionBus();
         if (!bus.registerService(QStringLiteral("org.zhyprbola.Screenshots"))) {
@@ -58,17 +59,20 @@ int main(int argc, char *argv[]) {
             if (!parser.isSet(QStringLiteral("resident"))) existing.call(QStringLiteral("Show"));
             return 0;
         }
-        bus.registerObject(QStringLiteral("/org/zhyprbola/Screenshots"), &screenshots,
+        bus.registerObject(QStringLiteral("/org/zhyprbola/Screenshots"), screenshots.get(),
             QDBusConnection::ExportScriptableSlots | QDBusConnection::ExportScriptableSignals);
-        if (parser.isSet(QStringLiteral("resident"))) screenshots.Hide();
-        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &screenshots);
+        if (parser.isSet(QStringLiteral("resident"))) screenshots->Hide();
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), screenshots.get());
     } else {
-        backend = std::make_unique<Backend>();
-        sound = std::make_unique<SoundBackend>();
+        if (panelName.isEmpty() || panelName == QLatin1String("settings"))
+            screenshots = std::make_unique<ScreenshotBackend>();
+        backend = std::make_unique<Backend>(nullptr, panelName);
+        if (panelName.isEmpty() || panelName == QLatin1String("sound"))
+            sound = std::make_unique<SoundBackend>();
         engine.rootContext()->setContextProperty(QStringLiteral("backend"), backend.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sound"), sound.get());
     }
-    engine.rootContext()->setContextProperty(QStringLiteral("screenshots"), &screenshots);
+    engine.rootContext()->setContextProperty(QStringLiteral("screenshots"), screenshots.get());
     engine.rootContext()->setContextProperty(QStringLiteral("edgeScreenWidth"),
         environmentInt("ZHYPRBOLA_EDGE_SCREEN_WIDTH", 0));
     engine.rootContext()->setContextProperty(QStringLiteral("edgeScreenHeight"),

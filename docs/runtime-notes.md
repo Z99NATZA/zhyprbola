@@ -20,6 +20,28 @@ and print the extension state with the command for inspecting Shell logs.
 ## Running Windows
 
 ```text
+Focused QML hosts use one Loader for the requested component. Other component
+trees are not constructed. The host becomes visible when that Loader is ready.
+Radio hosts pass standalone/opened as initial Loader.setSource properties,
+before anchors are evaluated. Changing standalone after creation can leave
+the card outside the window when its original overlay anchors are removed.
+Backend profiles start only the requested panel's services: system metrics,
+Wi-Fi, Bluetooth, weather, music, or spectrum. Calendar, Tasks, Settings, and
+Keys do not start those background services. Sound and screenshot backends
+are constructed only by hosts that use them; Settings also needs screenshot
+settings for its edge editor. The desktop host retains all services.
+
+Radio and playerctl reads use asynchronous, bounded-time QProcess queries.
+MPRIS fallback uses asynchronous ListNames and GetAll calls. Polling does not
+overlap a previous refresh; explicit post-action refreshes wait for a fresh
+snapshot before reporting power/scan/connect results. Failed reads retain the
+last usable data. Opening a radio panel still does not start discovery.
+
+Hiding or minimizing a focused host pauses its polling timers and cava;
+restoring resumes them and refreshes data. The loaded component remains alive
+so tasks, tabs, selection, and window state survive. Key capture follows the
+same visibility lifecycle. Screenshots keeps its separate resident lifecycle.
+
 The icon source is assets/zhyprbola-icon.svg, with a transparent exterior and
 solid green/white/mint shapes. assets/zhyprbola-icon.md documents PNG export.
 The Qt host embeds the 512 px PNG and uses app ID

@@ -8,6 +8,9 @@
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QSet>
+#include <QQueue>
+#include <functional>
 
 class Backend : public QObject {
     Q_OBJECT
@@ -75,7 +78,7 @@ class Backend : public QObject {
     Q_PROPERTY(bool keyCaptureGrantPending READ keyCaptureGrantPending NOTIFY keyCaptureGrantPendingChanged)
 
 public:
-    explicit Backend(QObject *parent = nullptr);
+    explicit Backend(QObject *parent = nullptr, const QString &panelName = QString());
     ~Backend() override;
 
     int cpuPercent() const { return m_cpuPercent; }
@@ -195,6 +198,7 @@ public:
     Q_INVOKABLE void startKeyCapture();
     Q_INVOKABLE void stopKeyCapture();
     Q_INVOKABLE void grantKeyCaptureAccess();
+    Q_INVOKABLE void setPanelActive(bool active);
 
 signals:
     void systemChanged();
@@ -223,6 +227,20 @@ signals:
     void globalKeyReleased(const QString &name);
 
 private:
+    using Completion = std::function<void()>;
+    struct QueryResult { bool success; QByteArray output; };
+    struct PendingQuery {
+        QString program;
+        QStringList arguments;
+        std::function<void(QueryResult)> completed;
+        int timeoutMs;
+    };
+    void query(const QString &program, const QStringList &arguments,
+        std::function<void(QueryResult)> completed, int timeoutMs = 1000);
+    void startQueries();
+    void refreshRadio(const QString &radio, Completion completed);
+    void refreshWifiStatus(Completion completed = {});
+    void startSpectrum();
     void setConnectionAction(const QString &radio, const QString &action, bool busy,
         const QString &message, bool success = true);
     void runConnectionCommand(const QString &radio, const QString &action,
@@ -232,8 +250,8 @@ private:
     void refreshSystem();
     void refreshWeather();
     void refreshMusic();
-    void refreshWifiNetworks();
-    void refreshBluetoothDevices();
+    void refreshWifiNetworks(Completion completed = {});
+    void refreshBluetoothDevices(Completion completed = {});
     void readSpectrum();
     void refreshTheme();
     void refreshKeyVisualizerSettings();
@@ -247,15 +265,33 @@ private:
     void readKeyCapture();
     void startEvdevKeyCapture();
     bool playerctlAvailable() const;
-    QString playerctl(const QStringList &args) const;
-    QStringList mprisPlayers() const;
-    QVariant mprisProperty(const QString &service, const QString &property) const;
+    void refreshMpris();
+    void refreshMprisPlayer(const QStringList &players, int index, const QString &fallback = QString(),
+        const QVariantMap &fallbackProperties = {});
+    void applyMpris(const QString &player, const QVariantMap &properties);
+    void refreshPlayerctl(const QStringList &players, int index = 0);
+    void refreshPlayerctlMetadata(const QString &player);
     void playerCommand(const QStringList &args);
     void loadTasks();
     bool saveTasks() const;
     int taskIndex(const QString &id) const;
 
     QNetworkAccessManager m_network;
+    QSet<QProcess *> m_queries;
+    QQueue<PendingQuery> m_queryQueue;
+    bool m_panelActive = false;
+    bool m_pollSystem = false;
+    bool m_pollWifi = false;
+    bool m_pollBluetooth = false;
+    bool m_pollWeather = false;
+    bool m_pollMusic = false;
+    bool m_pollSpectrum = false;
+    bool m_wifiStatusRefreshing = false;
+    bool m_wifiNetworksRefreshing = false;
+    bool m_bluetoothRefreshing = false;
+    bool m_musicRefreshing = false;
+    bool m_weatherRefreshing = false;
+    bool m_spectrumStopping = false;
     QTimer m_systemTimer;
     QTimer m_weatherTimer;
     QTimer m_musicTimer;
