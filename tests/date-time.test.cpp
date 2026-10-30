@@ -540,7 +540,7 @@ private slots:
         auto *settingsItem = qobject_cast<QQuickItem *>(settings.data());
         QVERIFY(settingsItem);
         QQuickWindow window;
-        window.resize(660, 510);
+        window.resize(660, qRound(settingsItem->height()));
         settingsItem->setParentItem(window.contentItem());
         window.show();
         QTRY_VERIFY(window.isExposed());
@@ -637,7 +637,7 @@ private slots:
         QTRY_COMPARE(settings->property("section").toString(), QStringLiteral("date-time"));
         const QImage image = window.grabWindow();
         QVERIFY(!image.isNull());
-        QCOMPARE(image.size(), QSize(660, 510));
+        QCOMPARE(image.size(), window.size());
         const QString screenshot = qEnvironmentVariable("ZHYPRBOLA_TEST_SCREENSHOT");
         if (!screenshot.isEmpty())
             QVERIFY(image.save(screenshot));
@@ -672,7 +672,11 @@ private slots:
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(595, 379));
         QCOMPARE(backend.dateTimeSettings().value(QStringLiteral("timeFormat")).toString(),
             QStringLiteral("12-dot"));
-        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(600, 422));
+        auto *showSeconds = findItem(settingsItem, QStringLiteral("date-time-show-seconds"));
+        QVERIFY(showSeconds);
+        const QPoint showSecondsCenter = showSeconds->mapToScene(
+            QPointF(showSeconds->width() / 2, showSeconds->height() / 2)).toPoint();
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, showSecondsCenter);
         QCOMPARE(backend.dateTimeSettings().value(QStringLiteral("showSeconds")).toBool(), true);
     }
 

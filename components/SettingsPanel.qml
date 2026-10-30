@@ -19,6 +19,7 @@ Item {
     }
     signal closeRequested()
     readonly property int contentRowHeight: 46
+    readonly property int sidebarRowHeight: 40
     readonly property int contentItemGap: 8
     readonly property int contentSectionGap: 16
     readonly property int contentX: 184
@@ -532,7 +533,7 @@ Item {
                 delegate: Rectangle {
                     required property var modelData
                     width: 134
-                    height: 40
+                    height: panel.sidebarRowHeight
                     radius: 10
                     color: panel.section === modelData.key
                         ? Theme.accent
@@ -620,7 +621,7 @@ Item {
             delegate: Rectangle {
                 required property var modelData
                 width: (themeGrid.width - themeGrid.spacing) / themeGrid.columns
-                height: panel.contentRowHeight
+                height: panel.sidebarRowHeight
                 radius: 11
                 color: backend.themeName === modelData.key
                     ? Theme.selected
@@ -798,7 +799,7 @@ Item {
                     objectName: edgeGroup.objectPrefix + modelData.key
                     width: (panel.contentWidth
                         - 8 * (edgeGroup.options.length - 1)) / edgeGroup.options.length
-                    height: 42
+                    height: panel.sidebarRowHeight
                     radius: 8
                     color: chosen ? Theme.selected
                         : (edgeOptionMouse.containsMouse
@@ -1037,7 +1038,7 @@ Item {
 
         Row {
             width: panel.contentWidth
-            height: panel.contentRowHeight
+            height: panel.sidebarRowHeight
             spacing: panel.dockPositionGap
 
             Repeater {
@@ -1047,7 +1048,7 @@ Item {
                     required property var modelData
                     objectName: "dock-position-" + modelData.key
                     width: panel.dockPositionWidth
-                    height: panel.contentRowHeight
+                    height: panel.sidebarRowHeight
                     radius: 11
                     color: backend.dockPosition === modelData.key
                         ? Theme.selected
@@ -1090,7 +1091,7 @@ Item {
         Rectangle {
             objectName: "open-dock-layout"
             width: panel.contentWidth
-            height: panel.contentRowHeight
+            height: panel.sidebarRowHeight
             radius: 11
             color: layoutLinkMouse.containsMouse ? Theme.controlHover : Theme.control
             Text {
@@ -1784,7 +1785,7 @@ Item {
 
         Rectangle {
             width: panel.contentWidth
-            height: panel.contentRowHeight
+            height: panel.sidebarRowHeight
             radius: 11
             color: Theme.control
 
@@ -1845,7 +1846,7 @@ Item {
                         id: spectrumSizeChoice
                         required property string modelData
                         width: (panel.contentWidth - 16) / 3
-                        height: 42
+                        height: panel.sidebarRowHeight
                         radius: 8
                         color: backend.edgeSpectrumSize === spectrumSizeChoice.modelData
                             ? Theme.selected : (spectrumSizeMouse.containsMouse
@@ -1895,7 +1896,7 @@ Item {
                 delegate: Rectangle {
                     required property var modelData
                     width: panel.contentWidth
-                    height: panel.contentRowHeight
+                    height: panel.sidebarRowHeight
                     radius: 11
                     color: backend.edgeSpectrumPosition === modelData.key
                         ? Theme.selected
@@ -1960,7 +1961,7 @@ Item {
                 delegate: Rectangle {
                     required property var modelData
                     width: (panel.contentWidth - 8 * (options.length - 1)) / options.length
-                    height: 42
+                    height: panel.sidebarRowHeight
                     radius: 8
                     color: backend.keyVisualizerSettings[settingKey] === modelData.key
                         ? Theme.selected : (optionMouse.containsMouse
@@ -2007,7 +2008,7 @@ Item {
         required property bool active
         signal toggled()
         width: panel.contentWidth
-        height: panel.contentRowHeight
+        height: panel.sidebarRowHeight
         radius: 11
         color: active ? Theme.selected : Theme.control
 
@@ -2052,7 +2053,7 @@ Item {
         required property string label
         required property string settingKey
         width: (panel.contentWidth - 8) / 2
-        height: 52
+        height: panel.sidebarRowHeight
         radius: 8
         color: Theme.control
 
@@ -2213,7 +2214,7 @@ Item {
             Rectangle {
                 objectName: "open-key-visualizer"
                 width: parent.width
-                height: 42
+                height: panel.sidebarRowHeight
                 radius: 8
                 color: openKeysMouse.containsMouse ? Qt.lighter(Theme.accent, 1.1) : Theme.accent
 
@@ -2257,7 +2258,7 @@ Item {
         required property var options
         signal chosen(string key)
         width: panel.contentWidth
-        height: 36
+        height: panel.sidebarRowHeight
         spacing: 8
 
         Text {
@@ -2485,8 +2486,8 @@ Item {
             }
 
             DateTimeToggle {
+                objectName: "date-time-show-seconds"
                 title: "Show seconds"
-                height: 40
                 active: backend.dateTimeSettings.showSeconds
                 onToggled: backend.setDateTimeSetting("showSeconds", !active)
             }
@@ -2501,7 +2502,6 @@ Item {
                     delegate: DateTimeToggle {
                         required property var modelData
                         width: (panel.contentWidth - 8) / 2
-                        height: 40
                         title: modelData.label
                         active: backend.dockVisibleComponents.includes(modelData.key)
                         onToggled: backend.moveDockComponent(modelData.key,
