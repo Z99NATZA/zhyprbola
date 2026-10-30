@@ -20,6 +20,7 @@ Item {
     signal closeRequested()
     readonly property int contentRowHeight: 46
     readonly property int sidebarRowHeight: 40
+    readonly property int controlRadius: 11
     readonly property int contentItemGap: 8
     readonly property int contentSectionGap: 16
     readonly property int contentX: 184
@@ -440,7 +441,7 @@ Item {
         property int lineWidth: 1
         property int dash: 6
         property int gap: 5
-        property int cornerRadius: 11
+        property int cornerRadius: panel.controlRadius
         opacity: 0.55
 
         Repeater {
@@ -508,7 +509,7 @@ Item {
         y: 12
         width: 150
         height: parent.height - 24
-        radius: 15
+        radius: panel.controlRadius
         color: Theme.control
 
         Text {
@@ -534,7 +535,7 @@ Item {
                     required property var modelData
                     width: 134
                     height: panel.sidebarRowHeight
-                    radius: 10
+                    radius: panel.controlRadius
                     color: panel.section === modelData.key
                         ? Theme.accent
                         : (navMouse.containsMouse ? Theme.controlHover : "transparent")
@@ -586,7 +587,7 @@ Item {
         y: 20
         width: 29
         height: 29
-        radius: 9
+        radius: panel.controlRadius
         color: closeMouse.containsMouse ? Theme.controlHover : Theme.control
 
         Text {
@@ -622,7 +623,7 @@ Item {
                 required property var modelData
                 width: (themeGrid.width - themeGrid.spacing) / themeGrid.columns
                 height: panel.sidebarRowHeight
-                radius: 11
+                radius: panel.controlRadius
                 color: backend.themeName === modelData.key
                     ? Theme.selected
                     : (themeMouse.containsMouse ? Theme.controlHover : Theme.control)
@@ -800,7 +801,7 @@ Item {
                     width: (panel.contentWidth
                         - 8 * (edgeGroup.options.length - 1)) / edgeGroup.options.length
                     height: panel.sidebarRowHeight
-                    radius: 8
+                    radius: panel.controlRadius
                     color: chosen ? Theme.selected
                         : (edgeOptionMouse.containsMouse
                             ? Theme.controlHover : Theme.control)
@@ -898,7 +899,7 @@ Item {
 
         width: panel.contentWidth
         height: 90
-        radius: 12
+        radius: panel.controlRadius
         color: dropHovered ? Theme.selected : Theme.control
         border.width: dropHovered ? 2 : 0
         border.color: Theme.accent
@@ -937,7 +938,7 @@ Item {
             y: 44
             width: edgeZone.cardWidth
             height: 34
-            radius: 7
+            radius: panel.controlRadius
             visible: panel.draggingEdgeHandle
                 && edgeZone.displayOrder.includes(panel.draggedEdgeHandle)
             color: Theme.selected
@@ -962,7 +963,7 @@ Item {
                 y: 44
                 width: edgeZone.cardWidth
                 height: 34
-                radius: 7
+                radius: panel.controlRadius
                 color: edgeCardMouse.containsMouse ? Theme.controlHover : Theme.cardSurface
                 border.width: 1
                 border.color: edgeCardMouse.containsMouse ? Theme.accent : "transparent"
@@ -1049,7 +1050,7 @@ Item {
                     objectName: "dock-position-" + modelData.key
                     width: panel.dockPositionWidth
                     height: panel.sidebarRowHeight
-                    radius: 11
+                    radius: panel.controlRadius
                     color: backend.dockPosition === modelData.key
                         ? Theme.selected
                         : (positionMouse.containsMouse ? Theme.controlHover : Theme.control)
@@ -1092,7 +1093,7 @@ Item {
             objectName: "open-dock-layout"
             width: panel.contentWidth
             height: panel.sidebarRowHeight
-            radius: 11
+            radius: panel.controlRadius
             color: layoutLinkMouse.containsMouse ? Theme.controlHover : Theme.control
             Text {
                 x: 14; anchors.verticalCenter: parent.verticalCenter
@@ -1206,7 +1207,7 @@ Item {
 
         width: panel.contentWidth
         height: Math.max(136, 55 + rowCount * 37)
-        radius: 12
+        radius: panel.controlRadius
         color: dropHovered ? Theme.selected : supportsOpacity
             ? Qt.alpha(Theme.control, Theme.componentOpacity) : Theme.control
         border.width: dropHovered ? 2 : 0
@@ -1242,7 +1243,7 @@ Item {
             Rectangle {
                 width: 34
                 height: 34
-                radius: 9
+                radius: panel.controlRadius
                 x: (supportZone.displayOrder.indexOf(panel.draggedOpacityComponent) % 9) * 37
                 y: Math.floor(supportZone.displayOrder.indexOf(
                     panel.draggedOpacityComponent) / 9) * 37
@@ -1275,7 +1276,7 @@ Item {
                     }
                     width: 34
                     height: 34
-                    radius: 9
+                    radius: panel.controlRadius
                     color: supportZone.supportsOpacity ? Theme.accent : Theme.mutedText
                     opacity: panel.draggingOpacityComponent
                         && panel.draggedOpacityComponent === componentKey ? 0 : 1
@@ -1338,7 +1339,7 @@ Item {
         objectName: "dock-zone-" + zoneKey
         width: panel.contentWidth
         height: 50 + rowCount * 40
-        radius: 12
+        radius: panel.controlRadius
         color: dropHovered ? Theme.selected : Theme.control
         border.width: dropHovered ? 2 : 0
         border.color: Theme.accent
@@ -1371,7 +1372,7 @@ Item {
             width: parent.width - 24
             height: zone.rowCount * 40
             Rectangle {
-                width: zone.tileWidth; height: 34; radius: 7
+                width: zone.tileWidth; height: 34; radius: panel.controlRadius
                 x: (zone.displayOrder.indexOf(panel.draggedComponent) % zone.columns) * (zone.tileWidth + 6)
                 y: Math.floor(zone.displayOrder.indexOf(panel.draggedComponent) / zone.columns) * 40
                 visible: panel.draggingComponent && zone.displayOrder.includes(panel.draggedComponent)
@@ -1389,7 +1390,7 @@ Item {
                     objectName: "dock-component-" + zone.zoneKey + "-" + componentKey
                     x: (previewIndex % zone.columns) * (zone.tileWidth + 6)
                     y: Math.floor(previewIndex / zone.columns) * 40
-                    width: zone.tileWidth; height: 34; radius: 7
+                    width: zone.tileWidth; height: 34; radius: panel.controlRadius
                     color: dragArea.containsMouse ? Theme.controlHover : Theme.cardSurface
                     border.width: 1
                     border.color: dragArea.containsMouse ? Theme.accent : "transparent"
@@ -1443,7 +1444,7 @@ Item {
 
         width: panel.contentWidth
         height: Math.max(136, 55 + rowCount * 37)
-        radius: 12
+        radius: panel.controlRadius
         color: Theme.control
 
         Text {
@@ -1486,7 +1487,7 @@ Item {
                     y: Math.floor(index / 9) * 37
                     width: 34
                     height: 34
-                    radius: 9
+                    radius: panel.controlRadius
                     color: launcherMouse.containsMouse ? Theme.accent : Theme.mutedText
 
                     Image {
@@ -1633,7 +1634,7 @@ Item {
             y: 76
             width: panel.contentWidth
             height: moveDockChoices.height + 28
-            radius: 12
+            radius: panel.controlRadius
             color: Theme.cardSurface
             border.width: 1
             border.color: Theme.track
@@ -1662,7 +1663,7 @@ Item {
                         objectName: "move-dock-item-" + modelData
                         width: moveDockChoices.width
                         height: 40
-                        radius: 8
+                        radius: panel.controlRadius
                         color: current ? Theme.selected
                             : moveChoiceMouse.containsMouse ? Theme.controlHover : Theme.control
                         Text {
@@ -1698,7 +1699,7 @@ Item {
         z: 100
         width: (panel.contentWidth - 36) / 3
         height: 34
-        radius: 9
+        radius: panel.controlRadius
         visible: panel.draggingComponent
         color: Theme.accent
 
@@ -1730,7 +1731,7 @@ Item {
         z: 100
         width: (panel.contentWidth - 30) / 2
         height: 34
-        radius: 9
+        radius: panel.controlRadius
         visible: panel.draggingEdgeHandle
         color: Theme.accent
 
@@ -1761,7 +1762,7 @@ Item {
         z: 100
         width: 34
         height: 34
-        radius: 9
+        radius: panel.controlRadius
         visible: panel.draggingOpacityComponent
         color: Theme.accent
 
@@ -1786,7 +1787,7 @@ Item {
         Rectangle {
             width: panel.contentWidth
             height: panel.sidebarRowHeight
-            radius: 11
+            radius: panel.controlRadius
             color: Theme.control
 
             Text {
@@ -1847,7 +1848,7 @@ Item {
                         required property string modelData
                         width: (panel.contentWidth - 16) / 3
                         height: panel.sidebarRowHeight
-                        radius: 8
+                        radius: panel.controlRadius
                         color: backend.edgeSpectrumSize === spectrumSizeChoice.modelData
                             ? Theme.selected : (spectrumSizeMouse.containsMouse
                                 ? Theme.controlHover : Theme.control)
@@ -1897,7 +1898,7 @@ Item {
                     required property var modelData
                     width: panel.contentWidth
                     height: panel.sidebarRowHeight
-                    radius: 11
+                    radius: panel.controlRadius
                     color: backend.edgeSpectrumPosition === modelData.key
                         ? Theme.selected
                         : (edgePositionMouse.containsMouse ? Theme.controlHover : Theme.control)
@@ -1962,7 +1963,7 @@ Item {
                     required property var modelData
                     width: (panel.contentWidth - 8 * (options.length - 1)) / options.length
                     height: panel.sidebarRowHeight
-                    radius: 8
+                    radius: panel.controlRadius
                     color: backend.keyVisualizerSettings[settingKey] === modelData.key
                         ? Theme.selected : (optionMouse.containsMouse
                             ? Theme.controlHover : Theme.control)
@@ -2009,7 +2010,7 @@ Item {
         signal toggled()
         width: panel.contentWidth
         height: panel.sidebarRowHeight
-        radius: 11
+        radius: panel.controlRadius
         color: active ? Theme.selected : Theme.control
 
         Text {
@@ -2054,7 +2055,7 @@ Item {
         required property string settingKey
         width: (panel.contentWidth - 8) / 2
         height: panel.sidebarRowHeight
-        radius: 8
+        radius: panel.controlRadius
         color: Theme.control
 
         Text {
@@ -2079,7 +2080,7 @@ Item {
                     required property int modelData
                     width: 26
                     height: 26
-                    radius: 6
+                    radius: panel.controlRadius
                     color: stepMouse.containsMouse ? Theme.controlHover : Theme.selected
 
                     Text {
@@ -2215,7 +2216,7 @@ Item {
                 objectName: "open-key-visualizer"
                 width: parent.width
                 height: panel.sidebarRowHeight
-                radius: 8
+                radius: panel.controlRadius
                 color: openKeysMouse.containsMouse ? Qt.lighter(Theme.accent, 1.1) : Theme.accent
 
                 Row {
@@ -2254,6 +2255,7 @@ Item {
     component DateTimeChoice: Row {
         id: choiceRow
         required property string title
+        property bool showTitle: true
         required property string selectedKey
         required property var options
         signal chosen(string key)
@@ -2262,6 +2264,7 @@ Item {
         spacing: 8
 
         Text {
+            visible: choiceRow.showTitle
             width: 76
             height: parent.height
             text: title
@@ -2272,7 +2275,8 @@ Item {
         }
 
         Row {
-            width: choiceRow.width - 84
+            id: choiceOptions
+            width: choiceRow.width - (choiceRow.showTitle ? 84 : 0)
             height: parent.height
             spacing: 6
 
@@ -2281,10 +2285,10 @@ Item {
 
                 delegate: Rectangle {
                     required property var modelData
-                    width: (choiceRow.width - 84 - 6 * (choiceRow.options.length - 1))
+                    width: (choiceOptions.width - choiceOptions.spacing * (choiceRow.options.length - 1))
                         / choiceRow.options.length
                     height: choiceRow.height
-                    radius: 8
+                    radius: panel.controlRadius
                     color: choiceRow.selectedKey === modelData.key
                         ? Theme.selected : (choiceMouse.containsMouse
                             ? Theme.controlHover : Theme.control)
@@ -2373,6 +2377,7 @@ Item {
 
             DateTimeChoice {
                 title: "Language"
+                showTitle: false
                 selectedKey: backend.dateTimeSettings.dateLocale
                     === backend.dateTimeSettings.timeLocale
                     ? backend.dateTimeSettings.dateLocale : ""
@@ -2411,7 +2416,7 @@ Item {
                         required property string modelData
                         width: (panel.contentWidth - 4) / 2
                         height: 40
-                        radius: 8
+                        radius: panel.controlRadius
                         color: backend.dateTimeSettings.dateFormat === modelData
                             ? Theme.selected : (dateFormatMouse.containsMouse
                                 ? Theme.controlHover : Theme.control)
@@ -2517,8 +2522,8 @@ Item {
         x: panel.contentX
         y: 76
         width: panel.contentWidth
-        height: panel.contentRowHeight
-        radius: 11
+        height: panel.sidebarRowHeight
+        radius: panel.controlRadius
         color: Theme.control
         visible: panel.section === "wallpaper"
 
