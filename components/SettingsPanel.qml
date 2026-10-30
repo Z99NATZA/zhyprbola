@@ -1110,7 +1110,7 @@ Item {
                 onClicked: panel.section = "components"
             }
         }
-        DateTimeToggle {
+        SettingsToggle {
             objectName: "dock-ungroup-windows"
             title: "Ungroup windows"
             active: backend.dockUngroupWindows
@@ -1784,45 +1784,11 @@ Item {
         spacing: panel.contentSectionGap
         visible: panel.section === "spectrum"
 
-        Rectangle {
-            width: panel.contentWidth
-            height: panel.sidebarRowHeight
-            radius: panel.controlRadius
-            color: Theme.control
-
-            Text {
-                x: 16
-                anchors.verticalCenter: parent.verticalCenter
-                text: "Show edge spectrum"
-                color: Theme.text
-                font.family: Qt.application.font.family
-                font.pixelSize: 14
-            }
-
-            Rectangle {
-                anchors.right: parent.right
-                anchors.rightMargin: 15
-                anchors.verticalCenter: parent.verticalCenter
-                width: 44
-                height: 26
-                radius: 13
-                color: backend.edgeSpectrumEnabled ? Theme.accent : Theme.track
-
-                Rectangle {
-                    x: backend.edgeSpectrumEnabled ? 21 : 3
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 20
-                    height: 20
-                    radius: 10
-                    color: "#ffffff"
-                }
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: backend.setEdgeSpectrumEnabled(!backend.edgeSpectrumEnabled)
-            }
+        SettingsToggle {
+            objectName: "spectrum-enabled"
+            title: "Show edge spectrum"
+            active: backend.edgeSpectrumEnabled
+            onToggled: backend.setEdgeSpectrumEnabled(!active)
         }
 
         Column {
@@ -2003,37 +1969,36 @@ Item {
         }
     }
 
-    component DateTimeToggle: Rectangle {
-        id: dateTimeToggle
+    component SettingsToggle: Rectangle {
+        id: toggleRow
         required property string title
         required property bool active
         signal toggled()
         width: panel.contentWidth
         height: panel.sidebarRowHeight
         radius: panel.controlRadius
-        color: active ? Theme.selected : Theme.control
+        color: Theme.control
 
         Text {
             x: 16
             anchors.verticalCenter: parent.verticalCenter
-            text: dateTimeToggle.title
+            text: toggleRow.title
             color: Theme.text
             font.family: Qt.application.font.family
             font.pixelSize: 14
-            font.weight: dateTimeToggle.active ? Font.DemiBold : Font.Normal
         }
 
         Rectangle {
             anchors.right: parent.right
-            anchors.rightMargin: 14
+            anchors.rightMargin: 15
             anchors.verticalCenter: parent.verticalCenter
             width: 44
             height: 26
             radius: 13
-            color: dateTimeToggle.active ? Theme.accent : Theme.track
+            color: toggleRow.active ? Theme.accent : Theme.track
 
             Rectangle {
-                x: dateTimeToggle.active ? 21 : 3
+                x: toggleRow.active ? 21 : 3
                 anchors.verticalCenter: parent.verticalCenter
                 width: 20
                 height: 20
@@ -2045,7 +2010,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
-            onClicked: dateTimeToggle.toggled()
+            onClicked: toggleRow.toggled()
         }
     }
 
@@ -2490,7 +2455,7 @@ Item {
                 onChosen: key => backend.setDateTimeSetting("timeFormat", key)
             }
 
-            DateTimeToggle {
+            SettingsToggle {
                 objectName: "date-time-show-seconds"
                 title: "Show seconds"
                 active: backend.dateTimeSettings.showSeconds
@@ -2504,7 +2469,7 @@ Item {
                     model: [{key: "date-display", label: "Date on dock"},
                         {key: "time-display", label: "Time on dock"}]
 
-                    delegate: DateTimeToggle {
+                    delegate: SettingsToggle {
                         required property var modelData
                         width: (panel.contentWidth - 8) / 2
                         title: modelData.label
@@ -2518,47 +2483,13 @@ Item {
         }
     }
 
-    Rectangle {
+    SettingsToggle {
+        objectName: "wallpaper-toggle"
         x: panel.contentX
         y: 76
-        width: panel.contentWidth
-        height: panel.sidebarRowHeight
-        radius: panel.controlRadius
-        color: Theme.control
         visible: panel.section === "wallpaper"
-
-        Text {
-            x: 16
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Use theme wallpaper"
-            color: Theme.text
-            font.family: Qt.application.font.family
-            font.pixelSize: 14
-        }
-
-        Rectangle {
-            anchors.right: parent.right
-            anchors.rightMargin: 15
-            anchors.verticalCenter: parent.verticalCenter
-            width: 44
-            height: 26
-            radius: 13
-            color: backend.useWallpaper ? Theme.accent : Theme.track
-
-            Rectangle {
-                x: backend.useWallpaper ? 21 : 3
-                anchors.verticalCenter: parent.verticalCenter
-                width: 20
-                height: 20
-                radius: 10
-                color: "#ffffff"
-            }
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: backend.setUseWallpaper(!backend.useWallpaper)
-        }
+        title: "Use theme wallpaper"
+        active: backend.useWallpaper
+        onToggled: backend.setUseWallpaper(!active)
     }
 }
