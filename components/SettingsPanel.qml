@@ -21,6 +21,12 @@ Item {
     readonly property int contentRowHeight: 46
     readonly property int sidebarRowHeight: 40
     readonly property int controlRadius: 11
+    readonly property int controlFontSize: 14
+    readonly property int controlFontWeight: Font.Normal
+    readonly property int detailFontSize: 12
+    readonly property int titleFontSize: 20
+    readonly property int headingFontSize: 16
+    readonly property int headingFontWeight: Font.DemiBold
     readonly property int contentItemGap: 8
     readonly property int contentSectionGap: 16
     readonly property int contentX: 184
@@ -518,8 +524,8 @@ Item {
             text: "Settings"
             color: Theme.text
             font.family: Qt.application.font.family
-            font.pixelSize: 19
-            font.weight: Font.DemiBold
+            font.pixelSize: panel.titleFontSize
+            font.weight: panel.headingFontWeight
         }
 
         Column {
@@ -548,9 +554,8 @@ Item {
                         color: panel.section === modelData.key
                             ? Theme.accentText : Theme.text
                         font.family: Qt.application.font.family
-                        font.pixelSize: 14
-                        font.weight: panel.section === modelData.key
-                            ? Font.DemiBold : Font.Normal
+                        font.pixelSize: panel.controlFontSize
+                        font.weight: panel.controlFontWeight
                     }
 
                     MouseArea {
@@ -578,8 +583,8 @@ Item {
             : (panel.section === "date-time" ? "Date & Time" : "Wallpaper")))))
         color: Theme.text
         font.family: Qt.application.font.family
-        font.pixelSize: 20
-        font.weight: Font.DemiBold
+        font.pixelSize: panel.titleFontSize
+        font.weight: panel.headingFontWeight
     }
 
     Rectangle {
@@ -595,7 +600,8 @@ Item {
             text: "×"
             color: Theme.text
             font.family: Qt.application.font.family
-            font.pixelSize: 20
+            font.pixelSize: panel.titleFontSize
+            font.weight: panel.controlFontWeight
         }
 
         MouseArea {
@@ -645,9 +651,8 @@ Item {
                     text: modelData.label
                     color: Theme.text
                     font.family: Qt.application.font.family
-                    font.pixelSize: 14
-                    font.weight: backend.themeName === modelData.key
-                        ? Font.DemiBold : Font.Normal
+                    font.pixelSize: panel.controlFontSize
+                    font.weight: panel.controlFontWeight
                 }
 
                 Text {
@@ -658,7 +663,7 @@ Item {
                     text: "✓"
                     color: Theme.accent
                     font.family: Qt.application.font.family
-                    font.pixelSize: 16
+                    font.pixelSize: panel.controlFontSize
                     font.weight: Font.Bold
                 }
 
@@ -755,7 +760,8 @@ Item {
                     text: "Position and order"
                     color: Theme.mutedText
                     font.family: Qt.application.font.family
-                    font.pixelSize: 12
+                    font.pixelSize: panel.controlFontSize
+                    font.weight: panel.controlFontWeight
                 }
 
                 EdgeHandleLayoutEditor {
@@ -782,7 +788,8 @@ Item {
             text: edgeGroup.title
             color: Theme.mutedText
             font.family: Qt.application.font.family
-            font.pixelSize: 12
+            font.pixelSize: panel.controlFontSize
+            font.weight: panel.controlFontWeight
         }
 
         Row {
@@ -811,9 +818,8 @@ Item {
                         text: edgeOption.modelData.label
                         color: Theme.text
                         font.family: Qt.application.font.family
-                        font.pixelSize: 14
-                        font.weight: edgeOption.chosen
-                            ? Font.DemiBold : Font.Normal
+                        font.pixelSize: panel.controlFontSize
+                        font.weight: panel.controlFontWeight
                     }
 
                     Text {
@@ -824,7 +830,7 @@ Item {
                         text: "✓"
                         color: Theme.accent
                         font.family: Qt.application.font.family
-                        font.pixelSize: 15
+                        font.pixelSize: panel.controlFontSize
                         font.weight: Font.Bold
                     }
 
@@ -910,8 +916,8 @@ Item {
             text: edgeZone.label
             color: Theme.text
             font.family: Qt.application.font.family
-            font.pixelSize: 13
-            font.weight: Font.DemiBold
+            font.pixelSize: panel.headingFontSize
+            font.weight: panel.headingFontWeight
         }
 
         Text {
@@ -921,7 +927,8 @@ Item {
             text: edgeZone.items.length
             color: Theme.mutedText
             font.family: Qt.application.font.family
-            font.pixelSize: 12
+            font.pixelSize: panel.detailFontSize
+            font.weight: panel.controlFontWeight
         }
 
         Text {
@@ -929,7 +936,9 @@ Item {
             visible: edgeZone.displayOrder.length === 0
             text: "Drop items here"
             color: Theme.mutedText
-            font.pixelSize: 11
+            font.family: Qt.application.font.family
+            font.pixelSize: panel.detailFontSize
+            font.weight: panel.controlFontWeight
         }
 
         Rectangle {
@@ -993,7 +1002,8 @@ Item {
                     text: panel.edgeHandleLabel(edgeHandleCard.handleKey)
                     color: Theme.text
                     font.family: Qt.application.font.family
-                    font.pixelSize: 11
+                    font.pixelSize: panel.controlFontSize
+                    font.weight: panel.controlFontWeight
                     elide: Text.ElideRight
                 }
 
@@ -1056,14 +1066,12 @@ Item {
                         : (positionMouse.containsMouse ? Theme.controlHover : Theme.control)
 
                     Text {
-                        x: 11
-                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.centerIn: parent
                         text: modelData.label
                         color: Theme.text
                         font.family: Qt.application.font.family
-                        font.pixelSize: 13
-                        font.weight: backend.dockPosition === modelData.key
-                            ? Font.DemiBold : Font.Normal
+                        font.pixelSize: panel.controlFontSize
+                        font.weight: panel.controlFontWeight
                     }
 
                     Text {
@@ -1074,7 +1082,7 @@ Item {
                         text: "✓"
                         color: Theme.accent
                         font.family: Qt.application.font.family
-                        font.pixelSize: 14
+                        font.pixelSize: panel.controlFontSize
                         font.weight: Font.Bold
                     }
 
@@ -1100,7 +1108,8 @@ Item {
                 text: "Arrange dock items   →"
                 color: Theme.text
                 font.family: Qt.application.font.family
-                font.pixelSize: 14
+                font.pixelSize: panel.controlFontSize
+                font.weight: panel.controlFontWeight
             }
             MouseArea {
                 id: layoutLinkMouse
@@ -1219,8 +1228,8 @@ Item {
             text: supportZone.label
             color: Theme.text
             font.family: Qt.application.font.family
-            font.pixelSize: 14
-            font.weight: Font.DemiBold
+            font.pixelSize: panel.headingFontSize
+            font.weight: panel.headingFontWeight
         }
 
         Text {
@@ -1230,7 +1239,8 @@ Item {
             text: supportZone.items.length
             color: Theme.mutedText
             font.family: Qt.application.font.family
-            font.pixelSize: 12
+            font.pixelSize: panel.detailFontSize
+            font.weight: panel.controlFontWeight
         }
 
         Item {
@@ -1349,8 +1359,8 @@ Item {
             text: zone.label
             color: Theme.text
             font.family: Qt.application.font.family
-            font.pixelSize: 13
-            font.weight: Font.DemiBold
+            font.pixelSize: panel.headingFontSize
+            font.weight: panel.headingFontWeight
         }
         Text {
             anchors.right: parent.right
@@ -1358,14 +1368,18 @@ Item {
             y: 13
             text: zone.items.length
             color: Theme.mutedText
-            font.pixelSize: 12
+            font.family: Qt.application.font.family
+            font.pixelSize: panel.detailFontSize
+            font.weight: panel.controlFontWeight
         }
         Text {
             x: 12; y: 52
             visible: zone.displayOrder.length === 0
             text: zone.zoneKey === "quick" ? "Quick menu items" : "Drop items here"
             color: Theme.mutedText
-            font.pixelSize: 11
+            font.family: Qt.application.font.family
+            font.pixelSize: panel.detailFontSize
+            font.weight: panel.controlFontWeight
         }
         Item {
             x: 12; y: 44
@@ -1413,7 +1427,8 @@ Item {
                         text: panel.dockItemLabel(tile.componentKey)
                         color: Theme.text
                         font.family: Qt.application.font.family
-                        font.pixelSize: 11
+                        font.pixelSize: panel.controlFontSize
+                        font.weight: panel.controlFontWeight
                         elide: Text.ElideRight
                     }
                     MouseArea {
@@ -1453,8 +1468,8 @@ Item {
             text: "Click for open"
             color: Theme.text
             font.family: Qt.application.font.family
-            font.pixelSize: 14
-            font.weight: Font.DemiBold
+            font.pixelSize: panel.headingFontSize
+            font.weight: panel.headingFontWeight
         }
 
         Text {
@@ -1464,7 +1479,8 @@ Item {
             text: launcherBox.items.length
             color: Theme.mutedText
             font.family: Qt.application.font.family
-            font.pixelSize: 12
+            font.pixelSize: panel.detailFontSize
+            font.weight: panel.controlFontWeight
         }
 
         Item {
@@ -1649,8 +1665,8 @@ Item {
                     text: "Move " + panel.dockItemLabel(panel.selectedDockItem) + " to"
                     color: Theme.text
                     font.family: Qt.application.font.family
-                    font.pixelSize: 14
-                    font.weight: Font.DemiBold
+                    font.pixelSize: panel.headingFontSize
+                    font.weight: panel.headingFontWeight
                 }
                 Repeater {
                     model: ["region-1", "region-2", "region-3", "hidden", "quick"]
@@ -1674,7 +1690,8 @@ Item {
                                 + (moveChoice.current ? "   ✓" : "")
                             color: Theme.text
                             font.family: Qt.application.font.family
-                            font.pixelSize: 13
+                            font.pixelSize: panel.controlFontSize
+                            font.weight: panel.controlFontWeight
                         }
                         MouseArea {
                             id: moveChoiceMouse
@@ -1720,7 +1737,8 @@ Item {
             text: panel.dockItemLabel(panel.draggedComponent)
             color: Theme.accentText
             font.family: Qt.application.font.family
-            font.pixelSize: 11
+            font.pixelSize: panel.controlFontSize
+            font.weight: panel.controlFontWeight
             elide: Text.ElideRight
         }
     }
@@ -1751,7 +1769,8 @@ Item {
             text: panel.edgeHandleLabel(panel.draggedEdgeHandle)
             color: Theme.accentText
             font.family: Qt.application.font.family
-            font.pixelSize: 11
+            font.pixelSize: panel.controlFontSize
+            font.weight: panel.controlFontWeight
             elide: Text.ElideRight
         }
     }
@@ -1795,13 +1814,6 @@ Item {
             width: panel.contentWidth
             spacing: 6
 
-            Text {
-                text: "Bar length"
-                color: Theme.mutedText
-                font.family: Qt.application.font.family
-                font.pixelSize: 12
-            }
-
             Row {
                 width: parent.width
                 spacing: 8
@@ -1824,7 +1836,8 @@ Item {
                             text: spectrumSizeChoice.modelData
                             color: Theme.text
                             font.family: Qt.application.font.family
-                            font.pixelSize: 14
+                            font.pixelSize: panel.controlFontSize
+                            font.weight: panel.controlFontWeight
                         }
 
                         Text {
@@ -1836,7 +1849,7 @@ Item {
                             text: "✓"
                             color: Theme.accent
                             font.family: Qt.application.font.family
-                            font.pixelSize: 15
+                            font.pixelSize: panel.controlFontSize
                             font.weight: Font.Bold
                         }
 
@@ -1875,9 +1888,8 @@ Item {
                         text: modelData.label
                         color: Theme.text
                         font.family: Qt.application.font.family
-                        font.pixelSize: 14
-                        font.weight: backend.edgeSpectrumPosition === modelData.key
-                            ? Font.DemiBold : Font.Normal
+                        font.pixelSize: panel.controlFontSize
+                        font.weight: panel.controlFontWeight
                     }
 
                     Text {
@@ -1888,7 +1900,7 @@ Item {
                         text: "✓"
                         color: Theme.accent
                         font.family: Qt.application.font.family
-                        font.pixelSize: 16
+                        font.pixelSize: panel.controlFontSize
                         font.weight: Font.Bold
                     }
 
@@ -1915,7 +1927,8 @@ Item {
             text: title
             color: Theme.mutedText
             font.family: Qt.application.font.family
-            font.pixelSize: 12
+            font.pixelSize: panel.controlFontSize
+            font.weight: panel.controlFontWeight
         }
 
         Row {
@@ -1939,9 +1952,8 @@ Item {
                         text: modelData.label
                         color: Theme.text
                         font.family: Qt.application.font.family
-                        font.pixelSize: 14
-                        font.weight: backend.keyVisualizerSettings[settingKey]
-                            === modelData.key ? Font.DemiBold : Font.Normal
+                        font.pixelSize: panel.controlFontSize
+                        font.weight: panel.controlFontWeight
                     }
 
                     Text {
@@ -1953,7 +1965,7 @@ Item {
                         text: "✓"
                         color: Theme.accent
                         font.family: Qt.application.font.family
-                        font.pixelSize: 15
+                        font.pixelSize: panel.controlFontSize
                         font.weight: Font.Bold
                     }
 
@@ -1985,7 +1997,8 @@ Item {
             text: toggleRow.title
             color: Theme.text
             font.family: Qt.application.font.family
-            font.pixelSize: 14
+            font.pixelSize: panel.controlFontSize
+            font.weight: panel.controlFontWeight
         }
 
         Rectangle {
@@ -2029,7 +2042,8 @@ Item {
             text: stepper.label
             color: Theme.text
             font.family: Qt.application.font.family
-            font.pixelSize: 13
+            font.pixelSize: panel.controlFontSize
+            font.weight: panel.controlFontWeight
         }
 
         Row {
@@ -2052,7 +2066,9 @@ Item {
                         anchors.centerIn: parent
                         text: modelData < 0 ? "−" : "+"
                         color: Theme.text
-                        font.pixelSize: 17
+                        font.family: Qt.application.font.family
+                        font.pixelSize: panel.controlFontSize
+                        font.weight: panel.controlFontWeight
                     }
 
                     MouseArea {
@@ -2113,7 +2129,8 @@ Item {
             text: backend.keyVisualizerSettings[stepper.settingKey]
             color: Theme.text
             font.family: Qt.application.font.family
-            font.pixelSize: 13
+            font.pixelSize: panel.controlFontSize
+            font.weight: panel.controlFontWeight
         }
     }
 
@@ -2201,8 +2218,8 @@ Item {
                         text: "Open Key visualizer"
                         color: Theme.accentText
                         font.family: Qt.application.font.family
-                        font.pixelSize: 14
-                        font.weight: Font.DemiBold
+                        font.pixelSize: panel.controlFontSize
+                        font.weight: panel.controlFontWeight
                     }
                 }
 
@@ -2236,7 +2253,8 @@ Item {
             verticalAlignment: Text.AlignVCenter
             color: Theme.mutedText
             font.family: Qt.application.font.family
-            font.pixelSize: 12
+            font.pixelSize: panel.controlFontSize
+            font.weight: panel.controlFontWeight
         }
 
         Row {
@@ -2266,9 +2284,8 @@ Item {
                         elide: Text.ElideRight
                         color: Theme.text
                         font.family: Qt.application.font.family
-                        font.pixelSize: 12
-                        font.weight: choiceRow.selectedKey
-                            === modelData.key ? Font.DemiBold : Font.Normal
+                        font.pixelSize: panel.controlFontSize
+                        font.weight: panel.controlFontWeight
                     }
 
                     Text {
@@ -2281,7 +2298,7 @@ Item {
                         text: "✓"
                         color: Theme.accent
                         font.family: Qt.application.font.family
-                        font.pixelSize: 15
+                        font.pixelSize: panel.controlFontSize
                         font.weight: Font.Bold
                     }
 
@@ -2307,8 +2324,8 @@ Item {
             text: title
             color: Theme.text
             font.family: Qt.application.font.family
-            font.pixelSize: 16
-            font.weight: Font.DemiBold
+            font.pixelSize: panel.headingFontSize
+            font.weight: panel.headingFontWeight
         }
 
         Text {
@@ -2318,7 +2335,8 @@ Item {
             elide: Text.ElideRight
             color: Theme.mutedText
             font.family: Qt.application.font.family
-            font.pixelSize: 13
+            font.pixelSize: panel.detailFontSize
+            font.weight: panel.controlFontWeight
         }
     }
 
@@ -2360,7 +2378,8 @@ Item {
                 text: "Date and time use different languages; choose one to sync them."
                 color: Theme.mutedText
                 font.family: Qt.application.font.family
-                font.pixelSize: 11
+                font.pixelSize: panel.detailFontSize
+                font.weight: panel.controlFontWeight
             }
 
             DateTimeHeading {
@@ -2398,9 +2417,8 @@ Item {
                                 elide: Text.ElideRight
                                 color: Theme.text
                                 font.family: Qt.application.font.family
-                                font.pixelSize: 12
-                                font.weight: backend.dateTimeSettings.dateFormat
-                                    === modelData ? Font.DemiBold : Font.Normal
+                                font.pixelSize: panel.controlFontSize
+                                font.weight: panel.controlFontWeight
                             }
 
                             Text {
@@ -2410,7 +2428,8 @@ Item {
                                 elide: Text.ElideRight
                                 color: Theme.mutedText
                                 font.family: Qt.application.font.family
-                                font.pixelSize: 11
+                                font.pixelSize: panel.detailFontSize
+                                font.weight: panel.controlFontWeight
                             }
                         }
 
@@ -2423,7 +2442,7 @@ Item {
                             text: "✓"
                             color: Theme.accent
                             font.family: Qt.application.font.family
-                            font.pixelSize: 15
+                            font.pixelSize: panel.controlFontSize
                             font.weight: Font.Bold
                         }
 
@@ -2447,6 +2466,7 @@ Item {
 
             DateTimeChoice {
                 title: "Format"
+                showTitle: false
                 selectedKey: backend.dateTimeSettings.timeFormat
                 options: [{key: "24-colon", label: "24h :"},
                     {key: "12-colon", label: "12h :"},
