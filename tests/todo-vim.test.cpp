@@ -234,6 +234,57 @@ private slots:
         keys("i!"); escape();
         QVERIFY(taskText().startsWith('!'));
     }
+    void clickingElsewhereClearsFocusAndPendingCommands() {
+        enableVim();
+        QVERIFY(card->property("vimHasFocus").toBool());
+        keys("d");
+        QTest::mouseClick(window.get(), Qt::LeftButton, Qt::NoModifier, QPoint(300, 320));
+        QVERIFY(!card->property("vimHasFocus").toBool());
+        QVERIFY(!editor->isVisible());
+        QVERIFY(!editor->property("cursorVisible").toBool());
+        QVERIFY(card->property("vimCommand").toString().isEmpty());
+        keys("dd"); QCOMPARE(backend->tasks().size(), 3);
+        backend->toggleTask(backend->tasks().first().toMap().value("id").toString());
+        QVERIFY(!card->property("vimHasFocus").toBool());
+        QTest::mouseClick(window.get(), Qt::LeftButton, Qt::NoModifier, QPoint(130, 130));
+        QCOMPARE(card->property("selectedTaskIndex").toInt(), 1);
+        QVERIFY(card->property("vimHasFocus").toBool());
+        QTest::mouseClick(window.get(), Qt::LeftButton, Qt::NoModifier, QPoint(40, 30));
+        QVERIFY(!card->property("vimHasFocus").toBool());
+    }
+    void clickingAwaySavesInsertAndReplaceDrafts() {
+        enableVim();
+        keys("iupdated ");
+        QTest::mouseClick(window.get(), Qt::LeftButton, Qt::NoModifier, QPoint(300, 320));
+        QCOMPARE(taskText(), "updated alpha beta tail");
+        QCOMPARE(card->property("vimMode").toString(), "normal");
+        QVERIFY(!card->property("vimHasFocus").toBool());
+        QTest::mouseClick(window.get(), Qt::LeftButton, Qt::NoModifier, QPoint(130, 82));
+        keys("0RXYZ");
+        QTest::mouseClick(window.get(), Qt::LeftButton, Qt::NoModifier, QPoint(300, 320));
+        QCOMPARE(taskText(), "XYZated alpha beta tail");
+        QVERIFY(!card->property("vimHasFocus").toBool());
+        QTest::mouseClick(window.get(), Qt::LeftButton, Qt::NoModifier, QPoint(130, 82));
+        keys("0icheckbox ");
+        QTest::mouseClick(window.get(), Qt::LeftButton, Qt::NoModifier, QPoint(45, 82));
+        QCOMPARE(taskText(), "checkbox XYZated alpha beta tail");
+        QVERIFY(backend->tasks().first().toMap().value("done").toBool());
+        QVERIFY(!card->property("vimHasFocus").toBool());
+    }
+    void activatingAnotherWindowClearsFocusAndSavesDraft() {
+        enableVim();
+        keys("idraft ");
+        QQuickWindow other;
+        other.resize(100, 100);
+        other.show();
+        other.requestActivate();
+        QTRY_VERIFY(other.isActive());
+        QCOMPARE(taskText(), "draft alpha beta tail");
+        QVERIFY(!card->property("vimHasFocus").toBool());
+        window->requestActivate();
+        QTRY_VERIFY(window->isActive());
+        QVERIFY(!card->property("vimHasFocus").toBool());
+    }
 };
 
 QTEST_MAIN(TodoVimTest)

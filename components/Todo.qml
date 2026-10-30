@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls as Controls
 import "TaskVim.js" as Vim
 
@@ -47,6 +48,8 @@ Item {
             : backend.tasks.length * taskPitch - taskRowGap
 
         readonly property bool vimEnabled: backend.taskVimEnabled
+        readonly property bool vimHasFocus: vimEnabled && (activeFocus || vimInput.activeFocus)
+            && (!win.Window.window || win.Window.window.active)
         property string vimMode: "normal"
         property string vimCommand: ""
         property string selectedTaskId: ""
@@ -75,6 +78,13 @@ Item {
             target: backend
             function onTasksChanged() {
                 if (card.vimEnabled) card.syncVimSelection()
+            }
+        }
+
+        Connections {
+            target: win.Window.window
+            function onActiveChanged() {
+                if (!win.Window.window.active) card.clearTaskFocus()
             }
         }
 
@@ -366,6 +376,18 @@ Item {
             forceActiveFocus()
         }
 
+        function clearTaskFocus() {
+            if (adding) commitNewTask()
+            if (vimEnabled) finishVimEdit()
+            vimCommand = ""
+            win.forceActiveFocus()
+        }
+
+        function toggleTaskFromMouse(taskId) {
+            clearTaskFocus()
+            backend.toggleTask(taskId)
+        }
+
         Rectangle {
             anchors.fill: parent
             radius: card.cornerRadius
@@ -375,8 +397,8 @@ Item {
         MouseArea {
             anchors.fill: parent
             enabled: card.adding || card.editingTaskId !== ""
-                || (card.vimEnabled && card.vimMode !== "normal")
-            onClicked: card.finishTransientEdit()
+                || card.vimHasFocus
+            onClicked: card.clearTaskFocus()
         }
 
         Text {
@@ -556,9 +578,9 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     enabled: card.adding || card.editingTaskId !== ""
-                        || (card.vimEnabled && card.vimMode !== "normal")
+                        || card.vimHasFocus
                     z: 0
-                    onClicked: card.finishTransientEdit()
+                    onClicked: card.clearTaskFocus()
                 }
 
                 Rectangle {
@@ -608,7 +630,7 @@ Item {
                     width: Math.max(0, taskContent.width - x - 66)
                     height: card.taskRowHeight
                     z: 2
-                    visible: card.vimEnabled && card.selectedTaskIndex >= 0 && !card.adding
+                    visible: card.vimHasFocus && card.selectedTaskIndex >= 0 && !card.adding
                     enabled: card.vimMode !== "normal"
                     readOnly: card.vimMode === "normal"
                     cursorVisible: visible && (card.activeFocus || activeFocus)
@@ -809,9 +831,9 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: 8
-            border.width: card.vimEnabled && card.selectedTaskId === row.taskId ? 1 : 0
+            border.width: card.vimHasFocus && card.selectedTaskId === row.taskId ? 1 : 0
             border.color: Qt.alpha(Theme.accent, 0.35)
-            color: card.vimEnabled && card.selectedTaskId === row.taskId ? Theme.control
+            color: card.vimHasFocus && card.selectedTaskId === row.taskId ? Theme.control
                 : card.draggingTaskId === row.taskId
                 ? Qt.alpha(Theme.accent, 0.12)
                 : rowHover.hovered || row.editing
@@ -848,7 +870,7 @@ Item {
                 radius: 6
                 color: row.checked ? card.accentColor
                     : rowHover.hovered || row.editing
-                        || (card.vimEnabled && card.selectedTaskId === row.taskId)
+                        || (card.vimHasFocus && card.selectedTaskId === row.taskId)
                     ? Theme.cardSurface : Theme.control
             }
 
@@ -867,7 +889,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: -6
                 cursorShape: Qt.PointingHandCursor
-                onClicked: backend.toggleTask(row.taskId)
+                onClicked: card.toggleTaskFromMouse(row.taskId)
             }
         }
 
@@ -885,7 +907,7 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                visible: !row.editing && !(card.vimEnabled && card.selectedTaskId === row.taskId)
+                visible: !row.editing && !(card.vimHasFocus && card.selectedTaskId === row.taskId)
                 text: row.taskText
                 color: row.checked ? card.checkedTextColor : card.textColor
                 elide: Text.ElideRight

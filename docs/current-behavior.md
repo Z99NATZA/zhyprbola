@@ -142,6 +142,8 @@ under the cursor, C changes through the end, r replaces one character, and R
 replaces continuously (Backspace restores replaced characters). Escape saves
 the edit and returns to normal mode. dd immediately deletes the selected task;
 Space or Enter toggles completion. Mouse editing and reordering remain available.
+Clicking away or switching windows saves the draft and clears the row highlight
+and cursor; clicking a task resumes Vim navigation.
 With Vim off, text fields keep their standard typing and Escape behavior.
 ```
 
