@@ -1543,20 +1543,6 @@ Item {
         flickableDirection: Flickable.VerticalFlick
         visible: panel.section === "components"
 
-        Rectangle {
-            parent: dockComponentsScroll
-            anchors.right: parent.right
-            width: 3
-            height: Math.max(28, parent.height * parent.height / Math.max(1, dockComponentsScroll.contentHeight))
-            y: Math.max(0, Math.min(parent.height - height,
-                dockComponentsScroll.contentY / Math.max(1, dockComponentsScroll.contentHeight - parent.height)
-                    * (parent.height - height)))
-            visible: dockComponentsScroll.contentHeight > dockComponentsScroll.height
-            z: 2
-            radius: 2
-            color: Theme.track
-        }
-
         rebound: Transition {
             NumberAnimation {
                 properties: "x,y"
