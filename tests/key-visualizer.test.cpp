@@ -488,7 +488,7 @@ private slots:
         QCOMPARE(supportedRepeater->property("count").toInt(), 11);
         QCOMPARE(opaqueRepeater->property("count").toInt(), 9);
         QCOMPARE(surface->property("color").value<QColor>().alpha(), 89);
-        QCOMPARE(box->property("color").value<QColor>().alpha(), 89);
+        QVERIFY(!box->property("color").isValid());
         QCOMPARE(supported->property("color").value<QColor>().alpha(), 89);
         QCOMPARE(opaque->property("color").value<QColor>().alpha(), 255);
 

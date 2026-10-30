@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls as Controls
 
 Item {
     id: panel
@@ -1026,6 +1027,14 @@ Item {
         spacing: panel.contentSectionGap
         visible: panel.section === "dock"
 
+        OpacityControl {
+            objectName: "dock-bg-opacity"
+            title: "Dock Background Opacity"
+            rangePrefix: "dock-bg-opacity"
+            percent: backend.dockBgOpacity
+            onEdited: value => backend.setDockBgOpacity(value)
+        }
+
         Row {
             width: panel.contentWidth
             height: panel.contentRowHeight
@@ -1106,158 +1115,77 @@ Item {
             onToggled: backend.setDockUngroupWindows(!active)
         }
 
-        Rectangle {
-            objectName: "dock-bg-opacity"
-            width: panel.contentWidth
-            height: 64
-            radius: 11
-            color: Theme.control
-
-            Text {
-                x: 16
-                y: 10
-                text: "Dock Background Opacity"
-                color: Theme.text
-                font.family: Qt.application.font.family
-                font.pixelSize: 14
-            }
-
-            Text {
-                anchors.right: parent.right
-                anchors.rightMargin: 16
-                y: 10
-                text: backend.dockBgOpacity + "%"
-                color: Theme.text
-                font.family: Qt.application.font.family
-                font.pixelSize: 13
-            }
-
-            Rectangle {
-                id: opacityTrack
-                x: 24
-                y: 42
-                width: parent.width - 48
-                height: 6
-                radius: 3
-                color: Theme.track
-
-                Rectangle {
-                    width: parent.width * backend.dockBgOpacity / 100
-                    height: parent.height
-                    radius: parent.radius
-                    color: Theme.accent
-                }
-            }
-
-            Rectangle {
-                x: opacityTrack.x - 8 + opacityTrack.width * backend.dockBgOpacity / 100
-                y: opacityTrack.y - 5
-                width: 16
-                height: 16
-                radius: 8
-                color: Theme.accent
-            }
-
-            MouseArea {
-                id: opacityMouse
-                x: 16
-                y: 32
-                width: parent.width - 32
-                height: 30
-                cursorShape: Qt.PointingHandCursor
-
-                function setFromPointer(pointerX) {
-                    const fraction = (pointerX - (opacityTrack.x - opacityMouse.x))
-                        / opacityTrack.width
-                    backend.setDockBgOpacity(Math.round(
-                        Math.max(0, Math.min(1, fraction)) * 100))
-                }
-
-                onPressed: function(mouse) { setFromPointer(mouse.x) }
-                onPositionChanged: function(mouse) {
-                    if (pressed) setFromPointer(mouse.x)
-                }
-            }
-        }
     }
 
-    component ComponentOpacityBox: Rectangle {
-        id: componentOpacityBox
-        objectName: "component-opacity-box"
+    component OpacityControl: Item {
+        id: opacityControl
+        required property string title
+        required property string rangePrefix
+        required property int percent
+        signal edited(int value)
+
         width: panel.contentWidth
-        height: 72
-        radius: 12
-        color: Qt.alpha(Theme.control, Theme.componentOpacity)
+        height: panel.contentRowHeight
 
-        Text {
-            x: 14
-            y: 10
-            text: "Component Background Opacity"
-            color: Theme.text
-            font.family: Qt.application.font.family
-            font.pixelSize: 14
-            font.weight: Font.DemiBold
-        }
-
-        Text {
-            anchors.right: parent.right
-            anchors.rightMargin: 14
-            y: 11
-            text: backend.componentOpacity + "%"
-            color: Theme.text
-            font.family: Qt.application.font.family
-            font.pixelSize: 13
-        }
-
-        Rectangle {
-            id: componentOpacityTrack
-            objectName: "component-opacity-track"
-            x: 22
-            y: 48
-            width: parent.width - 44
-            height: 6
-            radius: 3
-            color: Theme.track
-
-            Rectangle {
-                width: parent.width * backend.componentOpacity / 100
-                height: parent.height
-                radius: parent.radius
-                color: Theme.accent
-            }
-        }
-
-        Rectangle {
-            objectName: "component-opacity-handle"
-            x: componentOpacityTrack.x - 8
-                + componentOpacityTrack.width * backend.componentOpacity / 100
-            y: componentOpacityTrack.y - 5
-            width: 16
-            height: 16
-            radius: 8
-            color: Theme.accent
-        }
-
-        MouseArea {
-            id: componentOpacityMouse
-            objectName: "component-opacity-range"
-            x: 14
-            y: 36
-            width: parent.width - 28
-            height: 34
-            cursorShape: Qt.PointingHandCursor
-
-            function setFromPointer(pointerX) {
-                const fraction = (pointerX
-                    - (componentOpacityTrack.x - componentOpacityMouse.x))
-                    / componentOpacityTrack.width
-                backend.setComponentOpacity(Math.round(
-                    Math.max(0, Math.min(1, fraction)) * 100))
+        Controls.Slider {
+            id: range
+            objectName: opacityControl.rangePrefix + "-range"
+            anchors.fill: parent
+            padding: 0
+            from: 0
+            to: 100
+            stepSize: 1
+            snapMode: Controls.Slider.SnapAlways
+            value: opacityControl.percent
+            live: true
+            hoverEnabled: true
+            focusPolicy: Qt.StrongFocus
+            Accessible.name: opacityControl.title
+            onMoved: opacityControl.edited(Math.round(range.value))
+            Keys.onPressed: event => {
+                if (event.key === Qt.Key_Home || event.key === Qt.Key_End) {
+                    opacityControl.edited(event.key === Qt.Key_Home ? 0 : 100)
+                    event.accepted = true
+                }
             }
 
-            onPressed: function(mouse) { setFromPointer(mouse.x) }
-            onPositionChanged: function(mouse) {
-                if (pressed) setFromPointer(mouse.x)
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
+
+            background: Rectangle {
+                id: opacityTrack
+                objectName: opacityControl.rangePrefix + "-track"
+                y: (range.height - height) / 2
+                width: range.width
+                height: 38
+                radius: height / 2
+                color: Theme.track
+                border.width: range.visualFocus ? 1 : 0
+                border.color: Theme.accent
+
+                Item {
+                    x: range.mirrored ? parent.width - width : 0
+                    width: parent.width * range.position
+                    height: parent.height
+                    clip: true
+                    opacity: range.pressed ? 0.88 : 1
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+
+                    // Reveal a slice of the rounded track, leaving the moving edge straight.
+                    Rectangle {
+                        x: range.mirrored ? parent.width - width : 0
+                        width: opacityTrack.width
+                        height: opacityTrack.height
+                        radius: opacityTrack.radius
+                        color: Theme.accent
+                    }
+                }
+            }
+
+            handle: Item {
+                objectName: opacityControl.rangePrefix + "-handle"
+                x: range.visualPosition * (range.availableWidth - width)
+                width: 38
+                height: range.height
             }
         }
     }
@@ -1663,7 +1591,13 @@ Item {
         spacing: panel.contentSectionGap
         visible: panel.section === "opacity"
 
-        ComponentOpacityBox { }
+        OpacityControl {
+            objectName: "component-opacity-box"
+            title: "Component Background Opacity"
+            rangePrefix: "component-opacity"
+            percent: backend.componentOpacity
+            onEdited: value => backend.setComponentOpacity(value)
+        }
 
         OpacitySupportZone {
             id: opacityEnabledZone
