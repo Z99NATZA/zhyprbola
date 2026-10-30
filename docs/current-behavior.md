@@ -133,6 +133,16 @@ Changes apply live and persist. Bar width, spacing, and the edge baseline stay f
 ```text
 Local checklist: add, edit, toggle, delete, and drag-to-reorder.
 Items persist until deleted and do not expire when the date changes.
+
+The Vim switch before the task counter is off by default and remembers its state.
+Normal mode highlights the selected task and shows a block cursor. j/k select
+tasks; h/l, 0/$, and b/w move through its text. i inserts before the cursor,
+a inserts after it, and A appends at the end of the text. ciw changes the word
+under the cursor, C changes through the end, r replaces one character, and R
+replaces continuously (Backspace restores replaced characters). Escape saves
+the edit and returns to normal mode. dd immediately deletes the selected task;
+Space or Enter toggles completion. Mouse editing and reordering remain available.
+With Vim off, text fields keep their standard typing and Escape behavior.
 ```
 
 ## Screenshots
@@ -212,6 +222,7 @@ dock-ungroup-windows          one icon per window (default false)
 pinned-apps                   desktop IDs, used by the Pinned apps block
 use-wallpaper                 wallpaper toggle
 tasks.json                    checklist
+task-vim-enabled              task Vim keyboard mode (default false)
 key-visualizer                appearance JSON
 
 Key JSON: fontSize, paddingX, paddingY, widthMode, minWidth, maxWidth, alignment.

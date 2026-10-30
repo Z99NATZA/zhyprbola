@@ -71,6 +71,7 @@ class Backend : public QObject {
     Q_PROPERTY(QString edgeSpectrumPosition READ edgeSpectrumPosition NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QString edgeSpectrumSize READ edgeSpectrumSize NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QVariantList tasks READ tasks NOTIFY tasksChanged)
+    Q_PROPERTY(bool taskVimEnabled READ taskVimEnabled NOTIFY taskVimEnabledChanged)
     Q_PROPERTY(QVariantMap keyVisualizerSettings READ keyVisualizerSettings NOTIFY keyVisualizerSettingsChanged)
     Q_PROPERTY(QVariantMap dateTimeSettings READ dateTimeSettings NOTIFY dateTimeSettingsChanged)
     Q_PROPERTY(QString settingsSectionRequest READ settingsSectionRequest NOTIFY settingsSectionRequestChanged)
@@ -135,6 +136,7 @@ public:
     QString edgeSpectrumPosition() const { return m_edgeSpectrumPosition; }
     QString edgeSpectrumSize() const { return m_edgeSpectrumSize; }
     QVariantList tasks() const { return m_tasks; }
+    bool taskVimEnabled() const { return m_taskVimEnabled; }
     QVariantMap keyVisualizerSettings() const { return m_keyVisualizerSettings; }
     QVariantMap dateTimeSettings() const { return m_dateTimeSettings; }
     QString settingsSectionRequest() const { return m_settingsSectionRequest; }
@@ -184,6 +186,8 @@ public:
     Q_INVOKABLE void setEdgeSpectrumPosition(const QString &position);
     Q_INVOKABLE void setEdgeSpectrumSize(const QString &size);
     Q_INVOKABLE void addTask(const QString &text);
+    Q_INVOKABLE void setTaskVimEnabled(bool enabled);
+    Q_INVOKABLE bool isWordCharacter(const QString &text) const;
     Q_INVOKABLE void toggleTask(const QString &id);
     Q_INVOKABLE void renameTask(const QString &id, const QString &text);
     Q_INVOKABLE void moveTask(const QString &id, int targetIndex);
@@ -217,6 +221,7 @@ signals:
     void showDesktopEdgeSettingsChanged();
     void edgeSpectrumSettingsChanged();
     void tasksChanged();
+    void taskVimEnabledChanged();
     void keyVisualizerSettingsChanged();
     void dateTimeSettingsChanged();
     void settingsSectionRequestChanged();
@@ -359,6 +364,7 @@ private:
     QFileSystemWatcher m_edgeSpectrumSizeWatcher;
     QString m_edgeSpectrumSize = QStringLiteral("lg");
     QVariantList m_tasks;
+    bool m_taskVimEnabled = false;
     QFileSystemWatcher m_keyVisualizerWatcher;
     QVariantMap m_keyVisualizerSettings;
     QFileSystemWatcher m_dateTimeWatcher;

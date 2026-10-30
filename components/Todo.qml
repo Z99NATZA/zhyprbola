@@ -1,4 +1,6 @@
 import QtQuick
+import QtQuick.Controls as Controls
+import "TaskVim.js" as Vim
 
 Item {
     id: win
@@ -10,6 +12,7 @@ Item {
 
     Item {
         id: card
+        objectName: "tasks-card"
 
         anchors.fill: parent
         focus: true
@@ -42,6 +45,213 @@ Item {
         readonly property int taskPitch: taskRowHeight + taskRowGap
         readonly property int taskContentHeight: backend.tasks.length === 0 ? 0
             : backend.tasks.length * taskPitch - taskRowGap
+
+        readonly property bool vimEnabled: backend.taskVimEnabled
+        property string vimMode: "normal"
+        property string vimCommand: ""
+        property string selectedTaskId: ""
+        property int vimRowIndex: 0
+        property var replaceHistory: []
+        property bool initialized: false
+        readonly property int selectedTaskIndex: taskIndexIn(backend.tasks, selectedTaskId)
+
+        Component.onCompleted: {
+            initialized = true
+            if (vimEnabled) syncVimSelection()
+        }
+        onVimEnabledChanged: {
+            if (!initialized) return
+            if (!vimEnabled) finishVimEdit()
+            vimCommand = ""
+            vimMode = "normal"
+            if (vimEnabled) {
+                finishTransientEdit()
+                syncVimSelection()
+                Qt.callLater(function() { card.forceActiveFocus() })
+            }
+        }
+
+        Connections {
+            target: backend
+            function onTasksChanged() {
+                if (card.vimEnabled) card.syncVimSelection()
+            }
+        }
+
+        Keys.onPressed: event => {
+            if (vimEnabled && !adding && pendingDeleteTaskId === "")
+                handleVimKey(event)
+        }
+
+        function focusVimEditor() {
+            if (vimMode === "normal") forceActiveFocus()
+            else vimInput.forceActiveFocus()
+        }
+
+        function revealVimSelection() {
+            const top = Math.max(0, selectedTaskIndex) * taskPitch
+            if (top < taskList.contentY) taskList.contentY = top
+            else if (top + taskRowHeight > taskList.contentY + taskList.height)
+                taskList.contentY = top + taskRowHeight - taskList.height
+        }
+
+        function syncVimSelection() {
+            if (backend.tasks.length === 0) {
+                selectedTaskId = ""
+                vimInput.text = ""
+                vimMode = "normal"
+                vimCommand = ""
+                return
+            }
+            if (selectedTaskIndex < 0) {
+                vimRowIndex = Math.max(0, Math.min(vimRowIndex, backend.tasks.length - 1))
+                selectedTaskId = backend.tasks[vimRowIndex]["id"]
+            }
+            vimRowIndex = selectedTaskIndex
+            if (vimMode === "normal") {
+                const cursor = vimInput.cursorPosition
+                vimInput.text = backend.tasks[selectedTaskIndex]["text"]
+                vimInput.cursorPosition = Vim.normalPosition(vimInput.text, cursor)
+            }
+            revealVimSelection()
+        }
+
+        function selectVimTask(index) {
+            if (!vimEnabled || backend.tasks.length === 0) return
+            finishVimEdit()
+            const cursor = vimInput.cursorPosition
+            vimRowIndex = Math.max(0, Math.min(index, backend.tasks.length - 1))
+            selectedTaskId = backend.tasks[vimRowIndex]["id"]
+            vimInput.text = backend.tasks[vimRowIndex]["text"]
+            vimInput.cursorPosition = Vim.normalPosition(vimInput.text, cursor)
+            vimCommand = ""
+            revealVimSelection()
+            focusVimEditor()
+        }
+
+        function beginVimEdit(mode) {
+            if (selectedTaskIndex < 0) {
+                startAdding()
+                return
+            }
+            vimCommand = ""
+            replaceHistory = []
+            const cursor = vimInput.cursorPosition
+            vimMode = mode || "insert"
+            vimInput.forceActiveFocus()
+            vimInput.cursorPosition = cursor
+        }
+
+        function saveVimText() {
+            const text = vimInput.text.trim()
+            if (selectedTaskId !== "" && text.length > 0)
+                backend.renameTask(selectedTaskId, text)
+        }
+
+        function finishVimEdit() {
+            if (vimMode === "normal") return
+            const cursor = Vim.previousCharacter(vimInput.text, vimInput.cursorPosition)
+            vimMode = "normal"
+            vimCommand = ""
+            replaceHistory = []
+            saveVimText()
+            syncVimSelection()
+            vimInput.cursorPosition = Vim.normalPosition(vimInput.text, cursor)
+        }
+
+        function replaceVimCharacter(text, remember) {
+            const cursor = vimInput.cursorPosition
+            const end = Vim.nextCharacter(vimInput.text, cursor)
+            if (remember) {
+                const history = replaceHistory.slice()
+                history.push({position: cursor, removed: vimInput.text.slice(cursor, end),
+                    inserted: text})
+                replaceHistory = history
+            }
+            vimInput.remove(cursor, end)
+            vimInput.insert(cursor, text)
+            vimInput.cursorPosition = cursor + text.length
+        }
+
+        function handleVimKey(event) {
+            event.accepted = false
+            if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) return
+            if (event.key === Qt.Key_Escape) {
+                finishVimEdit()
+                vimCommand = ""
+                focusVimEditor()
+                event.accepted = true
+                return
+            }
+            if (vimMode === "replace") {
+                if (event.key === Qt.Key_Backspace && replaceHistory.length > 0) {
+                    const history = replaceHistory.slice()
+                    const edit = history.pop()
+                    vimInput.remove(edit.position, edit.position + edit.inserted.length)
+                    vimInput.insert(edit.position, edit.removed)
+                    vimInput.cursorPosition = edit.position
+                    replaceHistory = history
+                    event.accepted = true
+                } else if (event.text.length > 0 && event.text.charCodeAt(0) >= 32) {
+                    replaceVimCharacter(event.text, true)
+                    event.accepted = true
+                } else replaceHistory = []
+                return
+            }
+            if (vimMode !== "normal") return
+            event.accepted = true
+            const key = event.text
+            const cursor = vimInput.cursorPosition
+            const text = vimInput.text
+            if (vimCommand === "r") {
+                vimCommand = ""
+                if (key.length > 0 && key.charCodeAt(0) >= 32 && text.length > 0) {
+                    replaceVimCharacter(key, false)
+                    vimInput.cursorPosition = cursor
+                    saveVimText()
+                }
+                return
+            }
+            if (vimCommand !== "") {
+                const command = vimCommand + key
+                vimCommand = ""
+                if (command === "dd" && selectedTaskId !== "") {
+                    backend.deleteTask(selectedTaskId)
+                } else if (command === "ci") {
+                    vimCommand = "ci"
+                } else if (command === "ciw" && selectedTaskIndex >= 0) {
+                    const word = Vim.innerWord(text, cursor, backend.isWordCharacter)
+                    beginVimEdit("insert")
+                    vimInput.remove(word.start, word.end)
+                    vimInput.cursorPosition = word.start
+                }
+                return
+            }
+            if (key === "j" || event.key === Qt.Key_Down) selectVimTask(selectedTaskIndex + 1)
+            else if (key === "k" || event.key === Qt.Key_Up) selectVimTask(selectedTaskIndex - 1)
+            else if (key === "h" || event.key === Qt.Key_Left)
+                vimInput.cursorPosition = Vim.previousCharacter(text, cursor)
+            else if (key === "l" || event.key === Qt.Key_Right)
+                vimInput.cursorPosition = Vim.normalPosition(text, Vim.nextCharacter(text, cursor))
+            else if (key === "0") vimInput.cursorPosition = 0
+            else if (key === "$") vimInput.cursorPosition = Vim.normalPosition(text, text.length)
+            else if (key === "w") vimInput.cursorPosition = Vim.wordForward(text, cursor, backend.isWordCharacter)
+            else if (key === "b") vimInput.cursorPosition = Vim.wordBackward(text, cursor, backend.isWordCharacter)
+            else if (key === "i") beginVimEdit("insert")
+            else if (key === "a" || key === "A") {
+                beginVimEdit("insert")
+                if (selectedTaskIndex >= 0)
+                    vimInput.cursorPosition = key === "A" ? text.length : Vim.nextCharacter(text, cursor)
+            }
+            else if (key === "R") beginVimEdit("replace")
+            else if (key === "C" && selectedTaskIndex >= 0) {
+                beginVimEdit("insert")
+                vimInput.remove(cursor, vimInput.length)
+                vimInput.cursorPosition = cursor
+            } else if (key === "d" || key === "c" || key === "r") vimCommand = key
+            else if ((event.key === Qt.Key_Space || event.key === Qt.Key_Return)
+                && selectedTaskId !== "") backend.toggleTask(selectedTaskId)
+        }
 
         function copyTasks() {
             const tasks = []
@@ -102,6 +312,7 @@ Item {
         }
 
         function startAdding() {
+            if (vimEnabled) finishVimEdit()
             editingTaskId = ""
             adding = true
             newTaskInput.text = ""
@@ -118,11 +329,13 @@ Item {
             newTaskInput.text = ""
             adding = false
             clearTaskDrag()
+            if (vimEnabled) selectVimTask(backend.tasks.length - 1)
         }
 
         function cancelNewTask() {
             newTaskInput.text = ""
             adding = false
+            if (vimEnabled) focusVimEditor()
         }
 
         function requestDeleteTask(id, text) {
@@ -145,6 +358,7 @@ Item {
         }
 
         function finishTransientEdit() {
+            if (vimEnabled) finishVimEdit()
             if (adding) {
                 commitNewTask()
                 return
@@ -161,6 +375,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             enabled: card.adding || card.editingTaskId !== ""
+                || (card.vimEnabled && card.vimMode !== "normal")
             onClicked: card.finishTransientEdit()
         }
 
@@ -177,8 +392,51 @@ Item {
             font.weight: Font.DemiBold
         }
 
+        Controls.Switch {
+            id: vimToggle
+            objectName: "task-vim-toggle"
+            anchors.right: progressText.left
+            anchors.rightMargin: 12
+            anchors.verticalCenter: addButton.verticalCenter
+            width: 84
+            height: 30
+            padding: 0
+            checked: card.vimEnabled
+            Accessible.name: "Vim mode"
+            onToggled: backend.setTaskVimEnabled(checked)
+
+            contentItem: Text {
+                text: "Vim"
+                verticalAlignment: Text.AlignVCenter
+                color: card.vimEnabled ? card.textColor : card.dimColor
+                font.family: card.family
+                font.pixelSize: 13
+            }
+            indicator: Rectangle {
+                x: vimToggle.width - width
+                y: (vimToggle.height - height) / 2
+                width: 42
+                height: 24
+                radius: 12
+                color: vimToggle.checked ? Theme.accent : Theme.track
+                border.width: vimToggle.visualFocus ? 1 : 0
+                border.color: Theme.accent
+                Rectangle {
+                    x: vimToggle.checked ? parent.width - width - 3 : 3
+                    y: 3
+                    width: 18
+                    height: 18
+                    radius: 9
+                    color: Theme.cardSurface
+                    Behavior on x { NumberAnimation { duration: 120 } }
+                }
+                Behavior on color { ColorAnimation { duration: 120 } }
+            }
+        }
+
         Text {
             id: progressText
+            objectName: "task-progress"
             anchors.right: addButton.left
             anchors.rightMargin: 14
             anchors.verticalCenter: addButton.verticalCenter
@@ -238,6 +496,7 @@ Item {
 
             TextInput {
                 id: newTaskInput
+                objectName: "new-task-input"
                 anchors.fill: parent
                 anchors.leftMargin: 12
                 anchors.rightMargin: 12
@@ -250,7 +509,10 @@ Item {
                 font.pixelSize: 14
                 Keys.onReturnPressed: card.commitNewTask()
                 Keys.onEnterPressed: card.commitNewTask()
-                Keys.onEscapePressed: card.cancelNewTask()
+                Keys.onEscapePressed: {
+                    if (card.vimEnabled) card.commitNewTask()
+                    else card.cancelNewTask()
+                }
             }
 
             Text {
@@ -294,6 +556,7 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     enabled: card.adding || card.editingTaskId !== ""
+                        || (card.vimEnabled && card.vimMode !== "normal")
                     z: 0
                     onClicked: card.finishTransientEdit()
                 }
@@ -321,6 +584,7 @@ Item {
                             : (card.visualTaskIndex(taskId) >= 0
                                 ? card.visualTaskIndex(taskId) : index) * card.taskPitch
                         z: card.draggingTaskId === taskId ? 4 : 1
+                        objectName: "task-row-" + index
                         taskId: modelData["id"] || ""
                         taskText: modelData["text"] || ""
                         checked: Boolean(modelData["done"])
@@ -336,6 +600,49 @@ Item {
                     }
                 }
 
+                TextInput {
+                    id: vimInput
+                    objectName: "task-vim-editor"
+                    x: 42
+                    y: Math.max(0, card.selectedTaskIndex) * card.taskPitch
+                    width: Math.max(0, taskContent.width - x - 66)
+                    height: card.taskRowHeight
+                    z: 2
+                    visible: card.vimEnabled && card.selectedTaskIndex >= 0 && !card.adding
+                    enabled: card.vimMode !== "normal"
+                    readOnly: card.vimMode === "normal"
+                    cursorVisible: visible && (card.activeFocus || activeFocus)
+                    verticalAlignment: TextInput.AlignVCenter
+                    clip: true
+                    color: card.selectedTaskIndex >= 0
+                        && backend.tasks[card.selectedTaskIndex]["done"]
+                        ? card.checkedTextColor : card.textColor
+                    selectionColor: Theme.selected
+                    selectedTextColor: card.textColor
+                    font.family: card.family
+                    font.pixelSize: 14
+                    font.weight: Font.Medium
+                    selectByMouse: true
+                    Accessible.name: "Selected task"
+                    Keys.onPressed: event => card.handleVimKey(event)
+                    Keys.onReturnPressed: { card.finishVimEdit(); card.focusVimEditor() }
+                    Keys.onEnterPressed: { card.finishVimEdit(); card.focusVimEditor() }
+                    onActiveFocusChanged: {
+                        if (!activeFocus && card.vimMode !== "normal") card.finishVimEdit()
+                    }
+                    cursorDelegate: Rectangle {
+                        width: card.vimMode === "insert" ? 2 : Math.max(8, cursorMetrics.advanceWidth)
+                        height: 18
+                        color: card.vimMode === "insert" ? Theme.accent : Qt.alpha(Theme.accent, 0.35)
+                    }
+                }
+
+                TextMetrics {
+                    id: cursorMetrics
+                    font: vimInput.font
+                    text: vimInput.text.slice(vimInput.cursorPosition,
+                        Vim.nextCharacter(vimInput.text, vimInput.cursorPosition)) || " "
+                }
             }
         }
 
@@ -502,7 +809,10 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: 8
-            color: card.draggingTaskId === row.taskId
+            border.width: card.vimEnabled && card.selectedTaskId === row.taskId ? 1 : 0
+            border.color: Qt.alpha(Theme.accent, 0.35)
+            color: card.vimEnabled && card.selectedTaskId === row.taskId ? Theme.control
+                : card.draggingTaskId === row.taskId
                 ? Qt.alpha(Theme.accent, 0.12)
                 : rowHover.hovered || row.editing
                 ? Theme.control
@@ -537,7 +847,9 @@ Item {
                 height: 19
                 radius: 6
                 color: row.checked ? card.accentColor
-                    : rowHover.hovered || row.editing ? Theme.cardSurface : Theme.control
+                    : rowHover.hovered || row.editing
+                        || (card.vimEnabled && card.selectedTaskId === row.taskId)
+                    ? Theme.cardSurface : Theme.control
             }
 
             Text {
@@ -573,7 +885,7 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                visible: !row.editing
+                visible: !row.editing && !(card.vimEnabled && card.selectedTaskId === row.taskId)
                 text: row.taskText
                 color: row.checked ? card.checkedTextColor : card.textColor
                 elide: Text.ElideRight
@@ -629,6 +941,8 @@ Item {
                     card.clearTaskDrag()
                     if (from >= 0 && to >= 0 && from !== to)
                         backend.moveTask(taskId, to > from ? to + 1 : to)
+                    else if (!wasDragging && card.vimEnabled && card.vimMode === "normal")
+                        card.selectVimTask(card.taskIndexIn(backend.tasks, taskId))
                 }
 
                 onCanceled: {
@@ -637,8 +951,12 @@ Item {
                 }
 
                 onDoubleClicked: {
-                    if (!row.dragging)
-                        card.editingTaskId = row.taskId
+                    if (!row.dragging) {
+                        if (card.vimEnabled) {
+                            card.selectVimTask(card.taskIndexIn(backend.tasks, row.taskId))
+                            card.beginVimEdit("insert")
+                        } else card.editingTaskId = row.taskId
+                    }
                 }
             }
         }
@@ -708,7 +1026,12 @@ Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: card.editingTaskId = row.taskId
+                onClicked: {
+                    if (card.vimEnabled) {
+                        card.selectVimTask(card.taskIndexIn(backend.tasks, row.taskId))
+                        card.beginVimEdit("insert")
+                    } else card.editingTaskId = row.taskId
+                }
             }
         }
 

@@ -36,6 +36,15 @@ QML lint currently exits successfully but may print existing qmllint warnings.
 make check
 ```
 
+```bash
+# Task Vim commands, mode changes, mouse editing, and saved preferences
+mkdir -p build/todo-vim-tests
+cd build/todo-vim-tests
+qmake6 ../../tests/todo-vim.pro
+make
+QT_QPA_PLATFORM=offscreen ./todo-vim-test
+```
+
 ```text
 Panel startup
 ==========

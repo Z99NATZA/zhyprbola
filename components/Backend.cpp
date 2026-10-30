@@ -601,6 +601,9 @@ Backend::Backend(QObject *parent, const QString &panelName) : QObject(parent) {
             m_edgeSpectrumPosition = position;
     }
     loadTasks();
+    QFile taskVimFile(dockConfigPath(QStringLiteral("task-vim-enabled")));
+    if (taskVimFile.open(QIODevice::ReadOnly))
+        m_taskVimEnabled = taskVimFile.readAll().trimmed() == "true";
 
     m_location = qEnvironmentVariable("ZHYPRBOLA_LOCATION", "Bangkok");
     m_userName = qEnvironmentVariable("USER", "User");
@@ -1475,6 +1478,20 @@ int Backend::taskIndex(const QString &id) const {
             return index;
     }
     return -1;
+}
+
+void Backend::setTaskVimEnabled(bool enabled) {
+    if (enabled == m_taskVimEnabled
+        || !writeDockConfig(QStringLiteral("task-vim-enabled"),
+            enabled ? QStringLiteral("true") : QStringLiteral("false"))) return;
+    m_taskVimEnabled = enabled;
+    emit taskVimEnabledChanged();
+}
+
+bool Backend::isWordCharacter(const QString &text) const {
+    if (text.isEmpty()) return false;
+    const char32_t character = text.toUcs4().first();
+    return character == U'_' || QChar::isLetterOrNumber(character) || QChar::isMark(character);
 }
 
 void Backend::addTask(const QString &text) {
