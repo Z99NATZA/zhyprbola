@@ -3,7 +3,7 @@ import QtQuick
 Item {
     id: win
 
-    width: 480
+    width: 608
     height: 172
 
 
@@ -185,7 +185,7 @@ Item {
                 bottom: parent.bottom
             }
 
-            width: 224
+            width: 352
 
             Column {
                 anchors.centerIn: parent
@@ -249,33 +249,11 @@ Item {
                                 Font.Medium
                         }
 
-                        SequentialAnimation on opacity {
-                            loops:
-                                Animation.Infinite
-
-                            NumberAnimation {
-                                to: 0.35
-
-                                duration:
-                                    900
-
-                                easing.type:
-                                    Easing.InOutSine
-                            }
-
-                            NumberAnimation {
-                                to: 1
-
-                                duration:
-                                    900
-
-                                easing.type:
-                                    Easing.InOutSine
-                            }
-                        }
                     }
 
                     PopText {
+                        id: minutesText
+
                         animate:
                             card.ready
 
@@ -297,6 +275,19 @@ Item {
 
                             weight:
                                 Font.Medium
+                        }
+                    }
+
+                    Text {
+                        anchors.baseline: minutesText.baseline
+
+                        text: Qt.formatDateTime(card.now, ":ss")
+                        color: card.textColor
+
+                        font {
+                            family: card.family
+                            pixelSize: 58
+                            weight: Font.Medium
                         }
                     }
                 }

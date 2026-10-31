@@ -13,7 +13,7 @@ Window {
     property bool hostInitialized: false
     readonly property int panelWidth: {
         switch (panelName) {
-        case "clock-weather": return 480
+        case "clock-weather": return 608
         case "key-visualizer": return panelItem ? panelItem.implicitWidth : 180
         case "audio-spectrum": return 440
         case "system-status": return 528
