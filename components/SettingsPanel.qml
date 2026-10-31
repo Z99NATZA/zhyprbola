@@ -1097,20 +1097,42 @@ Item {
             }
         }
 
+        SettingsToggle {
+            objectName: "dock-ungroup-windows"
+            title: "Ungroup windows"
+            active: backend.dockUngroupWindows
+            onToggled: backend.setDockUngroupWindows(!active)
+        }
+
         Rectangle {
             objectName: "open-dock-layout"
             width: panel.contentWidth
             height: panel.sidebarRowHeight
             radius: panel.controlRadius
-            color: layoutLinkMouse.containsMouse ? Theme.controlHover : Theme.control
-            Text {
-                x: 14; anchors.verticalCenter: parent.verticalCenter
-                text: "Arrange dock items   →"
-                color: Theme.text
-                font.family: Qt.application.font.family
-                font.pixelSize: panel.controlFontSize
-                font.weight: panel.controlFontWeight
+            color: layoutLinkMouse.containsMouse ? Qt.lighter(Theme.accent, 1.1) : Theme.accent
+
+            Row {
+                anchors.centerIn: parent
+                spacing: 8
+
+                Image {
+                    width: 18
+                    height: 18
+                    source: Qt.resolvedUrl("../gnome-extension/icons/components.svg")
+                    sourceSize: Qt.size(width, height)
+                    fillMode: Image.PreserveAspectFit
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Arrange dock items"
+                    color: Theme.accentText
+                    font.family: Qt.application.font.family
+                    font.pixelSize: panel.controlFontSize
+                    font.weight: panel.controlFontWeight
+                }
             }
+
             MouseArea {
                 id: layoutLinkMouse
                 anchors.fill: parent
@@ -1119,13 +1141,6 @@ Item {
                 onClicked: panel.section = "components"
             }
         }
-        SettingsToggle {
-            objectName: "dock-ungroup-windows"
-            title: "Ungroup windows"
-            active: backend.dockUngroupWindows
-            onToggled: backend.setDockUngroupWindows(!active)
-        }
-
     }
 
     component OpacityControl: Item {
