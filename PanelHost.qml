@@ -13,7 +13,9 @@ Window {
     property bool hostInitialized: false
     readonly property int panelWidth: {
         switch (panelName) {
-        case "clock-weather": return 608
+        case "clock": return 352
+        case "weather": return 256
+        case "clock-weather": return 624
         case "key-visualizer": return panelItem ? panelItem.implicitWidth : 180
         case "audio-spectrum": return 440
         case "system-status": return 528
@@ -28,6 +30,8 @@ Window {
     readonly property int panelHeight: {
         switch (panelName) {
         case "wifi": return 576
+        case "clock":
+        case "weather":
         case "clock-weather":
         case "audio-spectrum": return 172
         case "key-visualizer": return panelItem ? panelItem.implicitHeight : 78
@@ -43,6 +47,10 @@ Window {
     readonly property string panelTitle: {
         if (panelName === "wifi")
             return "Zhyprbola Wi-Fi"
+        if (panelName === "clock")
+            return "Zhyprbola Clock"
+        if (panelName === "weather")
+            return "Zhyprbola Weather"
         if (panelName === "clock-weather")
             return "Zhyprbola Clock & Weather"
         if (panelName === "key-visualizer")
@@ -79,6 +87,7 @@ Window {
     function loadPanel() {
         const files = {
             bluetooth: "BluetoothPanel.qml", wifi: "WifiPanel.qml",
+            clock: "Clock.qml", weather: "Weather.qml",
             "clock-weather": "ClockWeather.qml", "key-visualizer": "KeyVisualizer.qml",
             "system-status": "SystemStatus.qml", "audio-spectrum": "AudioSpectrumBubble.qml",
             music: "MusicPlayer.qml", sound: "SoundPanel.qml", todo: "Todo.qml",

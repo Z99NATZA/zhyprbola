@@ -12,7 +12,8 @@ make build
 make run-panel
 ./scripts/run-panel bluetooth
 ./scripts/run-panel wifi
-./scripts/run-panel clock-weather
+./scripts/run-panel clock
+./scripts/run-panel weather
 ./scripts/run-panel key-visualizer
 ./scripts/run-panel system-status
 ```

@@ -85,3 +85,15 @@ test('a failed read uses the existing fallback without poisoning subsequent cach
     assert.equal(reads.length, 2);
     assert.equal(errors.length, 1);
 });
+
+
+test('Clock and Weather have distinct theme-colored dock artwork', () => {
+    const {dock, errors} = fixture();
+    const clock = dock._panelGicon('clock', '#68717d');
+    const weather = dock._panelGicon('weather', '#68717d');
+    assert.notEqual(clock, weather);
+    assert.match(clock.svg, /stroke="#68717d"/);
+    assert.match(weather.svg, /stroke="#68717d"/);
+    assert.notEqual(clock.svg, weather.svg);
+    assert.equal(errors.length, 0);
+});

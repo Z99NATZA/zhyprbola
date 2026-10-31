@@ -51,7 +51,8 @@ const DOCK_COMPONENTS = [
     ['settings', 'Zhyprbola settings'],
     ['bluetooth', 'Bluetooth'],
     ['wifi', 'Wi-Fi'],
-    ['clock-weather', 'Clock and Weather'],
+    ['clock', 'Clock'],
+    ['weather', 'Weather'],
     ['key-visualizer', 'Key Visualizer'],
     ['system-status', 'System Status'],
     ['audio-spectrum', 'Audio Spectrum'],
@@ -94,6 +95,8 @@ const PANEL_TITLES = Object.freeze({
     screenshots: 'Zhyprbola Screenshots',
     bluetooth: 'Zhyprbola Bluetooth',
     wifi: 'Zhyprbola Wi-Fi',
+    clock: 'Zhyprbola Clock',
+    weather: 'Zhyprbola Weather',
     'clock-weather': 'Zhyprbola Clock & Weather',
     'key-visualizer': 'Zhyprbola Key Visualizer',
     'system-status': 'Zhyprbola System Status',
@@ -106,12 +109,18 @@ const PANEL_TITLES = Object.freeze({
     settings: 'Zhyprbola Settings',
 });
 
+// Expand the retired component in place, retaining its saved region or menu.
+function splitClockWeather(items) {
+    return (Array.isArray(items) ? items : []).flatMap(key =>
+        key === 'clock-weather' ? ['clock', 'weather'] : [key]);
+}
+
 function normalizedDockLayout(saved, fallback) {
     if (!Array.isArray(saved?.regions) || saved.regions.length !== 3)
         return fallback;
     const known = new Set([...DOCK_COMPONENTS.map(([name]) => name), 'apps', 'running']);
     const seen = new Set();
-    const take = (values, zone) => (Array.isArray(values) ? values : []).filter(key => {
+    const take = (values, zone) => splitClockWeather(values).filter(key => {
         if (!known.has(key) || seen.has(key) || (zone !== 'region' && key === 'settings') ||
             (zone === 'quick' && ['apps', 'running', 'settings', 'components', ...INLINE_DOCK_COMPONENTS].includes(key)))
             return false;
@@ -1311,10 +1320,10 @@ export default class ZhyprbolaExtension extends Extension {
             if (!Array.isArray(saved.visible) || !Array.isArray(saved.hidden))
                 throw new Error('Invalid dock components');
             const known = new Set(defaults);
-            const visible = [...new Set(saved.visible.filter(name => known.has(name)))];
-            const hidden = [...new Set(saved.hidden.filter(name =>
+            const visible = [...new Set(splitClockWeather(saved.visible).filter(name => known.has(name)))];
+            const hidden = [...new Set(splitClockWeather(saved.hidden).filter(name =>
                 name !== 'settings' && known.has(name) && !visible.includes(name)))];
-            const quick = [...new Set((Array.isArray(saved.quick) ? saved.quick : [])
+            const quick = [...new Set(splitClockWeather(saved.quick)
                 .filter(name => name !== 'settings' && name !== 'components'
                     && !INLINE_DOCK_COMPONENTS.includes(name) && known.has(name) &&
                     !visible.includes(name) && !hidden.includes(name)))];

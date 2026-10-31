@@ -20,7 +20,7 @@ namespace {
 QStringList opacityComponentKeys() {
     return {QStringLiteral("date-display"), QStringLiteral("time-display"),
         QStringLiteral("settings"), QStringLiteral("bluetooth"), QStringLiteral("wifi"),
-        QStringLiteral("clock-weather"), QStringLiteral("system-status"),
+        QStringLiteral("clock"), QStringLiteral("weather"), QStringLiteral("system-status"),
         QStringLiteral("audio-spectrum"), QStringLiteral("music"), QStringLiteral("sound"),
         QStringLiteral("brightness"), QStringLiteral("battery"), QStringLiteral("todo"),
         QStringLiteral("calendar"), QStringLiteral("input-source"), QStringLiteral("power"),
@@ -31,7 +31,7 @@ QStringList opacityComponentKeys() {
 QPair<QStringList, QStringList> validatedOpacityComponents(const QJsonObject &saved) {
     const QStringList names = opacityComponentKeys();
     const QStringList defaults = {QStringLiteral("settings"), QStringLiteral("bluetooth"),
-        QStringLiteral("wifi"), QStringLiteral("clock-weather"),
+        QStringLiteral("wifi"), QStringLiteral("clock"), QStringLiteral("weather"),
         QStringLiteral("key-visualizer"), QStringLiteral("system-status"),
         QStringLiteral("audio-spectrum"), QStringLiteral("music"), QStringLiteral("todo"),
         QStringLiteral("calendar"), QStringLiteral("screenshots")};
@@ -41,9 +41,13 @@ QPair<QStringList, QStringList> validatedOpacityComponents(const QJsonObject &sa
                             QStringList &target) {
         if (!value.isArray()) return;
         for (const QJsonValue &entry : value.toArray()) {
-            const QString name = entry.toString();
-            if (names.contains(name) && !enabled.contains(name) && !disabled.contains(name))
-                target.append(name);
+            const QStringList migrated = entry.toString() == QLatin1String("clock-weather")
+                ? QStringList{QStringLiteral("clock"), QStringLiteral("weather")}
+                : QStringList{entry.toString()};
+            for (const QString &name : migrated) {
+                if (names.contains(name) && !enabled.contains(name) && !disabled.contains(name))
+                    target.append(name);
+            }
         }
     };
     append(saved.value(QStringLiteral("opacity")), enabled);

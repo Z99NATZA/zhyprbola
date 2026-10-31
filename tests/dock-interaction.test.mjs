@@ -1296,7 +1296,7 @@ test('dock reserves enough region width for inline date and time', () => {
     dock._dateTimeSettings = {dateFormat: 'yyyy-MM-dd', dateLocale: 'global',
         timeFormat: '24-colon', timeLocale: 'global', showSeconds: false};
     const names = ['date-display', 'time-display', 'settings', 'bluetooth',
-        'wifi', 'clock-weather', 'system-status', 'audio-spectrum', 'music'];
+        'wifi', 'clock', 'weather', 'system-status', 'audio-spectrum', 'music'];
     dock._dockComponents.visible = names;
     dock._dockItems.set('zhyprbola', names.map(name => ({name,
         kind: name.endsWith('-display') ? 'date-time' : 'panel'})));
@@ -2006,4 +2006,51 @@ test('authorization spawn errors remain retryable and late callbacks are ignored
     dock._keyCountGrantProcess = null;
     dock._disabling = true;
     callback({wait_finish() { assert.fail('stale callback'); }}, {});
+});
+
+
+test('Clock and Weather inherit each legacy dock zone without duplicate entries', () => {
+    for (const zone of ['visible', 'hidden', 'quick']) {
+        const {dock, context} = fixture();
+        context.TextDecoder = TextDecoder;
+        const saved = {visible: ['settings'], hidden: [], quick: []};
+        saved[zone].push('clock-weather', 'weather');
+        context.GLib.file_get_contents = () => [true,
+            new TextEncoder().encode(JSON.stringify(saved))];
+        const layout = dock._readDockComponents();
+        for (const key of ['clock', 'weather']) {
+            assert.equal(layout[zone].filter(name => name === key).length, 1);
+            assert.equal(Object.values(layout).flat().filter(name => name === key).length, 1);
+        }
+        assert.equal(Object.values(layout).flat().includes('clock-weather'), false);
+    }
+});
+
+test('Clock and Weather keep the legacy shared region or menu and can move independently', () => {
+    for (const zone of ['region', 'hidden', 'quick']) {
+        const {dock, context} = fixture();
+        context.TextDecoder = TextDecoder;
+        const saved = {regions: [[], ['settings'], []], hidden: [], quick: []};
+        (zone === 'region' ? saved.regions[0] : saved[zone]).push('clock-weather');
+        context.GLib.file_get_contents = () => [true,
+            new TextEncoder().encode(JSON.stringify(saved))];
+        const components = {visible: ['settings', 'clock', 'weather'], hidden: [], quick: []};
+        const layout = dock._readDockLayout(components, ['zhyprbola'], ['apps', 'running', 'zhyprbola']);
+        const migrated = zone === 'region' ? layout.regions[0] : layout[zone];
+        assert.deepEqual(Array.from(migrated).filter(key => ['clock', 'weather'].includes(key)), ['clock', 'weather']);
+        const all = [...layout.regions.flat(), ...layout.hidden, ...layout.quick];
+        assert.equal(all.includes('clock-weather'), false);
+        assert.equal(all.filter(key => key === 'clock').length, 1);
+        assert.equal(all.filter(key => key === 'weather').length, 1);
+    }
+    const {dock, context} = fixture();
+    context.TextDecoder = TextDecoder;
+    context.GLib.file_get_contents = () => [true, new TextEncoder().encode(JSON.stringify({
+        regions: [['clock'], ['settings'], []], hidden: ['weather'], quick: [],
+    }))];
+    const layout = dock._readDockLayout({visible: ['settings', 'clock', 'weather'], hidden: [], quick: []},
+        ['zhyprbola'], ['apps', 'running', 'zhyprbola']);
+    assert.equal(layout.regions[0].includes('clock'), true);
+    assert.equal(layout.hidden.includes('weather'), true);
+    assert.equal(layout.regions.flat().includes('weather'), false);
 });

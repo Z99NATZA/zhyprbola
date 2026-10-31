@@ -114,7 +114,7 @@ esac
     }
     void localPanelsDoNotStartUnrelatedHelpers_data() {
         QTest::addColumn<QString>("name");
-        for (const char *name : {"calendar", "todo", "settings", "key-visualizer", "sound"})
+        for (const char *name : {"calendar", "todo", "settings", "key-visualizer", "sound", "clock"})
             QTest::newRow(name) << QString::fromLatin1(name);
     }
     void localPanelsDoNotStartUnrelatedHelpers() {
@@ -227,6 +227,9 @@ esac
     void focusedHostsLoadOnlyTheirOwnComponent_data() {
         QTest::addColumn<QString>("name");
         QTest::addColumn<QString>("type");
+        QTest::newRow("clock") << QStringLiteral("clock") << QStringLiteral("Clock");
+        QTest::newRow("weather") << QStringLiteral("weather") << QStringLiteral("Weather");
+        QTest::newRow("clock-weather") << QStringLiteral("clock-weather") << QStringLiteral("ClockWeather");
         QTest::newRow("calendar") << QStringLiteral("calendar") << QStringLiteral("Calendar");
         QTest::newRow("settings") << QStringLiteral("settings") << QStringLiteral("SettingsPanel");
         QTest::newRow("tasks") << QStringLiteral("tasks") << QStringLiteral("Todo");
@@ -270,8 +273,20 @@ esac
         for (QObject *object : window->findChildren<QObject *>()) {
             const QString className = QString::fromLatin1(object->metaObject()->className());
             for (const QString &other : {QStringLiteral("Calendar"), QStringLiteral("SettingsPanel"),
-                     QStringLiteral("WifiPanel"), QStringLiteral("BluetoothPanel"), QStringLiteral("MusicPlayer")})
-                if (other != type) QVERIFY2(!className.startsWith(other + QLatin1Char('_')), qPrintable(className));
+                     QStringLiteral("WifiPanel"), QStringLiteral("BluetoothPanel"), QStringLiteral("MusicPlayer"),
+                     QStringLiteral("Clock"), QStringLiteral("Weather")})
+                if (other != type && name != QLatin1String("clock-weather")) QVERIFY2(!className.startsWith(other + QLatin1Char('_')), qPrintable(className));
+        }
+        if (name == QLatin1String("clock") || name == QLatin1String("weather")) {
+            QCOMPARE(window->width(), name == QLatin1String("clock") ? 352 : 256);
+            QCOMPARE(window->height(), 172);
+            QTRY_COMPARE(item->property("opacity").toReal(), 1.0);
+            const QImage frame = window->grabWindow();
+            QVERIFY(!frame.isNull());
+            QVERIFY(frame.pixelColor(window->width() / 2, 20).alpha() > 240);
+            QVERIFY(frame.pixelColor(0, 0).alpha() < 10);
+            const QString preview = qEnvironmentVariable("ZHYPRBOLA_CARD_PREVIEW_DIR");
+            if (!preview.isEmpty()) QVERIFY(frame.save(preview + QLatin1Char('/') + name + ".png"));
         }
         if (name == QLatin1String("tasks")) {
             window->resize(500, 500);

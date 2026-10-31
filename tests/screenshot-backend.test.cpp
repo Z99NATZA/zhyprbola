@@ -178,11 +178,15 @@ private slots:
         QVERIFY(image);
         QCOMPARE(image->opacity(), 0.35);
         saveSetting("component-opacity-components",
-            R"({"opacity":[],"default":["screenshots"]})");
+            R"({"opacity":[],"default":["screenshots","clock-weather"]})");
         QTRY_COMPARE(surface->property("color").value<QColor>().alpha(), 255);
         QCOMPARE(image->opacity(), 1.0);
         ScreenshotBackend reloaded(images.path());
         QVERIFY(reloaded.opacityDisabledComponents().contains(QStringLiteral("screenshots")));
+        QVERIFY(reloaded.opacityDisabledComponents().contains(QStringLiteral("clock")));
+        QVERIFY(reloaded.opacityDisabledComponents().contains(QStringLiteral("weather")));
+        QVERIFY(!reloaded.opacityEnabledComponents().contains(QStringLiteral("clock")));
+        QVERIFY(!reloaded.opacityDisabledComponents().contains(QStringLiteral("clock-weather")));
         saveSetting("component-opacity-components",
             R"({"opacity":["screenshots"],"default":[]})");
         QTRY_COMPARE(surface->property("color").value<QColor>().alpha(), 89);

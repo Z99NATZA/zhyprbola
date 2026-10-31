@@ -277,6 +277,7 @@ int wifiSignalFromProc() {
 QStringList componentKeys() {
     return {
         QStringLiteral("clock"),
+        QStringLiteral("weather"),
         QStringLiteral("music"),
         QStringLiteral("apps"),
         QStringLiteral("system"),
@@ -290,11 +291,26 @@ bool validComponentKey(const QString &key) {
     return componentKeys().contains(key);
 }
 
+QVariantList splitClockWeather(const QVariantList &items) {
+    QVariantList result;
+    for (const QVariant &item : items) {
+        if (item.toString() == QLatin1String("clock-weather"))
+            result << QStringLiteral("clock") << QStringLiteral("weather");
+        else
+            result.append(item);
+    }
+    return result;
+}
+
+QJsonArray splitClockWeather(const QJsonValue &items) {
+    return QJsonArray::fromVariantList(splitClockWeather(items.toArray().toVariantList()));
+}
+
 QStringList dockComponentKeys() {
     return {QStringLiteral("workspaces"), QStringLiteral("date-display"), QStringLiteral("time-display"),
         QStringLiteral("key-count"),
         QStringLiteral("settings"), QStringLiteral("bluetooth"),
-        QStringLiteral("wifi"), QStringLiteral("clock-weather"),
+        QStringLiteral("wifi"), QStringLiteral("clock"), QStringLiteral("weather"),
         QStringLiteral("system-status"), QStringLiteral("audio-spectrum"),
         QStringLiteral("music"), QStringLiteral("sound"), QStringLiteral("brightness"),
         QStringLiteral("battery"),
@@ -320,7 +336,7 @@ QVariantMap normalizedDockLayout(const QVariantMap &saved, const QVariantMap &fa
     QVariantList regions;
     const auto take = [&seen, &known](const QVariant &value, const QString &zone) {
         QStringList result;
-        for (const QVariant &entry : value.toList()) {
+        for (const QVariant &entry : splitClockWeather(value.toList())) {
             const QString key = entry.toString();
             if (!known.contains(key) || seen.contains(key)
                 || (zone != QLatin1String("region") && key == QLatin1String("settings"))
@@ -346,7 +362,7 @@ QVariantMap normalizedDockLayout(const QVariantMap &saved, const QVariantMap &fa
 
 QStringList defaultOpacityEnabledComponents() {
     return {QStringLiteral("settings"), QStringLiteral("bluetooth"),
-        QStringLiteral("wifi"), QStringLiteral("clock-weather"),
+        QStringLiteral("wifi"), QStringLiteral("clock"), QStringLiteral("weather"),
         QStringLiteral("key-visualizer"), QStringLiteral("system-status"),
         QStringLiteral("audio-spectrum"), QStringLiteral("music"),
         QStringLiteral("todo"), QStringLiteral("calendar"), QStringLiteral("screenshots")};
@@ -367,7 +383,7 @@ QPair<QStringList, QStringList> validatedOpacityComponents(const QJsonObject &sa
     const auto append = [&names, &enabled, &disabled](const QJsonValue &value,
                             QStringList &target) {
         if (!value.isArray()) return;
-        for (const QJsonValue &entry : value.toArray()) {
+        for (const QJsonValue &entry : splitClockWeather(value)) {
             const QString name = entry.toString();
             if (names.contains(name) && !enabled.contains(name) && !disabled.contains(name))
                 target.append(name);
@@ -407,11 +423,17 @@ QString bluetoothInfoValue(const QString &info, const QString &key) {
 }
 
 Backend::Backend(QObject *parent, const QString &panelName) : QObject(parent) {
+    // The old desktop clock toggle controlled both cards.
+    QSettings componentSettings;
+    if (!componentSettings.contains(QStringLiteral("components/weather")))
+        componentSettings.setValue(QStringLiteral("components/weather"),
+            componentSettings.value(QStringLiteral("components/clock"), true));
     const bool desktop = panelName.isEmpty();
     m_pollSystem = desktop || panelName == QLatin1String("system-status");
     m_pollWifi = desktop || panelName == QLatin1String("wifi");
     m_pollBluetooth = desktop || panelName == QLatin1String("bluetooth");
-    m_pollWeather = desktop || panelName == QLatin1String("clock-weather");
+    m_pollWeather = desktop || panelName == QLatin1String("weather")
+        || panelName == QLatin1String("clock-weather");
     m_pollMusic = desktop || panelName == QLatin1String("music");
     m_pollSpectrum = m_pollMusic || panelName == QLatin1String("audio-spectrum")
         || panelName == QLatin1String("edge-spectrum");
@@ -538,18 +560,18 @@ Backend::Backend(QObject *parent, const QString &panelName) : QObject(parent) {
             && object.value(QStringLiteral("hidden")).isArray()) {
             m_dockVisibleComponents.clear();
             m_dockQuickComponents.clear();
-            for (const auto &entry : object.value(QStringLiteral("visible")).toArray()) {
+            for (const auto &entry : splitClockWeather(object.value(QStringLiteral("visible")))) {
                 const QString name = entry.toString();
                 if (componentNames.contains(name) && !m_dockVisibleComponents.contains(name))
                     m_dockVisibleComponents.append(name);
             }
-            for (const auto &entry : object.value(QStringLiteral("hidden")).toArray()) {
+            for (const auto &entry : splitClockWeather(object.value(QStringLiteral("hidden")))) {
                 const QString name = entry.toString();
                 if (componentNames.contains(name) && !m_dockVisibleComponents.contains(name)
                     && !m_dockHiddenComponents.contains(name))
                     m_dockHiddenComponents.append(name);
             }
-            for (const auto &entry : object.value(QStringLiteral("quick")).toArray()) {
+            for (const auto &entry : splitClockWeather(object.value(QStringLiteral("quick")))) {
                 const QString name = entry.toString();
                 if (name != QLatin1String("components")
                     && name != QLatin1String("workspaces")
@@ -1328,7 +1350,8 @@ void Backend::openDockComponent(const QString &key) {
     static const QStringList panelNames = {
         QStringLiteral("bluetooth"),
         QStringLiteral("wifi"),
-        QStringLiteral("clock-weather"),
+        QStringLiteral("clock"),
+        QStringLiteral("weather"),
         QStringLiteral("system-status"),
         QStringLiteral("audio-spectrum"),
         QStringLiteral("music"),

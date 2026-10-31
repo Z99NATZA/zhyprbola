@@ -10,7 +10,8 @@ Item {
     readonly property color dimTextColor: Qt.alpha(textColor, 0.70)
     readonly property color accentColor: Theme.accent
     readonly property var componentItems: [
-        { key: "clock", title: "Clock & Weather", detail: "Time, date, and forecast" },
+        { key: "clock", title: "Clock", detail: "Time and date" },
+        { key: "weather", title: "Weather", detail: "Current conditions and forecast" },
         { key: "music", title: "Music Player", detail: "MPRIS player controls" },
         { key: "apps", title: "Launcher", detail: "Application shortcuts" },
         { key: "system", title: "System Status", detail: "CPU, RAM, and disk" },
@@ -54,7 +55,7 @@ Item {
         }
 
         width: 390
-        height: 548
+        height: 614
         radius: 18
         color: manager.surfaceColor
 

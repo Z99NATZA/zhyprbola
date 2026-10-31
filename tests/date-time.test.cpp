@@ -6,11 +6,14 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QLineF>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QFile>
 #include <QTemporaryDir>
+#include <QSettings>
 #include <QtTest>
 
 namespace {
@@ -52,6 +55,69 @@ private:
 class DateTimeTest : public QObject {
     Q_OBJECT
 private slots:
+    void clockWeatherPreferencesMigrate_data() {
+        QTest::addColumn<QString>("zone");
+        for (const char *zone : {"visible", "hidden", "quick"})
+            QTest::newRow(zone) << QString::fromLatin1(zone);
+    }
+
+    void clockWeatherPreferencesMigrate() {
+        QFETCH(QString, zone);
+        QTemporaryDir directory;
+        qputenv("XDG_CONFIG_HOME", directory.path().toUtf8());
+        QVERIFY(QDir().mkpath(directory.filePath("zhyprbola")));
+        auto write = [&directory](const QString &name, const QJsonObject &value) {
+            QFile file(directory.filePath("zhyprbola/" + name));
+            if (!file.open(QIODevice::WriteOnly)) return false;
+            return file.write(QJsonDocument(value).toJson()) > 0;
+        };
+        QJsonObject legacy{{"visible", QJsonArray{"settings"}}, {"hidden", QJsonArray{}}, {"quick", QJsonArray{}}};
+        auto entries = legacy.value(zone).toArray();
+        entries.append("clock-weather");
+        legacy[zone] = entries;
+        QVERIFY(write("dock-components", legacy));
+        QJsonArray regions{QJsonArray{}, QJsonArray{"settings"}, QJsonArray{}};
+        QJsonObject layout{{"regions", regions}, {"hidden", QJsonArray{}}, {"quick", QJsonArray{}}};
+        if (zone == "visible") {
+            regions[0] = QJsonArray{"clock-weather"};
+            layout["regions"] = regions;
+        } else {
+            layout[zone] = QJsonArray{"clock-weather"};
+        }
+        QVERIFY(write("dock-layout", layout));
+        QVERIFY(write("component-opacity-components", {{"opacity", QJsonArray{}},
+            {"default", QJsonArray{"clock-weather"}}}));
+        QSettings settings;
+        settings.setValue("components/clock", false);
+        settings.remove("components/weather");
+        Backend backend(nullptr, QStringLiteral("clock"));
+        const auto migrated = backend.dockLayout();
+        QStringList migratedZone = zone == "visible"
+            ? migrated.value("regions").toList()[0].toStringList()
+            : migrated.value(zone).toStringList();
+        migratedZone.removeIf([](const QString &key) { return key != "clock" && key != "weather"; });
+        QCOMPARE(migratedZone, (QStringList{"clock", "weather"}));
+        for (const QString &key : {QStringLiteral("clock"), QStringLiteral("weather")}) {
+            QVERIFY(backend.opacityDisabledComponents().contains(key));
+            QVERIFY(!backend.opacityEnabledComponents().contains(key));
+            QVERIFY(!backend.componentEnabled(key));
+        }
+        backend.setComponentEnabled("clock", true);
+        QVERIFY(!backend.componentEnabled("weather"));
+        backend.moveDockLayoutItem("clock", "region-2", "settings");
+        QVERIFY(backend.dockLayout().value("regions").toList()[1].toStringList().contains("clock"));
+        QStringList weatherZone = zone == "visible"
+            ? backend.dockLayout().value("regions").toList()[0].toStringList()
+            : backend.dockLayout().value(zone).toStringList();
+        weatherZone.removeIf([](const QString &key) { return key != "clock" && key != "weather"; });
+        QCOMPARE(weatherZone, QStringList{"weather"});
+        Backend reopened(nullptr, QStringLiteral("clock"));
+        QCOMPARE(reopened.dockLayout(), backend.dockLayout());
+        QVERIFY(reopened.componentEnabled("clock"));
+        QVERIFY(!reopened.componentEnabled("weather"));
+        backend.resetComponentSettings();
+    }
+
     void sharedDockRegionsMigrateAndPersistMixedItems() {
         QTemporaryDir directory;
         qputenv("XDG_CONFIG_HOME", directory.path().toUtf8());

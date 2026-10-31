@@ -135,7 +135,7 @@ Item {
         const labels = {apps: "Pinned apps", running: "Running apps", workspaces: "Workspaces",
             "date-display": "Date", "time-display": "Time", "key-count": "Key count",
             settings: "Settings", bluetooth: "Bluetooth", wifi: "Wi-Fi",
-            "clock-weather": "Clock/weather", "system-status": "System status",
+            clock: "Clock", weather: "Weather", "system-status": "System status",
             "audio-spectrum": "Spectrum", music: "Music", sound: "Sound",
             brightness: "Brightness", battery: "Battery", todo: "Tasks", calendar: "Calendar",
             "input-source": "Language", power: "Power", components: "Quick menu",

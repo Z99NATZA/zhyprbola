@@ -3,7 +3,7 @@
 ```text
 Zhyprbola combines a GNOME Shell dock with focused Qt/QML panels.
 Shell handles sound, brightness, and battery popups; Screenshots is a resident QML browser.
-Other QML panels cover connections, clock/weather, keys, status, spectrum, music,
+Other QML panels cover connections, clock, weather, keys, status, spectrum, music,
 tasks, calendar, and settings.
 Each focused host loads only its requested component and starts only its needed
 data services. Data refreshes asynchronously; hiding/minimizing pauses polling
@@ -30,6 +30,17 @@ Ungroup windows shows one icon per window and defaults to false.
 Existing group visibility/order and component placement are imported when
 dock-layout is absent. The first layout edit saves the new format; the legacy
 files remain available. Each item has exactly one region or Hidden/Quick location.
+```
+
+## Clock and Weather
+
+```text
+Clock and Weather are independent cards and dock launchers, with separate
+visibility, placement, and opacity settings. Clock displays time with seconds
+and the date; Weather displays current conditions, high/low, and location.
+Only the Weather host starts weather polling. Existing clock-weather placement
+and opacity preferences apply to both new cards. The legacy clock-weather
+panel command remains available as a side-by-side compatibility view.
 ```
 
 ## Components and Opacity
@@ -191,7 +202,7 @@ make dock                         # Build, install, and enable the dock
 ./scripts/run-panel settings
 make check                        # QML lint; existing warnings may be printed
 
-# Other panel names: clock-weather, system-status, audio-spectrum, sound,
+# Other panel names: clock, weather, system-status, audio-spectrum, sound,
 # tasks, calendar, music, screenshots
 ```
 

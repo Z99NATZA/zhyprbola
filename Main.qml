@@ -30,6 +30,7 @@ Window {
             readonly property real leftScale: 1 + 0.28 * layoutProgress
             readonly property real rightScale: 1 + 0.15 * layoutProgress
             property bool clockEnabled: true
+            property bool weatherEnabled: true
             property bool musicEnabled: true
             property bool appsEnabled: true
             property bool systemEnabled: true
@@ -39,6 +40,7 @@ Window {
 
             function loadComponentSettings() {
                 clockEnabled = backend.componentEnabled("clock")
+                weatherEnabled = backend.componentEnabled("weather")
                 musicEnabled = backend.componentEnabled("music")
                 appsEnabled = backend.componentEnabled("apps")
                 systemEnabled = backend.componentEnabled("system")
@@ -65,17 +67,21 @@ Window {
                 onBluetoothRequested: bluetoothPanel.opened = true
             }
 
-            Item {
+            Row {
                 x: 90 + 40 * stage.layoutProgress
                 y: 100 + 5 * stage.layoutProgress
-                width: 608 * stage.leftScale
-                height: 172 * stage.leftScale
-                visible: stage.clockEnabled
-                enabled: visible
+                spacing: 16
+                scale: stage.leftScale
+                transformOrigin: Item.TopLeft
 
-                ClockWeather {
-                    scale: stage.leftScale
-                    transformOrigin: Item.TopLeft
+                Clock {
+                    visible: stage.clockEnabled
+                    enabled: visible
+                }
+
+                Weather {
+                    visible: stage.weatherEnabled
+                    enabled: visible
                 }
             }
 
