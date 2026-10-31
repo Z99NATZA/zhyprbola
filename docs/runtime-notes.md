@@ -15,6 +15,11 @@ This also restores the user's other enabled extensions.
 
 Activation checks use the C locale. ERROR and OUT OF DATE states fail immediately
 and print the extension state with the command for inspecting Shell logs.
+
+Extension packaging and installation use GIO_USE_VFS=local to avoid blocking on
+GVfs metadata requests. The installed extension stays in place while packaging;
+only a successfully built bundle is passed to gnome-extensions install --force.
+This keeps its panel launchers available if packaging fails or is interrupted.
 ```
 
 ## Running Windows
