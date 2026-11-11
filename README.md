@@ -1,4 +1,4 @@
-# Zhyprbola
+# zhyprbola
 
 ![Zhyprbola](assets/zhyprbola-logo.png)
 
