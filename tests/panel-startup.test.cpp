@@ -291,6 +291,11 @@ esac
         if (name == QLatin1String("tasks")) {
             window->resize(500, 500);
             QTRY_COMPARE(qobject_cast<QQuickItem *>(item)->width(), 500.0);
+            QCOMPARE(window->minimumSize(), QSize(384, 360));
+            QVERIFY(window->maximumWidth() > 640 && window->maximumHeight() > 720);
+            window->resize(1000, 900);
+            QTRY_COMPARE(qobject_cast<QQuickItem *>(item)->width(), 1000.0);
+            QTRY_COMPARE(qobject_cast<QQuickItem *>(item)->height(), 900.0);
         }
         if (name == QLatin1String("key-visualizer")) {
             QTRY_VERIFY(backend.keyCaptureAvailable());

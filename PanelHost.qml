@@ -77,8 +77,9 @@ Window {
     height: panelHeight
     minimumWidth: panelWidth
     minimumHeight: panelHeight
-    maximumWidth: resizablePanel ? 640 : panelWidth
-    maximumHeight: resizablePanel ? 720 : panelHeight
+    // Resizable panels keep their default size as a floor but have no ceiling.
+    maximumWidth: resizablePanel ? 16777215 : panelWidth
+    maximumHeight: resizablePanel ? 16777215 : panelHeight
     // Normal windows participate in the compositor's minimize/restore animation.
     flags: Qt.FramelessWindowHint | Qt.Window
     color: "transparent"
