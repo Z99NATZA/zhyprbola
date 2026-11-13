@@ -253,6 +253,15 @@ Item {
                 if (selectedTaskIndex >= 0)
                     vimInput.cursorPosition = key === "A" ? text.length : Vim.nextCharacter(text, cursor)
             }
+            else if (key === "x" && selectedTaskIndex >= 0 && text.length > 0) {
+                const end = Vim.nextCharacter(text, cursor)
+                const remaining = text.slice(0, cursor) + text.slice(end)
+                if (remaining.trim().length > 0) {
+                    vimInput.remove(cursor, end)
+                    vimInput.cursorPosition = Vim.normalPosition(vimInput.text, cursor)
+                    saveVimText()
+                }
+            }
             else if (key === "R") beginVimEdit("replace")
             else if (key === "C" && selectedTaskIndex >= 0) {
                 beginVimEdit("insert")

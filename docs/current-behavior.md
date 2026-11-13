@@ -151,7 +151,8 @@ tasks; h/l, 0/$, and b/w move through its text. i inserts before the cursor,
 a inserts after it, and A appends at the end of the text. ciw changes the word
 under the cursor, C changes through the end, r replaces one character, and R
 replaces continuously (Backspace restores replaced characters). Escape saves
-the edit and returns to normal mode. dd immediately deletes the selected task;
+the edit and returns to normal mode. x deletes the character under the cursor
+(the last character of a task is kept). dd immediately deletes the selected task;
 Space or Enter toggles completion. Mouse editing and reordering remain available.
 Clicking away or switching windows saves the draft and clears the row highlight
 and cursor; clicking a task resumes Vim navigation.

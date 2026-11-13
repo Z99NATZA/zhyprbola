@@ -157,6 +157,17 @@ private slots:
         keys("$R!!"); escape();
         QCOMPARE(taskText(), "Zlpha beta tai!!");
     }
+    void deleteCharacterUnderCursor() {
+        enableVim();
+        keys("x"); QCOMPARE(taskText(), "lpha beta tail"); QCOMPARE(cursor(), 0);
+        keys("wx"); QCOMPARE(taskText(), "lpha eta tail"); QCOMPARE(cursor(), 5);
+        keys("$x"); QCOMPARE(taskText(), "lpha eta tai"); QCOMPARE(cursor(), 11);
+        backend->renameTask(backend->tasks().first().toMap().value("id").toString(),
+            QString::fromUtf8("a🙂b"));
+        keys("0lx"); QCOMPARE(taskText(), "ab"); QCOMPARE(cursor(), 1);
+        keys("xx"); QCOMPARE(taskText(), "a");
+        QCOMPARE(backend->tasks().size(), 3);
+    }
     void deleteRowsAndCreateFromEmptyList() {
         enableVim();
         keys("d"); escape(); QCOMPARE(backend->tasks().size(), 3);
