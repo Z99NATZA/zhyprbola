@@ -19,10 +19,10 @@ const UPowerDeviceProxy = Gio.DBusProxy.makeProxyWrapper(`
 </node>`);
 
 export class BatteryMenu extends PopupMenu.PopupMenu {
-    constructor(sourceActor, side, accent) {
+    constructor(sourceActor, side, accent, surface = '#fafcfd') {
         super(sourceActor, 0.5, side);
         this.actor.add_style_class_name('zhyprbola-battery-menu');
-        this.box.set_style(`background-color: #fafcfd; color: ${accent};`);
+        this.box.set_style(`background-color: ${surface}; color: ${accent};`);
         this._destroyed = false;
         this.actor.connect('destroy', () => { this._destroyed = true; });
 

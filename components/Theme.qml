@@ -20,9 +20,13 @@ QtObject {
                 accent: "#477F6D", text: "#194C3C", control: "#E8F3EE",
                 controlHover: "#D9EAE1", selected: "#B8D6C8", track: "#CFE3D8"
             },
+            // One Half Dark terminal colors: gray surfaces with light text. The
+            // accent is the light gray foreground, so text on accent fills is dark.
             "one-half-gray": {
-                accent: "#68717D", text: "#2D3640", control: "#ECEFF1",
-                controlHover: "#E0E5E8", selected: "#C5CDD5", track: "#CFD7DC"
+                surface: "#282C34", accent: "#ABB2BF", accentText: "#282C34",
+                text: "#DCDFE4", control: "#323842", controlHover: "#3E4451",
+                selected: "#5C6370", track: "#3E4451", line: "#4B5263", knob: "#DCDFE4",
+                border: "#3E4451"
             },
             red: {
                 accent: "#B83252", text: "#542437", control: "#FAE9EE",
@@ -37,15 +41,19 @@ QtObject {
                 controlHover: "#F8D6E0", selected: "#ECB7C9", track: "#EAC9D5"
             }
         }
-        return colors[backend.themeName] || colors.current
+        const defaults = {
+            surface: "#FAFCFD", accentText: "#FFFFFF", line: "#CFD7DC", knob: "#FFFFFF",
+            border: ""
+        }
+        return Object.assign({}, defaults, colors[backend.themeName] || colors.current)
     }
 
     readonly property color accent: palette.accent
-    readonly property color accentText: "#FFFFFF"
+    readonly property color accentText: palette.accentText
     readonly property color text: palette.text
     readonly property color mutedText: Qt.alpha(text, 0.68)
 
-    readonly property color cardSurface: "#FAFCFD"
+    readonly property color cardSurface: palette.surface
     readonly property real componentOpacity: Math.max(0, Math.min(100,
         backend.componentOpacity)) / 100
     readonly property color componentSurface: Qt.alpha(cardSurface, componentOpacity)
@@ -53,6 +61,9 @@ QtObject {
         return backend.opacityDisabledComponents.includes(componentKey)
             ? cardSurface : componentSurface
     }
+    // Card outline like the terminal window frame; themes without one draw none.
+    readonly property color cardBorder: palette.border || "transparent"
+    readonly property int cardBorderWidth: palette.border ? 1 : 0
     readonly property color panelSurface: cardSurface
     readonly property color managerSurface: cardSurface
     readonly property color barSurface: cardSurface
@@ -62,12 +73,16 @@ QtObject {
     readonly property color selectedStrong: accent
     readonly property color track: palette.track
     readonly property color secondary: track
+    readonly property color line: palette.line
+    // Toggle knob: accentText on the accent-filled (checked) track, knob otherwise.
+    readonly property color knob: palette.knob
+    function knobFor(checked) { return checked ? accentText : knob }
 
     readonly property color heroSurface: accent
-    readonly property color heroText: "#FFFFFF"
-    readonly property color heroMutedText: Qt.rgba(1, 1, 1, 0.78)
-    readonly property color heroControl: Qt.rgba(1, 1, 1, 0.16)
-    readonly property color heroControlHover: Qt.rgba(1, 1, 1, 0.24)
+    readonly property color heroText: accentText
+    readonly property color heroMutedText: Qt.alpha(accentText, 0.78)
+    readonly property color heroControl: Qt.alpha(accentText, 0.16)
+    readonly property color heroControlHover: Qt.alpha(accentText, 0.24)
 
     readonly property color clockAccent: accent
     readonly property color checkedText: accent

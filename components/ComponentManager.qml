@@ -58,6 +58,8 @@ Item {
         height: 614
         radius: 18
         color: manager.surfaceColor
+        border.width: Theme.cardBorderWidth
+        border.color: Theme.cardBorder
 
         transform: Translate {
             id: panelTransform

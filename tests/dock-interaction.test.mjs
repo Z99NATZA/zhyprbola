@@ -766,6 +766,27 @@ test('overflow styles every action and opens Settings and Power from the same so
         assert.equal(action.label.style, 'color: #be345f;');
 });
 
+test('One Half Gray popups use terminal colors while the dock keeps its gray tint', () => {
+    const {dock, flush} = workspaceFixture();
+    const source = new Actor();
+    dock._themeName = 'one-half-gray';
+    dock._panelGicon = (name, color) => ({name, color});
+    dock._showOverflow(source, ['settings', 'power'].map(name => dock._componentItem(name)));
+    const menu = dock._overflowMenu;
+    assert.equal(menu.box.style, 'background-color: #282c34; color: #dcdfe4;');
+    for (const action of menu.items) {
+        assert.equal(action.label.style, 'color: #dcdfe4;');
+        assert.equal(action.icon.color, '#dcdfe4');
+    }
+    menu.items.find(action => action.label.text === 'Power').activate();
+    flush();
+    assert.equal(dock._powerMenu.box.style, 'background-color: #282c34; color: #dcdfe4;');
+    dock._dock = new Actor();
+    dock._dockBgOpacity = 50;
+    dock._applyDockBackground();
+    assert.match(dock._dock.style, /background-color: rgba\(104, 113, 125, 0.5\)/);
+});
+
 test('overflow and Power release pointer focus on leave while retaining keyboard focus otherwise', () => {
     const {dock, flush} = workspaceFixture();
     dock._panelGicon = name => name;

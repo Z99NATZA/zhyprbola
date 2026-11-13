@@ -6,10 +6,10 @@ import * as Slider from 'resource:///org/gnome/shell/ui/slider.js';
 import * as Volume from 'resource:///org/gnome/shell/ui/status/volume.js';
 
 export class SoundMenu extends PopupMenu.PopupMenu {
-    constructor(sourceActor, side, accent) {
+    constructor(sourceActor, side, accent, surface = '#fafcfd') {
         super(sourceActor, 0.5, side);
         this.actor.add_style_class_name('zhyprbola-sound-menu');
-        this.box.set_style(`background-color: #fafcfd; color: ${accent};`);
+        this.box.set_style(`background-color: ${surface}; color: ${accent};`);
         this._control = Volume.getMixerControl();
         this._rows = [this._createRow('microphone', accent), this._createRow('speaker', accent)];
         this._control.connectObject(

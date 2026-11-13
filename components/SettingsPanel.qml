@@ -443,7 +443,7 @@ Item {
 
     component DashedBorder: Item {
         id: border
-        property color lineColor: "#CFD7DC"
+        property color lineColor: Theme.line
         property int lineWidth: 1
         property int dash: 6
         property int gap: 5
@@ -459,7 +459,7 @@ Item {
                 radius: border.lineWidth / 2
                 x: border.cornerRadius + index * (border.dash + border.gap)
                 y: 0
-                color: border.lineColor === undefined ? "#CFD7DC" : border.lineColor
+                color: border.lineColor === undefined ? Theme.line : border.lineColor
             }
         }
 
@@ -472,7 +472,7 @@ Item {
                 radius: border.lineWidth / 2
                 x: border.cornerRadius + index * (border.dash + border.gap)
                 y: border.height - border.lineWidth
-                color: border.lineColor === undefined ? "#CFD7DC" : border.lineColor
+                color: border.lineColor === undefined ? Theme.line : border.lineColor
             }
         }
 
@@ -485,7 +485,7 @@ Item {
                 radius: border.lineWidth / 2
                 x: 0
                 y: border.cornerRadius + index * (border.dash + border.gap)
-                color: border.lineColor === undefined ? "#CFD7DC" : border.lineColor
+                color: border.lineColor === undefined ? Theme.line : border.lineColor
             }
         }
 
@@ -498,7 +498,7 @@ Item {
                 radius: border.lineWidth / 2
                 x: border.width - border.lineWidth
                 y: border.cornerRadius + index * (border.dash + border.gap)
-                color: border.lineColor === undefined ? "#CFD7DC" : border.lineColor
+                color: border.lineColor === undefined ? Theme.line : border.lineColor
             }
         }
     }
@@ -508,6 +508,8 @@ Item {
         anchors.fill: parent
         radius: 22
         color: Theme.componentSurfaceFor("settings")
+        border.width: Theme.cardBorderWidth
+        border.color: Theme.cardBorder
     }
 
     Rectangle {
@@ -2017,7 +2019,7 @@ Item {
                 width: 20
                 height: 20
                 radius: 10
-                color: "#ffffff"
+                color: Theme.knobFor(toggleRow.active)
             }
         }
 

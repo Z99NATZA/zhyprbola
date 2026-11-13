@@ -289,6 +289,10 @@ Silver Dawn     -> wallpapers/8.png
 
 Silver Dawn uses a silver-blue and lavender palette with the supplied morning
 bedroom wallpaper.
+
+One Half Gray uses One Half Dark terminal colors for panels and dock popups:
+#282C34 surfaces, #DCDFE4 text, #3E4451/#5C6370 controls, and a light #ABB2BF
+accent with dark text on it. The dock bar keeps its translucent #68717D tint.
 ```
 
 ## Weather Override

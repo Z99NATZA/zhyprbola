@@ -101,6 +101,8 @@ Item {
             anchors.fill: parent
             radius: card.cornerRadius
             color: card.surfaceColor
+            border.width: Theme.cardBorderWidth
+            border.color: Theme.cardBorder
         }
 
         // ==================================================

@@ -115,6 +115,8 @@ Item {
             anchors.fill: parent
             radius: card.cornerRadius
             color: card.surfaceColor
+            border.width: Theme.cardBorderWidth
+            border.color: Theme.cardBorder
         }
 
         // ==================================================
@@ -301,7 +303,7 @@ Item {
                     radius: 3
 
                     color:
-                        Qt.rgba(1, 1, 1, 0.30)
+                        Qt.alpha(Theme.heroText, 0.30)
                 }
 
                 Rectangle {

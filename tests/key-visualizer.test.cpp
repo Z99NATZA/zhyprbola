@@ -378,6 +378,16 @@ private slots:
             }
         }
         QVERIFY(accentPixels > 20);
+
+        // One Half Gray: terminal-gray surface, light text, light-gray accent.
+        backend.setThemeName(QStringLiteral("one-half-gray"));
+        QTRY_VERIFY(object->property("styledText").toString().contains(
+            QStringLiteral("<font color=\"#abb2bf\">Ctrl+</font>")));
+        QCOMPARE(display->property("color").value<QColor>(), QColor("#DCDFE4"));
+        const QImage gray = window.grabWindow();
+        QCOMPARE(gray.pixelColor(240, 4).name(), QStringLiteral("#282c34"));
+        QCOMPARE(gray.pixelColor(240, 0).name(), QStringLiteral("#3e4451"));
+        QCOMPARE(image.pixelColor(240, 0).name(), QStringLiteral("#fafcfd"));
     }
 
     void fitsLauncherIconsInsideSettings() {

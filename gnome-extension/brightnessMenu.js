@@ -7,11 +7,11 @@ import * as Slider from 'resource:///org/gnome/shell/ui/slider.js';
 import {DdcBrightness} from './ddcBrightness.js';
 
 export class BrightnessMenu extends PopupMenu.PopupMenu {
-    constructor(sourceActor, side, accent) {
+    constructor(sourceActor, side, accent, surface = '#fafcfd') {
         super(sourceActor, 0.5, side);
         this.actor.add_style_class_name('zhyprbola-sound-menu');
         this.actor.add_style_class_name('zhyprbola-brightness-menu');
-        this.box.set_style(`background-color: #fafcfd; color: ${accent};`);
+        this.box.set_style(`background-color: ${surface}; color: ${accent};`);
         this._manager = Main.brightnessManager;
         this._scale = null;
         this._ddc = null;

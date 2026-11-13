@@ -401,6 +401,8 @@ Item {
             anchors.fill: parent
             radius: card.cornerRadius
             color: card.surfaceColor
+            border.width: Theme.cardBorderWidth
+            border.color: Theme.cardBorder
         }
 
         MouseArea {
@@ -458,7 +460,7 @@ Item {
                     width: 18
                     height: 18
                     radius: 9
-                    color: Theme.cardSurface
+                    color: Theme.knobFor(vimToggle.checked)
                     Behavior on x { NumberAnimation { duration: 120 } }
                 }
                 Behavior on color { ColorAnimation { duration: 120 } }

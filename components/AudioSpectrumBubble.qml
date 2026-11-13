@@ -18,6 +18,8 @@ Item {
         anchors.fill: parent
         radius: 26
         color: Theme.componentSurfaceFor("audio-spectrum")
+        border.width: Theme.cardBorderWidth
+        border.color: Theme.cardBorder
     }
 
     SpectrumBars {

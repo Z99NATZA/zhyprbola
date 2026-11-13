@@ -11,6 +11,8 @@ Rectangle {
 
     radius: 26
     color: Theme.componentSurfaceFor(componentKey)
+    border.width: Theme.cardBorderWidth
+    border.color: Theme.cardBorder
     Component.onCompleted: ready = true
 
     transform: Translate {

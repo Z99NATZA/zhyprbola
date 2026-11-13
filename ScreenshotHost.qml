@@ -43,6 +43,8 @@ Window {
         topRightRadius: screenshots.edgeSide === "right" ? 0 : 18
         bottomRightRadius: screenshots.edgeSide === "right" ? 0 : 18
         color: Components.Theme.componentSurfaceFor("screenshots")
+        border.width: Components.Theme.cardBorderWidth
+        border.color: Components.Theme.cardBorder
 
         Text {
             x: 18; y: 16

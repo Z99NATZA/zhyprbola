@@ -236,6 +236,8 @@ Item {
         anchors.fill: parent
         radius: Math.min(26, height / 3)
         color: Theme.componentSurfaceFor("key-visualizer")
+        border.width: Theme.cardBorderWidth
+        border.color: Theme.cardBorder
 
         Text {
             objectName: "key-visualizer-display"
@@ -285,7 +287,7 @@ Item {
             Text {
                 anchors.centerIn: parent
                 text: backend.keyCaptureGrantPending ? "Waiting..." : "Allow temporarily"
-                color: Theme.cardSurface
+                color: Theme.accentText
                 font.pixelSize: 11
                 font.weight: Font.Medium
             }

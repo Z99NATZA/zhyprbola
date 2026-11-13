@@ -85,11 +85,21 @@ const THEMES = [
     {name: 'white', wallpaper: '2.png', iconColor: '#467b9d'},
     {name: 'white-sky', wallpaper: '3.png', iconColor: '#1e73e7'},
     {name: 'forest', wallpaper: '4.png', iconColor: '#477f6d'},
-    {name: 'one-half-gray', wallpaper: '5.png', iconColor: '#68717d'},
+    // Dock keeps iconColor; popups use One Half Dark terminal colors.
+    {name: 'one-half-gray', wallpaper: '5.png', iconColor: '#68717d',
+        menuSurface: '#282c34', menuAccent: '#dcdfe4'},
     {name: 'red', wallpaper: '6.png', iconColor: '#b83252'},
     {name: 'mauve', wallpaper: '7.png', iconColor: '#be345f'},
     {name: 'silver-dawn', wallpaper: '8.png', iconColor: '#6275a6'},
 ];
+
+function menuSurface(theme) {
+    return theme.menuSurface ?? '#fafcfd';
+}
+
+function menuAccent(theme) {
+    return theme.menuAccent ?? theme.iconColor;
+}
 
 const PANEL_TITLES = Object.freeze({
     screenshots: 'Zhyprbola Screenshots',
@@ -2381,7 +2391,7 @@ export default class ZhyprbolaExtension extends Extension {
         const current = this._currentInputSourceIndex(sources);
         menu.actor.add_style_class_name('zhyprbola-input-source-menu');
         menu.actor.add_style_class_name(`zhyprbola-input-source-${theme.name}`);
-        menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor};`);
+        menu.box.set_style(`background-color: ${menuSurface(theme)}; color: ${menuAccent(theme)};`);
         for (const [index, source] of sources.entries()) {
             const item = menu.addAction(this._inputSourceName(source), () => {
                 if (source.managerSource?.activate)
@@ -2391,14 +2401,14 @@ export default class ZhyprbolaExtension extends Extension {
                 this._queueInputSourceRefresh();
             });
             item.actor.add_style_class_name('zhyprbola-input-source-item');
-            item.set_style(`color: ${theme.iconColor};`);
+            item.set_style(`color: ${menuAccent(theme)};`);
             item.label.x_expand = true;
-            item.label.set_style(`color: ${theme.iconColor};`);
+            item.label.set_style(`color: ${menuAccent(theme)};`);
             const code = new St.Label({
                 text: this._inputSourceCode(source),
                 style_class: 'zhyprbola-input-source-code',
             });
-            code.set_style(`color: ${theme.iconColor};`);
+            code.set_style(`color: ${menuAccent(theme)};`);
             item.actor.add_child(code);
             // NONE keeps the ornament column visible, unlike the default HIDDEN.
             item.setOrnament(index === current ? PopupMenu.Ornament.DOT : PopupMenu.Ornament.NONE);
@@ -3021,11 +3031,11 @@ export default class ZhyprbolaExtension extends Extension {
         const theme = THEMES.find(item => item.name === this._themeName) ?? THEMES[0];
         menu.actor.add_style_class_name('zhyprbola-overflow-menu');
         menu.actor.add_style_class_name(`zhyprbola-overflow-${theme.name}`);
-        menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor};`);
+        menu.box.set_style(`background-color: ${menuSurface(theme)}; color: ${menuAccent(theme)};`);
         const addAction = (label, callback, icon) => {
             // A null icon still creates the same icon column for text-only rows.
             const action = menu.addAction(label, callback, icon ?? null);
-            this._styleOverflowAction(menu, action, theme.iconColor);
+            this._styleOverflowAction(menu, action, menuAccent(theme));
         };
         for (const item of items) {
             if (item.kind === 'workspaces') {
@@ -3033,7 +3043,7 @@ export default class ZhyprbolaExtension extends Extension {
                 for (let index = 0; index < this._workspaceCount(); index++) {
                     addAction(`Workspace ${index + 1}${index === active ? ' (current)' : ''}`,
                         () => this._activateWorkspace(index),
-                        this._panelGicon(item.name, theme.iconColor));
+                        this._panelGicon(item.name, menuAccent(theme)));
                 }
                 continue;
             }
@@ -3042,17 +3052,17 @@ export default class ZhyprbolaExtension extends Extension {
                     ? this._formatDockDate() : this._formatDockTime();
                 addAction(`${item.label}: ${value}`,
                     () => this._openDateTimeSettings(),
-                    this._panelGicon(item.name, theme.iconColor));
+                    this._panelGicon(item.name, menuAccent(theme)));
                 continue;
             }
             if (item.kind === 'key-count') {
                 addAction(this._keyCountText(),
                     () => this._openKeyCountMenu(button),
-                    this._panelGicon(item.name, theme.iconColor));
+                    this._panelGicon(item.name, menuAccent(theme)));
                 continue;
             }
             const icon = item.kind !== 'app'
-                ? this._panelGicon(this._connectionIconName(item.name), theme.iconColor)
+                ? this._panelGicon(this._connectionIconName(item.name), menuAccent(theme))
                 : item.app.get_icon();
             addAction(item.label, () => {
                 if (item.name === 'power') {
@@ -3159,7 +3169,7 @@ export default class ZhyprbolaExtension extends Extension {
         }
         // Let the rows determine the natural width. St adds CSS padding outside
         // a declared width, so including it here would reserve it twice.
-        menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor}; ` +
+        menu.box.set_style(`background-color: ${menuSurface(theme)}; color: ${menuAccent(theme)}; ` +
             'min-width: 0px;');
         item.set_style('min-width: 0px;');
         item.add_child(grid);
@@ -3184,7 +3194,8 @@ export default class ZhyprbolaExtension extends Extension {
             [DockPosition.BOTTOM]: St.Side.TOP,
         }[this._dockPosition];
         const theme = THEMES.find(item => item.name === this._themeName) ?? THEMES[0];
-        const menu = new SoundMenu(button, side, theme.iconColor);
+        const menu = new SoundMenu(button, side, menuAccent(theme), menuSurface(theme));
+        menu.actor.add_style_class_name(`zhyprbola-menu-${theme.name}`);
         Main.uiGroup.add_child(menu.actor);
         menu.actor.hide();
         this._menuManager.addMenu(menu);
@@ -3211,7 +3222,7 @@ export default class ZhyprbolaExtension extends Extension {
         const menu = new PopupMenu.PopupMenu(button, 0.5, side);
         menu.actor.add_style_class_name('zhyprbola-key-count-menu');
         menu.actor.add_style_class_name(`zhyprbola-key-count-${theme.name}`);
-        menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor};`);
+        menu.box.set_style(`background-color: ${menuSurface(theme)}; color: ${menuAccent(theme)};`);
         const title = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
         title.add_style_class_name('zhyprbola-key-count-summary');
         title.add_child(new St.Label({
@@ -3289,7 +3300,8 @@ export default class ZhyprbolaExtension extends Extension {
             [DockPosition.BOTTOM]: St.Side.TOP,
         }[this._dockPosition];
         const theme = THEMES.find(item => item.name === this._themeName) ?? THEMES[0];
-        const menu = new BrightnessMenu(button, side, theme.iconColor);
+        const menu = new BrightnessMenu(button, side, menuAccent(theme), menuSurface(theme));
+        menu.actor.add_style_class_name(`zhyprbola-menu-${theme.name}`);
         Main.uiGroup.add_child(menu.actor);
         menu.actor.hide();
         this._menuManager.addMenu(menu);
@@ -3310,7 +3322,8 @@ export default class ZhyprbolaExtension extends Extension {
             [DockPosition.BOTTOM]: St.Side.TOP,
         }[this._dockPosition];
         const theme = THEMES.find(item => item.name === this._themeName) ?? THEMES[0];
-        const menu = new BatteryMenu(button, side, theme.iconColor);
+        const menu = new BatteryMenu(button, side, menuAccent(theme), menuSurface(theme));
+        menu.actor.add_style_class_name(`zhyprbola-menu-${theme.name}`);
         Main.uiGroup.add_child(menu.actor);
         menu.actor.hide();
         this._menuManager.addMenu(menu);
@@ -3336,10 +3349,10 @@ export default class ZhyprbolaExtension extends Extension {
         menu.actor.add_style_class_name(`zhyprbola-overflow-${theme.name}`);
         menu.actor.add_style_class_name('zhyprbola-power-menu');
         menu.actor.add_style_class_name(`zhyprbola-power-${this._themeName}`);
-        menu.box.set_style(`background-color: #fafcfd; color: ${theme.iconColor};`);
+        menu.box.set_style(`background-color: ${menuSurface(theme)}; color: ${menuAccent(theme)};`);
         const addAction = (label, callback) => {
             const item = menu.addAction(label, callback);
-            this._styleOverflowAction(menu, item, theme.iconColor);
+            this._styleOverflowAction(menu, item, menuAccent(theme));
         };
         addAction('Power Off', () => this._sessionBusCall(
             'org.gnome.SessionManager', '/org/gnome/SessionManager',
