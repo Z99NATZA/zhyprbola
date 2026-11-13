@@ -18,13 +18,16 @@ Item {
     property var history: []
     property bool componentReady: false
     property bool previewing: false
+    // Typed keys stay on screen; a settings preview only borrows the display.
+    property var keptHistory: []
     readonly property string previewAppearance: [settings.fontSize, settings.paddingX,
         settings.paddingY, settings.alignment].join(":")
     onPreviewAppearanceChanged: {
         if (componentReady) {
+            if (!previewing) keptHistory = history
             previewing = true
             history = ["hello", "␣", "world"]
-            clearTimer.restart()
+            previewTimer.restart()
         }
     }
     readonly property string displayText: formatHistory(false)
@@ -55,15 +58,19 @@ Item {
         }
     }
 
+    function endPreview() {
+        if (!previewing) return
+        previewTimer.stop()
+        previewing = false
+        history = keptHistory
+        keptHistory = []
+    }
+
     function appendKey(value) {
         if (!value) return
-        if (previewing) {
-            previewing = false
-            history = []
-        }
+        endPreview()
         const next = history.concat(value)
         history = next.length > 48 ? next.slice(-48) : next
-        clearTimer.restart()
     }
 
     function escapeText(value) {
@@ -191,12 +198,9 @@ Item {
     }
 
     Timer {
-        id: clearTimer
+        id: previewTimer
         interval: 5000
-        onTriggered: {
-            visualizer.previewing = false
-            visualizer.history = []
-        }
+        onTriggered: visualizer.endPreview()
     }
 
     Timer {

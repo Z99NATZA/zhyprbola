@@ -206,16 +206,45 @@ private slots:
         QVERIFY(QMetaObject::invokeMethod(object.data(), "appendKey",
             Q_ARG(QVariant, QStringLiteral("a"))));
         QVERIFY(!object->property("previewing").toBool());
-        QCOMPARE(object->property("displayText").toString(), QStringLiteral("a"));
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("Padding testa"));
         backend.setKeyVisualizerSetting(QStringLiteral("alignment"), QStringLiteral("left"));
         QVERIFY(object->property("previewing").toBool());
         QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
         QVERIFY(QMetaObject::invokeMethod(object.data(), "appendKey",
             Q_ARG(QVariant, QStringLiteral("b"))));
-        QCOMPARE(object->property("displayText").toString(), QStringLiteral("b"));
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("Padding testab"));
         backend.setKeyVisualizerSetting(QStringLiteral("paddingY"), QStringLiteral("md"));
         QVERIFY(object->property("previewing").toBool());
         QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
+    }
+
+    void keepsTypedKeysAfterPreviewTimeout() {
+        QTemporaryDir config;
+        QVERIFY(config.isValid());
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+        const auto restoreConfig = qScopeGuard([previous] {
+            if (previous.isNull()) qunsetenv("XDG_CONFIG_HOME");
+            else qputenv("XDG_CONFIG_HOME", previous);
+        });
+        Backend backend;
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        QQmlComponent component(&engine,
+            QUrl::fromLocalFile(QFINDTESTDATA("../components/KeyVisualizer.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        for (const QString &key : {QStringLiteral("o"), QStringLiteral("k")})
+            QVERIFY(QMetaObject::invokeMethod(object.data(), "appendKey", Q_ARG(QVariant, key)));
+        backend.setKeyVisualizerSetting(QStringLiteral("alignment"), QStringLiteral("left"));
+        QVERIFY(object->property("previewing").toBool());
+        backend.setKeyVisualizerSetting(QStringLiteral("alignment"), QStringLiteral("right"));
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
+        // Well past the old five-second clear: the preview ends and typed keys remain.
+        QTest::qWait(5600);
+        QVERIFY(!object->property("previewing").toBool());
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("ok"));
     }
 
     void keepsCompactHeightStableForThaiAndSymbols() {
