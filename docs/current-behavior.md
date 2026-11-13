@@ -114,7 +114,9 @@ Unavailable audio/brightness controls are disabled; missing batteries show unava
 
 ```text
 Floating key bubble; recent keys clear after five seconds.
-Settings: font size, Padding X/Y, fit/fixed width, min/max width, and text alignment.
+Settings: font size, Padding X/Y, and text alignment.
+Drag the bubble's left or right edge to set its width (minimum 200 px); the
+cursor changes near an edge, with no visible handle. The width persists.
 
 Font, padding, or alignment changes show hello ␣ world for five seconds.
 The next typed key replaces the preview. Legacy padding initializes both axes.
@@ -239,6 +241,6 @@ tasks.json                    checklist
 task-vim-enabled              task Vim keyboard mode (default false)
 key-visualizer                appearance JSON
 
-Key JSON: fontSize, paddingX, paddingY, widthMode, minWidth, maxWidth, alignment.
+Key JSON: fontSize, paddingX, paddingY, width, alignment (old maxWidth migrates to width).
 Padding accepts sm/md/lg; legacy padding fills axes not saved separately.
 ```

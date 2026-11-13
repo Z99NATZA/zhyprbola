@@ -2028,113 +2028,6 @@ Item {
         }
     }
 
-    component WidthStepper: Rectangle {
-        id: stepper
-        required property string label
-        required property string settingKey
-        width: (panel.contentWidth - 8) / 2
-        height: panel.sidebarRowHeight
-        radius: panel.controlRadius
-        color: Theme.control
-
-        Text {
-            x: 12
-            anchors.verticalCenter: parent.verticalCenter
-            text: stepper.label
-            color: Theme.text
-            font.family: Qt.application.font.family
-            font.pixelSize: panel.controlFontSize
-            font.weight: panel.controlFontWeight
-        }
-
-        Row {
-            anchors.right: parent.right
-            anchors.rightMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 4
-
-            Repeater {
-                model: [-20, 20]
-
-                delegate: Rectangle {
-                    required property int modelData
-                    width: 26
-                    height: 26
-                    radius: panel.controlRadius
-                    color: stepMouse.containsMouse ? Theme.controlHover : Theme.selected
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: modelData < 0 ? "−" : "+"
-                        color: Theme.text
-                        font.family: Qt.application.font.family
-                        font.pixelSize: panel.controlFontSize
-                        font.weight: panel.controlFontWeight
-                    }
-
-                    MouseArea {
-                        id: stepMouse
-                        objectName: "key-width-" + stepper.settingKey
-                            + (modelData < 0 ? "-decrease" : "-increase")
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        property int heldMs: 0
-
-                        function step() {
-                            const settings = backend.keyVisualizerSettings
-                            const value = settings[stepper.settingKey] + modelData
-                            const limit = stepper.settingKey === "minWidth"
-                                ? Math.min(settings.maxWidth, Math.max(120, value))
-                                : Math.max(settings.minWidth, Math.min(1000, value))
-                            backend.setKeyVisualizerSetting(stepper.settingKey, limit)
-                        }
-
-                        onPressed: {
-                            step()
-                            heldMs = 0
-                            repeatTimer.interval = 400
-                            repeatTimer.restart()
-                        }
-                        onReleased: repeatTimer.stop()
-                        onCanceled: repeatTimer.stop()
-                        onExited: repeatTimer.stop()
-                        onVisibleChanged: if (!visible) repeatTimer.stop()
-                        onEnabledChanged: if (!enabled) repeatTimer.stop()
-
-                        Timer {
-                            id: repeatTimer
-                            repeat: true
-                            onTriggered: {
-                                if (!stepMouse.pressed || !stepMouse.containsMouse
-                                        || !stepMouse.visible || !stepMouse.enabled) {
-                                    stop()
-                                    return
-                                }
-                                stepMouse.heldMs += interval
-                                stepMouse.step()
-                                // Accelerate from ~8 to 25 steps/s as the hold continues.
-                                interval = Math.max(40,
-                                    140 - Math.floor(stepMouse.heldMs / 400) * 20)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Text {
-            anchors.right: parent.right
-            anchors.rightMargin: 73
-            anchors.verticalCenter: parent.verticalCenter
-            text: backend.keyVisualizerSettings[stepper.settingKey]
-            color: Theme.text
-            font.family: Qt.application.font.family
-            font.pixelSize: panel.controlFontSize
-            font.weight: panel.controlFontWeight
-        }
-    }
-
     Flickable {
         objectName: "key-visualizer-scroll"
         x: panel.contentX
@@ -2172,19 +2065,6 @@ Item {
                 settingKey: "paddingY"
                 options: [{key: "sm", label: "sm"}, {key: "md", label: "md"},
                     {key: "lg", label: "lg"}]
-            }
-
-            KeyChoice {
-                title: "Width"
-                settingKey: "widthMode"
-                options: [{key: "fit", label: "Fit content"},
-                    {key: "fixed", label: "Fixed max"}]
-            }
-
-            Row {
-                spacing: 8
-                WidthStepper { label: "Min"; settingKey: "minWidth" }
-                WidthStepper { label: "Max"; settingKey: "maxWidth" }
             }
 
             KeyChoice {

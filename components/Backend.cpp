@@ -36,36 +36,33 @@ QString dockConfigPath(const QString &name) {
         .filePath(QStringLiteral("zhyprbola/") + name);
 }
 
+constexpr int keyVisualizerMinimumWidth = 200;
+
 QVariantMap defaultKeyVisualizerSettings() {
     return {{QStringLiteral("fontSize"), QStringLiteral("md")},
         {QStringLiteral("paddingX"), QStringLiteral("md")},
         {QStringLiteral("paddingY"), QStringLiteral("md")},
-        {QStringLiteral("minWidth"), 180}, {QStringLiteral("maxWidth"), 480},
-        {QStringLiteral("widthMode"), QStringLiteral("fit")},
+        {QStringLiteral("width"), 480},
         {QStringLiteral("alignment"), QStringLiteral("center")}};
 }
 
 QVariantMap validatedKeyVisualizerSettings(const QJsonObject &saved) {
     QVariantMap settings = defaultKeyVisualizerSettings();
     for (const QString &key : {QStringLiteral("fontSize"), QStringLiteral("paddingX"), QStringLiteral("paddingY"),
-             QStringLiteral("widthMode"), QStringLiteral("alignment")}) {
+             QStringLiteral("alignment")}) {
         const QString value = saved.value(key).toString(
             key.startsWith(QLatin1String("padding")) ? saved.value(QStringLiteral("padding")).toString() : QString());
         const QStringList allowed = (key == QLatin1String("fontSize")
             || key.startsWith(QLatin1String("padding")))
             ? QStringList{QStringLiteral("sm"), QStringLiteral("md"), QStringLiteral("lg")}
-            : key == QLatin1String("widthMode")
-                ? QStringList{QStringLiteral("fit"), QStringLiteral("fixed")}
-                : QStringList{QStringLiteral("left"), QStringLiteral("center"), QStringLiteral("right")};
+            : QStringList{QStringLiteral("left"), QStringLiteral("center"), QStringLiteral("right")};
         if (allowed.contains(value)) settings.insert(key, value);
     }
-    for (const QString &key : {QStringLiteral("minWidth"), QStringLiteral("maxWidth")}) {
-        const int width = saved.value(key).toInt(-1);
-        if (width >= 120 && width <= 1000) settings.insert(key, width);
-    }
-    if (settings.value(QStringLiteral("minWidth")).toInt()
-        > settings.value(QStringLiteral("maxWidth")).toInt())
-        settings.insert(QStringLiteral("maxWidth"), settings.value(QStringLiteral("minWidth")));
+    // The bubble width is set by dragging its edges; older configs migrate from maxWidth.
+    const int width = saved.value(QStringLiteral("width")).toInt(
+        saved.value(QStringLiteral("maxWidth")).toInt(-1));
+    if (width > 0)
+        settings.insert(QStringLiteral("width"), std::clamp(width, keyVisualizerMinimumWidth, 16384));
     return settings;
 }
 

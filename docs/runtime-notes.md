@@ -270,8 +270,8 @@ sm:  text height + 4 px per side
 md:  default key-area height: sm font 64 px, md 78 px, lg 96 px
 lg:  default key-area height + 24 px
 
-Key width buttons change by 20 px.
-Holding starts repeat after 400 ms and accelerates to 25 steps per second.
+Key bubble width: 480 px by default, at least 200 px, no maximum.
+The left and right 8 px edge strips start a compositor resize.
 
 ```
 

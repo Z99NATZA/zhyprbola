@@ -299,9 +299,30 @@ esac
         }
         if (name == QLatin1String("key-visualizer")) {
             QTRY_VERIFY(backend.keyCaptureAvailable());
-            backend.setKeyVisualizerSetting(QStringLiteral("maxWidth"), 500);
-            backend.setKeyVisualizerSetting(QStringLiteral("widthMode"), QStringLiteral("fixed"));
+            backend.setKeyVisualizerSetting(QStringLiteral("width"), 500);
             QTRY_COMPARE(window->width(), 500);
+            QCOMPARE(window->minimumWidth(), 200);
+            QVERIFY(window->maximumWidth() > 1000);
+            QCOMPARE(window->minimumHeight(), window->maximumHeight());
+            // Repeater delegates are visual children only, so search the item tree.
+            const auto findStrip = [window](const QString &name) -> QQuickItem * {
+                for (QQuickItem *child : window->contentItem()->childItems())
+                    if (child->objectName() == name) return child;
+                return nullptr;
+            };
+            for (const QString &edge : {QStringLiteral("panel-resize-left"),
+                     QStringLiteral("panel-resize-right")}) {
+                auto *strip = findStrip(edge);
+                QVERIFY2(strip, qPrintable(edge));
+                QCOMPARE(strip->property("cursorShape").toInt(), int(Qt::SizeHorCursor));
+                QCOMPARE(strip->height(), qreal(window->height()));
+            }
+            QTRY_COMPARE(findStrip(QStringLiteral("panel-resize-right"))->x(),
+                qreal(500 - 8));
+            // A compositor-driven edge drag changes the window size; the width is saved.
+            window->resize(720, window->height());
+            QTRY_COMPARE(backend.keyVisualizerSettings().value(QStringLiteral("width")).toInt(), 720);
+            QCOMPARE(window->width(), 720);
         }
         window->hide();
         if (name == QLatin1String("key-visualizer")) QVERIFY(!backend.keyCaptureAvailable());

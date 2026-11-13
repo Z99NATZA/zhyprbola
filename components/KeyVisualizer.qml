@@ -29,9 +29,8 @@ Item {
     }
     readonly property string displayText: formatHistory(false)
     readonly property string styledText: formatHistory(true)
-    implicitWidth: settings.widthMode === "fixed" ? settings.maxWidth
-        : Math.max(showAccessPrompt ? 300 : settings.minWidth,
-            Math.min(settings.maxWidth, measure.implicitWidth + paddingX * 2))
+    readonly property int minimumWidth: showAccessPrompt ? 300 : 200
+    implicitWidth: Math.max(minimumWidth, settings.width)
     implicitHeight: keyAreaHeight + (showAccessPrompt ? 58 : 0)
     focus: true
 

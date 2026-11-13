@@ -9,6 +9,7 @@ Window {
     readonly property string panelName: requestedPanel === "tasks" || requestedPanel === "task"
         ? "todo" : requestedPanel
     readonly property bool resizablePanel: panelName === "todo"
+    readonly property bool horizontallyResizable: panelName === "key-visualizer"
     readonly property Item panelItem: panelLoader.item as Item
     property bool hostInitialized: false
     readonly property int panelWidth: {
@@ -75,10 +76,10 @@ Window {
     visible: panelLoader.status === Loader.Ready
     width: panelWidth
     height: panelHeight
-    minimumWidth: panelWidth
+    minimumWidth: horizontallyResizable && panelItem ? panelItem.minimumWidth : panelWidth
     minimumHeight: panelHeight
     // Resizable panels keep their default size as a floor but have no ceiling.
-    maximumWidth: resizablePanel ? 16777215 : panelWidth
+    maximumWidth: resizablePanel || horizontallyResizable ? 16777215 : panelWidth
     maximumHeight: resizablePanel ? 16777215 : panelHeight
     // Normal windows participate in the compositor's minimize/restore animation.
     flags: Qt.FramelessWindowHint | Qt.Window
@@ -123,6 +124,19 @@ Window {
     }
 
     onVisibilityChanged: syncActivity()
+    // A width that differs from the bound panel width came from an edge drag.
+    onWidthChanged: {
+        if (horizontallyResizable && width !== panelWidth) widthSaveTimer.restart()
+    }
+
+    Timer {
+        id: widthSaveTimer
+        interval: 150
+        onTriggered: {
+            if (host.horizontallyResizable && host.width !== host.panelWidth)
+                backend.setKeyVisualizerSetting("width", host.width)
+        }
+    }
     onActiveChanged: {
         if (active && panelName === "key-visualizer" && panelItem)
             panelItem.forceActiveFocus()
@@ -161,6 +175,26 @@ Window {
         color: "transparent"
         border.color: Theme.secondary
         border.width: 1
+    }
+
+    Repeater {
+        model: host.horizontallyResizable ? [Qt.LeftEdge, Qt.RightEdge] : []
+
+        // Invisible edge strips: only the cursor shows that the bubble can be resized.
+        MouseArea {
+            required property int modelData
+            objectName: modelData === Qt.LeftEdge ? "panel-resize-left" : "panel-resize-right"
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.left: modelData === Qt.LeftEdge ? parent.left : undefined
+            anchors.right: modelData === Qt.RightEdge ? parent.right : undefined
+            width: 8
+            z: 300
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton
+            cursorShape: Qt.SizeHorCursor
+            onPressed: host.startSystemResize(modelData)
+        }
     }
 
     Item {
