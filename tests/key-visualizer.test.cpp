@@ -183,8 +183,8 @@ private slots:
             QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
             QCOMPARE(object->property("implicitWidth").toReal(), narrowWidth);
             QVERIFY(object->property("implicitHeight").toReal() < defaultHeight);
-            QCOMPARE(object->property("implicitHeight").toReal(),
-                qCeil(display->property("implicitHeight").toReal()) + 8.0);
+            QVERIFY(object->property("implicitHeight").toReal()
+                >= qCeil(display->property("implicitHeight").toReal()) + 8.0);
             backend.setKeyVisualizerSetting(QStringLiteral("paddingX"), QStringLiteral("lg"));
             QCOMPARE(object->property("paddingX").toInt(), font == QStringLiteral("lg") ? 36 : 32);
             QCOMPARE(object->property("implicitWidth").toReal(), defaultWidth);
@@ -216,6 +216,38 @@ private slots:
         backend.setKeyVisualizerSetting(QStringLiteral("paddingY"), QStringLiteral("md"));
         QVERIFY(object->property("previewing").toBool());
         QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
+    }
+
+    void keepsCompactHeightStableForThaiAndSymbols() {
+        QTemporaryDir config;
+        QVERIFY(config.isValid());
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+        const auto restoreConfig = qScopeGuard([previous] {
+            if (previous.isNull()) qunsetenv("XDG_CONFIG_HOME");
+            else qputenv("XDG_CONFIG_HOME", previous);
+        });
+        Backend backend;
+        backend.setKeyVisualizerSetting(QStringLiteral("paddingY"), QStringLiteral("sm"));
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        QQmlComponent component(&engine,
+            QUrl::fromLocalFile(QFINDTESTDATA("../components/KeyVisualizer.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        for (const QString &font : {QStringLiteral("sm"), QStringLiteral("md"),
+                 QStringLiteral("lg")}) {
+            backend.setKeyVisualizerSetting(QStringLiteral("fontSize"), font);
+            object->setProperty("history", QVariantList{});
+            const qreal empty = object->property("implicitHeight").toReal();
+            for (const QString &typed : {QStringLiteral("hello"),
+                     QString::fromUtf8("สวัสดีปั้นจั่นกิ๊กๆ ฟ้ญู ฎุฏุ"),
+                     QString::fromUtf8("␣ ⌫ ↵ ⇥ ⌦ ← → ↑ ↓ Ctrl+k")}) {
+                object->setProperty("history", QVariantList{typed});
+                QCOMPARE(object->property("implicitHeight").toReal(), empty);
+            }
+        }
     }
 
     void widthComesFromEdgeResizeNotSettings() {

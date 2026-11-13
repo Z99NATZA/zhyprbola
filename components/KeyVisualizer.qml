@@ -217,10 +217,12 @@ Item {
         }
     }
 
+    // Compact height comes from a fixed sample, not the typed keys, so fallback
+    // fonts (Thai stacked marks, key symbols) cannot make the bubble jump.
     Text {
         id: measure
         visible: false
-        text: visualizer.displayText
+        text: "Agjy ␣⌫↵⇥⌦←→↑↓ ปั้ฟ้ญูฎุกิ๊"
         font.family: Qt.application.font.family
         font.pixelSize: visualizer.fontSize
         font.weight: Font.Medium

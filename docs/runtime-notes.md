@@ -266,7 +266,7 @@ md:  20 px per side, or 24 px with lg font
 lg:  md spacing + 12 px per side
 
 Padding Y changes top/bottom spacing without changing width:
-sm:  text height + 4 px per side
+sm:  fixed sample height (Latin, Thai marks, key symbols) + 4 px per side
 md:  default key-area height: sm font 64 px, md 78 px, lg 96 px
 lg:  default key-area height + 24 px
 
