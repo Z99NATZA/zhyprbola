@@ -47,7 +47,8 @@ Item {
         case Qt.Key_Backspace: return "⌫"
         case Qt.Key_Return:
         case Qt.Key_Enter: return "↵"
-        case Qt.Key_Tab: return "⇥"
+        case Qt.Key_Tab:
+        case Qt.Key_Backtab: return "Tab"
         case Qt.Key_Escape: return "Esc"
         case Qt.Key_Delete: return "⌦"
         case Qt.Key_Left: return "←"
@@ -117,7 +118,7 @@ Item {
     }
 
     function isSpecialKey(value) {
-        return ["␣", "⌫", "↵", "⇥", "Esc", "⌦", "←", "→",
+        return ["␣", "⌫", "↵", "Tab", "Esc", "⌦", "←", "→",
             "↑", "↓", "Home", "End", "PgUp", "PgDn"].includes(value)
     }
 
@@ -166,7 +167,7 @@ Item {
         case "Return":
         case "KP_Enter": return "↵"
         case "Tab":
-        case "ISO_Left_Tab": return "⇥"
+        case "ISO_Left_Tab": return "Tab"
         case "Escape": return "Esc"
         case "Delete": return "⌦"
         case "Left": return "←"

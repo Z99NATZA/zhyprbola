@@ -100,7 +100,7 @@ private slots:
         check({"h", "e", "l", "l", "o", "1", "!", QString::fromUtf8("ก")},
             QString::fromUtf8("hello1!ก"));
         for (const QString &key : QStringList{QString::fromUtf8("␣"), QString::fromUtf8("⌫"),
-                 QString::fromUtf8("↵"), QString::fromUtf8("⇥"), QStringLiteral("Esc"),
+                 QString::fromUtf8("↵"), QStringLiteral("Tab"), QStringLiteral("Esc"),
                  QString::fromUtf8("⌦"), QString::fromUtf8("←"), QString::fromUtf8("→"),
                  QString::fromUtf8("↑"), QString::fromUtf8("↓"), QStringLiteral("Home"),
                  QStringLiteral("End"), QStringLiteral("PgUp"), QStringLiteral("PgDn"),
@@ -396,7 +396,7 @@ private slots:
             const qreal empty = object->property("implicitHeight").toReal();
             for (const QString &typed : {QStringLiteral("hello"),
                      QString::fromUtf8("สวัสดีปั้นจั่นกิ๊กๆ ฟ้ญู ฎุฏุ"),
-                     QString::fromUtf8("␣ ⌫ ↵ ⇥ ⌦ ← → ↑ ↓ Ctrl+k")}) {
+                     QString::fromUtf8("␣ ⌫ ↵ Tab ⌦ ← → ↑ ↓ Ctrl+k")}) {
                 object->setProperty("history", QVariantList{typed});
                 QCOMPARE(object->property("implicitHeight").toReal(), empty);
             }
@@ -830,6 +830,13 @@ private slots:
             }
         }
         QVERIFY(inkPixels > 30);
+
+        object->setProperty("history", QVariantList{});
+        QTest::keyClick(&window, Qt::Key_Tab);
+        QTest::keyClick(&window, Qt::Key_Backtab, Qt::ShiftModifier);
+        QTest::keyClick(&window, Qt::Key_Tab, Qt::ControlModifier);
+        QCOMPARE(object->property("displayText").toString(),
+            QStringLiteral("Tab Tab Ctrl+Tab"));
     }
 
     void rendersCtrlShiftChords_data() {
@@ -1097,6 +1104,16 @@ private slots:
         QTest::keyClick(&window, Qt::Key_X);
         QCOMPARE(visualizer->property("displayText").toString(),
             QStringLiteral("HEADa"));
+
+        visualizer->setProperty("history", QVariantList{});
+        emit backend.globalKeyPressed(QStringLiteral("Tab"), QStringLiteral("\t"),
+            false, false, false, false);
+        emit backend.globalKeyPressed(QStringLiteral("ISO_Left_Tab"), QString(),
+            true, false, false, false);
+        emit backend.globalKeyPressed(QStringLiteral("Tab"), QStringLiteral("\t"),
+            true, true, false, false);
+        QCOMPARE(visualizer->property("displayText").toString(),
+            QStringLiteral("Tab Tab Ctrl+Shift+Tab"));
     }
 };
 
