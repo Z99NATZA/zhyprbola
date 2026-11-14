@@ -77,6 +77,7 @@ class Backend : public QObject {
     Q_PROPERTY(bool taskVimEnabled READ taskVimEnabled NOTIFY taskVimEnabledChanged)
     Q_PROPERTY(bool noteVimEnabled READ noteVimEnabled NOTIFY noteVimEnabledChanged)
     Q_PROPERTY(QString noteLastFile READ noteLastFile NOTIFY noteLastFileChanged)
+    Q_PROPERTY(QStringList noteOpenFiles READ noteOpenFiles NOTIFY noteOpenFilesChanged)
     Q_PROPERTY(QVariantMap keyVisualizerSettings READ keyVisualizerSettings NOTIFY keyVisualizerSettingsChanged)
     Q_PROPERTY(QVariantMap dateTimeSettings READ dateTimeSettings NOTIFY dateTimeSettingsChanged)
     Q_PROPERTY(QString settingsSectionRequest READ settingsSectionRequest NOTIFY settingsSectionRequestChanged)
@@ -144,6 +145,7 @@ public:
     bool taskVimEnabled() const { return m_taskVimEnabled; }
     bool noteVimEnabled() const { return m_noteVimEnabled; }
     QString noteLastFile() const { return m_noteLastFile; }
+    QStringList noteOpenFiles() const { return m_noteOpenFiles; }
     QVariantMap keyVisualizerSettings() const { return m_keyVisualizerSettings; }
     QVariantMap dateTimeSettings() const { return m_dateTimeSettings; }
     QString settingsSectionRequest() const { return m_settingsSectionRequest; }
@@ -196,6 +198,8 @@ public:
     Q_INVOKABLE void setTaskVimEnabled(bool enabled);
     Q_INVOKABLE void setNoteVimEnabled(bool enabled);
     Q_INVOKABLE void setNoteLastFile(const QString &path);
+    // Saved files open in Note tabs, restored when the panel starts.
+    Q_INVOKABLE void setNoteOpenFiles(const QStringList &paths);
     // Note file I/O: accepts local paths or file:// URLs.
     Q_INVOKABLE QVariantMap readTextFile(const QString &path) const;
     Q_INVOKABLE QString writeTextFile(const QString &path, const QString &text) const;
@@ -240,6 +244,7 @@ signals:
     void taskVimEnabledChanged();
     void noteVimEnabledChanged();
     void noteLastFileChanged();
+    void noteOpenFilesChanged();
     // path is empty when cancelled; error is set when the portal is unavailable.
     void noteFileChosen(const QString &mode, const QString &path, const QString &error);
     void keyVisualizerSettingsChanged();
@@ -391,6 +396,7 @@ private:
     bool m_taskVimEnabled = false;
     bool m_noteVimEnabled = false;
     QString m_noteLastFile;
+    QStringList m_noteOpenFiles;
     QHash<QString, QString> m_noteFileRequests;
     QFileSystemWatcher m_keyVisualizerWatcher;
     QVariantMap m_keyVisualizerSettings;

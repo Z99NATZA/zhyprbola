@@ -36,9 +36,13 @@ Item {
         property bool preview: false
         property string message: ""
         property bool messageError: false
-        // Action waiting on the unsaved-changes prompt: "new", "open", or "close".
+        // Action waiting on the unsaved-changes prompt: "close-tab" or "quit".
         property string pendingAction: ""
-        property string pendingOpenPath: ""
+
+        // Tabs: the current tab lives in the editor and the properties above;
+        // the others are snapshots in `tabs`.
+        property var tabs: []
+        property int currentTab: 0
 
         // Vim state.
         readonly property bool vimEnabled: backend.noteVimEnabled
@@ -67,8 +71,7 @@ Item {
 
         Component.onCompleted: {
             syncReadOnly()
-            const last = backend.noteLastFile
-            if (last !== "") openPath(last, true)
+            restoreTabs()
             Qt.callLater(focusEditor)
         }
 
@@ -105,12 +108,146 @@ Item {
             editor.cursorPosition = 0
             flick.contentY = 0
             backend.setNoteLastFile(path)
+            persistTabs()
+        }
+
+        // ---- Tabs ----------------------------------------------------------
+
+        function emptyTab() {
+            return {filePath: "", text: "", savedText: "", cursor: 0, undo: [], redo: [],
+                scroll: 0, preview: false, dirty: false}
+        }
+
+        function storeCurrentTab() {
+            const list = tabs.slice()
+            list[currentTab] = {filePath: filePath, text: editor.text, savedText: savedText,
+                cursor: editor.cursorPosition, undo: undoStack, redo: redoStack,
+                scroll: flick.contentY, preview: preview, dirty: dirty}
+            tabs = list
+        }
+
+        function loadTab(index) {
+            const tab = tabs[index]
+            currentTab = index
+            editor.text = tab.text
+            savedText = tab.savedText
+            dirty = tab.text !== tab.savedText
+            filePath = tab.filePath
+            undoStack = tab.undo
+            redoStack = tab.redo
+            preview = tab.preview
+            vimMode = "normal"
+            vimPending = ""
+            vimCount = ""
+            editor.cursorPosition = Math.min(tab.cursor, editor.text.length)
+            flick.contentY = tab.scroll
+            backend.setNoteLastFile(filePath)
+            focusEditor()
+        }
+
+        function switchTab(index) {
+            if (index < 0 || index >= tabs.length || index === currentTab) return
+            storeCurrentTab()
+            loadTab(index)
+        }
+
+        function nextTab(step) {
+            if (tabs.length > 1) switchTab((currentTab + step + tabs.length) % tabs.length)
+        }
+
+        function newTab() {
+            storeCurrentTab()
+            const list = tabs.slice()
+            list.splice(currentTab + 1, 0, emptyTab())
+            tabs = list
+            loadTab(currentTab + 1)
+        }
+
+        function tabPath(index) { return index === currentTab ? filePath : tabs[index].filePath }
+        function tabDirty(index) { return index === currentTab ? dirty : tabs[index].dirty }
+        function tabTitle(index) {
+            const path = tabPath(index)
+            return path === "" ? "Untitled" : path.slice(path.lastIndexOf("/") + 1)
+        }
+
+        function persistTabs() {
+            const paths = []
+            for (let index = 0; index < tabs.length; ++index) {
+                if (tabPath(index) !== "") paths.push(tabPath(index))
+            }
+            backend.setNoteOpenFiles(paths)
+        }
+
+        function restoreTabs() {
+            const last = backend.noteLastFile
+            let paths = backend.noteOpenFiles.slice()
+            if (paths.length === 0 && last !== "") paths = [last]
+            const list = []
+            let active = 0
+            for (const path of paths) {
+                const result = backend.readTextFile(path)
+                if (!result.ok) continue
+                if (result.path === last) active = list.length
+                list.push(Object.assign(emptyTab(), {filePath: result.path, text: result.text,
+                    savedText: result.text}))
+            }
+            tabs = list.length > 0 ? list : [emptyTab()]
+            loadTab(Math.min(active, tabs.length - 1))
+            persistTabs()
+        }
+
+        // Opens in a new tab, reusing an empty Untitled tab or the file's own tab.
+        function openInTab(path, quiet) {
+            const result = backend.readTextFile(path)
+            if (!result.ok) {
+                if (!quiet) showMessage("Cannot open: " + result.error, true)
+                return false
+            }
+            for (let index = 0; index < tabs.length; ++index) {
+                if (tabPath(index) === result.path) {
+                    switchTab(index)
+                    return true
+                }
+            }
+            if (filePath !== "" || editor.text !== "") newTab()
+            setDocument(result.text, result.path)
+            if (!quiet) showMessage("Opened " + fileName)
+            return true
+        }
+
+        // Closing the last tab clears it; on an empty Untitled tab it closes
+        // the panel, like the last tab of a terminal.
+        function closeTab(index) {
+            if (index === undefined) index = currentTab
+            switchTab(index)
+            if (tabs.length === 1 && filePath === "" && editor.text === "") {
+                win.closeRequested()
+                return
+            }
+            requestAction("close-tab")
+        }
+
+        function removeCurrentTab() {
+            if (tabs.length === 1) {
+                setDocument("", "")
+                return
+            }
+            const list = tabs.slice()
+            list.splice(currentTab, 1)
+            tabs = list
+            loadTab(Math.min(currentTab, list.length - 1))
+            persistTabs()
+        }
+
+        // :q semantics: close the tab, or the panel when it is the last one.
+        function quitTab() {
+            if (tabs.length > 1) removeCurrentTab()
+            else win.closeRequested()
         }
 
         // ---- File actions -------------------------------------------------
 
-        function requestAction(action, path) {
-            pendingOpenPath = path || ""
+        function requestAction(action) {
             if (dirty) {
                 pendingAction = action
                 return
@@ -118,33 +255,44 @@ Item {
             runAction(action)
         }
 
-        function closeTab() {
-            if (filePath === "" && editor.text === "") win.closeRequested()
-            else requestAction("close-tab")
-        }
-
         function runAction(action) {
             pendingAction = ""
-            if (action === "close-tab") {
-                setDocument("", "")
-            } else if (action === "new") {
-                setDocument("", "")
-                showMessage("New note")
-            } else if (action === "open") {
-                if (pendingOpenPath !== "") openPath(pendingOpenPath, false)
-                else chooseFile("open")
-            } else if (action === "close") {
-                win.closeRequested()
+            if (action === "close-tab") removeCurrentTab()
+            else if (action === "quit") quitTab()
+            else if (action === "close-window") {
+                removeCurrentTab()
+                closeWindow()
+                return
             }
-            pendingOpenPath = ""
             focusEditor()
         }
 
+        // Window ×: walk the unsaved tabs one at a time, focusing each and asking.
+        // Save or Discard closes that tab and moves to the next unsaved one;
+        // Cancel stops. With nothing unsaved left, the panel closes.
+        function closeWindow() {
+            const index = nextDirtyTab()
+            if (index < 0) {
+                win.closeRequested()
+                return
+            }
+            switchTab(index)
+            pendingAction = "close-window"
+        }
+
+        function nextDirtyTab() {
+            for (let step = 0; step < tabs.length; ++step) {
+                const index = (currentTab + step) % tabs.length
+                if (tabDirty(index)) return index
+            }
+            return -1
+        }
+
+        // Replaces the current tab's document (used by :e).
         function openPath(path, quiet) {
             const result = backend.readTextFile(path)
             if (!result.ok) {
                 if (!quiet) showMessage("Cannot open: " + result.error, true)
-                else backend.setNoteLastFile("")
                 return false
             }
             setDocument(result.text, result.path)
@@ -172,6 +320,7 @@ Item {
             if (local !== filePath) {
                 filePath = local
                 backend.setNoteLastFile(local)
+                persistTabs()
             }
             showMessage("Saved " + fileName)
             return true
@@ -199,7 +348,7 @@ Item {
                 } else if (mode === "save") {
                     if (card.writeTo(path)) card.afterSave()
                 } else {
-                    card.openPath(path, false)
+                    card.openInTab(path, false)
                 }
                 card.focusEditor()
             }
@@ -207,7 +356,6 @@ Item {
 
         function cancelPrompt() {
             pendingAction = ""
-            pendingOpenPath = ""
             focusEditor()
         }
 
@@ -459,12 +607,23 @@ Item {
                 if (argument !== "") writeTo(argument)
                 else save()
             } else if (name === "wq" || name === "x" || name === "xit") {
-                pendingAction = "close"
+                pendingAction = "quit"
                 const saved = argument !== "" ? writeTo(argument) : save()
                 if (saved) afterSave()
-            } else if (name === "q" || name === "quit") {
+            } else if (name === "q" || name === "quit" || name === "tabc" || name === "tabclose") {
                 if (dirty && !force) showMessage("No write since last change (add ! to override)", true)
-                else win.closeRequested()
+                else quitTab()
+            } else if (name === "tabnew" || name === "tabe" || name === "tabedit") {
+                if (argument !== "") {
+                    newTab()
+                    if (!openPath(argument, false)) removeCurrentTab()
+                } else {
+                    newTab()
+                }
+            } else if (name === "tabn" || name === "tabnext") {
+                nextTab(1)
+            } else if (name === "tabp" || name === "tabprevious" || name === "tabN") {
+                nextTab(-1)
             } else if (name === "e" || name === "edit") {
                 if (dirty && !force) { showMessage("No write since last change (add ! to override)", true); return }
                 if (argument !== "") openPath(argument, false)
@@ -546,6 +705,10 @@ Item {
             if (pending === "g") {
                 if (key === "g")
                     setCursor(Vim.firstNonBlank(text, hadCount ? Vim.lineStartAt(text, count - 1) : 0))
+                else if (key === "t") {
+                    if (hadCount) switchTab(count - 1)
+                    else nextTab(1)
+                } else if (key === "T") nextTab(-count)
                 return
             }
             if (pending === "d" || pending === "c" || pending === "y") {
@@ -734,11 +897,23 @@ Item {
         }
         Shortcut {
             sequences: [StandardKey.Open]
-            onActivated: card.requestAction("open")
+            onActivated: card.chooseFile("open")
         }
         Shortcut {
-            sequences: [StandardKey.New]
-            onActivated: card.requestAction("new")
+            sequences: [StandardKey.New, "Ctrl+T"]
+            onActivated: card.newTab()
+        }
+        Shortcut {
+            sequence: "Ctrl+W"
+            onActivated: card.closeTab()
+        }
+        Shortcut {
+            sequences: ["Ctrl+Tab", "Ctrl+PgDown"]
+            onActivated: card.nextTab(1)
+        }
+        Shortcut {
+            sequences: ["Ctrl+Shift+Tab", "Ctrl+Backtab", "Ctrl+PgUp"]
+            onActivated: card.nextTab(-1)
         }
 
         // ---- Layout --------------------------------------------------------
@@ -781,74 +956,160 @@ Item {
                 onDoubleClicked: card.toggleMaximized()
             }
 
-            Rectangle {
-                id: tab
-                x: 0
-                width: Math.min(tabText.implicitWidth + 82, tabBar.width - windowButtons.width - 32)
-                height: parent.height
-                color: card.tabTint
+            // Tabs scroll sideways when they outgrow the bar; + opens a new one.
+            Flickable {
+                id: tabStrip
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: Math.min(contentWidth, tabBar.width - windowButtons.width - 24)
+                contentWidth: tabRow.width
+                contentHeight: height
+                flickableDirection: Flickable.HorizontalFlick
+                boundsBehavior: Flickable.StopAtBounds
+                interactive: contentWidth > width
+                clip: true
 
-                // Only the outer corner follows the card's rounding.
-                topLeftRadius: card.cornerRadius
-
-                Text {
-                    id: tabText
-                    objectName: "note-title"
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 28
-                    anchors.rightMargin: 48
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: card.fileName
-                    elide: Text.ElideMiddle
-                    color: card.textColor
-                    font.family: "monospace"
-                    font.pixelSize: 13
+                function revealCurrent() {
+                    const tab = tabRepeater.itemAt(card.currentTab)
+                    if (!tab) return
+                    if (tab.x < contentX) contentX = tab.x
+                    else if (tab.x + tab.width > contentX + width)
+                        contentX = tab.x + tab.width - width
                 }
 
-                Rectangle {
-                    objectName: "note-dirty-dot"
-                    anchors.right: tabText.left
-                    anchors.rightMargin: 9
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 7
-                    height: 7
-                    radius: 3.5
-                    color: Theme.accent
-                    visible: card.dirty
+                Connections {
+                    target: card
+                    function onCurrentTabChanged() { Qt.callLater(tabStrip.revealCurrent) }
                 }
 
-                // Closing the tab closes the file; on an empty Untitled tab it
-                // closes the panel, like the last tab of a terminal.
-                Rectangle {
-                    id: tabClose
-                    objectName: "note-tab-close"
-                    anchors.right: parent.right
-                    anchors.rightMargin: 12
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 22
-                    height: 22
-                    radius: 6
-                    color: tabCloseMouse.containsMouse ? Theme.controlHover : "transparent"
+                WheelHandler {
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    onWheel: event => {
+                        const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
+                        tabStrip.contentX = Math.max(0, Math.min(tabStrip.contentWidth - tabStrip.width,
+                            tabStrip.contentX - delta / 2))
+                    }
+                }
 
-                    FlatIcon {
-                        anchors.centerIn: parent
-                        width: 12
-                        height: 12
-                        name: "close"
-                        ink: Theme.text
+                Row {
+                    id: tabRow
+                    height: tabStrip.height
+
+                    Repeater {
+                        id: tabRepeater
+                        model: card.tabs.length
+
+                        delegate: Rectangle {
+                            id: tabItem
+                            required property int index
+                            readonly property bool current: index === card.currentTab
+                            objectName: "note-tab-" + index
+                            width: Math.min(220, Math.max(120, tabText.implicitWidth + 82))
+                            height: tabRow.height
+                            color: current ? card.tabTint
+                                : tabMouse.containsMouse ? Qt.alpha(Theme.text, 0.04) : "transparent"
+                            // Only the outer corner follows the card's rounding.
+                            topLeftRadius: index === 0 ? card.cornerRadius : 0
+
+                            MouseArea {
+                                id: tabMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                                onClicked: mouse => {
+                                    if (mouse.button === Qt.MiddleButton) card.closeTab(tabItem.index)
+                                    else card.switchTab(tabItem.index)
+                                }
+                            }
+
+                            Text {
+                                id: tabText
+                                objectName: "note-title"
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.leftMargin: 28
+                                anchors.rightMargin: 48
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: card.tabTitle(tabItem.index)
+                                elide: Text.ElideMiddle
+                                color: tabItem.current ? card.textColor : card.dimColor
+                                font.family: "monospace"
+                                font.pixelSize: 13
+                            }
+
+                            Rectangle {
+                                objectName: "note-dirty-dot"
+                                anchors.right: tabText.left
+                                anchors.rightMargin: 9
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 7
+                                height: 7
+                                radius: 3.5
+                                color: Theme.accent
+                                visible: card.tabDirty(tabItem.index)
+                            }
+
+                            Rectangle {
+                                objectName: "note-tab-close"
+                                anchors.right: parent.right
+                                anchors.rightMargin: 12
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 22
+                                height: 22
+                                radius: width / 2
+                                color: tabCloseMouse.containsMouse ? Theme.controlHover : "transparent"
+
+                                FlatIcon {
+                                    anchors.centerIn: parent
+                                    width: 12
+                                    height: 12
+                                    name: "close"
+                                    ink: Theme.text
+                                }
+
+                                MouseArea {
+                                    id: tabCloseMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: card.closeTab(tabItem.index)
+                                }
+                            }
+                        }
                     }
 
-                    MouseArea {
-                        id: tabCloseMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: card.closeTab()
+                    Item {
+                        width: 40
+                        height: tabRow.height
+
+                        Rectangle {
+                            objectName: "note-new-tab"
+                            anchors.centerIn: parent
+                            width: 24
+                            height: 24
+                            radius: width / 2
+                            color: newTabMouse.containsMouse ? Theme.controlHover : "transparent"
+
+                            FlatIcon {
+                                anchors.centerIn: parent
+                                width: 14
+                                height: 14
+                                name: "add"
+                                ink: Theme.text
+                            }
+
+                            MouseArea {
+                                id: newTabMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: card.newTab()
+                            }
+                        }
                     }
                 }
             }
-
 
             Row {
                 id: windowButtons
@@ -870,7 +1131,7 @@ Item {
                 WindowButton {
                     objectName: "note-close"
                     glyph: "close"
-                    onClicked: win.closeRequested()
+                    onClicked: card.closeWindow()
                 }
             }
         }
@@ -1125,13 +1386,13 @@ Item {
                 objectName: "note-new"
                 text: "New"
                 shortcut: "Ctrl+N"
-                onTriggered: card.requestAction("new")
+                onTriggered: card.newTab()
             }
             NoteMenuItem {
                 objectName: "note-open"
                 text: "Open"
                 shortcut: "Ctrl+O"
-                onTriggered: card.requestAction("open")
+                onTriggered: card.chooseFile("open")
             }
             NoteMenuItem {
                 objectName: "note-save"
@@ -1148,8 +1409,8 @@ Item {
             NoteMenuItem {
                 objectName: "note-preview"
                 text: card.preview ? "Edit markdown" : "Preview markdown"
-                visible: card.isMarkdown
-                height: visible ? implicitHeight : 0
+                // Always listed; only Markdown files can be previewed.
+                enabled: card.isMarkdown
                 onTriggered: card.preview = !card.preview
             }
 
@@ -1286,6 +1547,8 @@ Item {
         hoverEnabled: true
 
         contentItem: Item {
+            opacity: menuItem.enabled ? 1 : 0.35
+
             Text {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
@@ -1305,7 +1568,7 @@ Item {
         }
         background: Rectangle {
             radius: 7
-            color: menuItem.hovered ? Theme.controlHover : "transparent"
+            color: menuItem.hovered && menuItem.enabled ? Theme.controlHover : "transparent"
         }
     }
 

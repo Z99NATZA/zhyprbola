@@ -30,6 +30,22 @@ class NoteVimTest : public QObject {
     void escape() { QTest::keyClick(window.get(), Qt::Key_Escape); }
     void enter() { QTest::keyClick(window.get(), Qt::Key_Return); }
     QString filePath(const QString &name) const { return files->filePath(name); }
+    int tabCount() const { return card->property("tabs").toList().size(); }
+    // Repeater delegates are only reachable through the visual item tree.
+    static QQuickItem *findItem(QQuickItem *root, const QString &name) {
+        if (!root) return nullptr;
+        if (root->objectName() == name) return root;
+        for (QQuickItem *child : root->childItems()) {
+            if (QQuickItem *found = findItem(child, name)) return found;
+        }
+        return nullptr;
+    }
+    QQuickItem *item(const QString &name) const { return findItem(window->contentItem(), name); }
+    void click(QQuickItem *target) {
+        QTest::qWait(30); // let positioners lay out new tabs before hit-testing
+        QTest::mouseClick(window.get(), Qt::LeftButton, Qt::NoModifier,
+            target->mapToScene(QPointF(target->width() / 2, target->height() / 2)).toPoint());
+    }
     QString readFile(const QString &path) const {
         QFile file(path);
         return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
@@ -125,10 +141,10 @@ private slots:
         QTest::keyClick(window.get(), Qt::Key_S, Qt::ControlModifier);
         QCOMPARE(readFile(path), "hello world");
 
-        // A new note asks before discarding unsaved edits.
+        // Closing a tab with unsaved edits asks first; Esc cancels.
         keys("!");
-        QVERIFY(QMetaObject::invokeMethod(card, "requestAction", Q_ARG(QVariant, "new"), Q_ARG(QVariant, "")));
-        QCOMPARE(card->property("pendingAction").toString(), "new");
+        QVERIFY(QMetaObject::invokeMethod(card, "closeTab", Q_ARG(QVariant, 0)));
+        QCOMPARE(card->property("pendingAction").toString(), "close-tab");
         auto *prompt = panel->findChild<QQuickItem *>("note-unsaved-prompt");
         QVERIFY(prompt);
         QTRY_VERIFY(prompt->hasActiveFocus());
@@ -137,17 +153,84 @@ private slots:
         QVERIFY(!prompt->isVisible());
         QVERIFY(editor->hasActiveFocus());
         QCOMPARE(text(), "hello world!");
-        QVERIFY(QMetaObject::invokeMethod(card, "requestAction", Q_ARG(QVariant, "new"), Q_ARG(QVariant, "")));
-        QVERIFY(QMetaObject::invokeMethod(card, "runAction", Q_ARG(QVariant, "new")));
+
+        // Ctrl+N opens a new tab and keeps the edited one.
+        QTest::keyClick(window.get(), Qt::Key_N, Qt::ControlModifier);
+        QCOMPARE(tabCount(), 2);
+        QCOMPARE(card->property("currentTab").toInt(), 1);
         QCOMPARE(text(), QString());
         QCOMPARE(card->property("filePath").toString(), QString());
 
-        // The last file is reopened when the panel starts.
-        backend->setNoteLastFile(path);
+        // Saved tabs reopen when the panel starts.
         QQmlComponent component(engine.get(), QUrl::fromLocalFile(QFINDTESTDATA("../components/Note.qml")));
         QScopedPointer<QObject> reopened(component.create());
         auto *reopenedEditor = reopened->findChild<QQuickItem *>("note-editor");
         QCOMPARE(reopenedEditor->property("text").toString(), "hello world");
+    }
+
+    void multipleTabs() {
+        const QString first = filePath("first.md");
+        const QString second = filePath("second.txt");
+        writeFile(first, "first file");
+        writeFile(second, "second file");
+        QVariant opened;
+        QVERIFY(QMetaObject::invokeMethod(card, "openInTab", Q_RETURN_ARG(QVariant, opened),
+            Q_ARG(QVariant, first), Q_ARG(QVariant, true)));
+        // The empty Untitled tab is reused for the first file.
+        QCOMPARE(tabCount(), 1);
+        QCOMPARE(text(), "first file");
+        editor->forceActiveFocus();
+        keys("X");
+        QVERIFY(QMetaObject::invokeMethod(card, "openInTab", Q_RETURN_ARG(QVariant, opened),
+            Q_ARG(QVariant, second), Q_ARG(QVariant, true)));
+        QCOMPARE(tabCount(), 2);
+        QCOMPARE(card->property("currentTab").toInt(), 1);
+        QCOMPARE(text(), "second file");
+        QCOMPARE(backend->noteOpenFiles(), QStringList({first, second}));
+
+        // The first tab keeps its unsaved edit and shows the dot.
+        auto *firstTab = item("note-tab-0");
+        QVERIFY(firstTab);
+        auto *firstDot = findItem(firstTab, "note-dirty-dot");
+        QVERIFY(firstDot && firstDot->isVisible());
+        click(firstTab);
+        QCOMPARE(card->property("currentTab").toInt(), 0);
+        QCOMPARE(text(), "Xfirst file");
+        QVERIFY(card->property("dirty").toBool());
+
+        // Opening an already-open file switches to its tab.
+        QVERIFY(QMetaObject::invokeMethod(card, "openInTab", Q_RETURN_ARG(QVariant, opened),
+            Q_ARG(QVariant, second), Q_ARG(QVariant, true)));
+        QCOMPARE(tabCount(), 2);
+        QCOMPARE(card->property("currentTab").toInt(), 1);
+
+        // Ctrl+Tab cycles; the + button adds a tab after the current one.
+        QTest::keyClick(window.get(), Qt::Key_Tab, Qt::ControlModifier);
+        QCOMPARE(card->property("currentTab").toInt(), 0);
+        auto *plus = item("note-new-tab");
+        QVERIFY(plus);
+        click(plus);
+        QCOMPARE(tabCount(), 3);
+        QCOMPARE(card->property("currentTab").toInt(), 1);
+
+        // Vim gt/gT and :q close the tab, not the panel.
+        enableVim();
+        keys("gt");
+        QCOMPARE(card->property("currentTab").toInt(), 2);
+        QCOMPARE(text(), "second file");
+        keys("gT");
+        QCOMPARE(card->property("currentTab").toInt(), 1);
+        QSignalSpy closed(panel.data(), SIGNAL(closeRequested()));
+        keys(":q"); enter();
+        QCOMPARE(tabCount(), 2);
+        QCOMPARE(closed.count(), 0);
+        QCOMPARE(text(), "second file");
+
+        // Ctrl+W on a clean tab closes it without asking.
+        QTest::keyClick(window.get(), Qt::Key_W, Qt::ControlModifier);
+        QCOMPARE(tabCount(), 1);
+        QCOMPARE(text(), "Xfirst file");
+        QCOMPARE(backend->noteOpenFiles(), QStringList({first}));
     }
 
     void contextMenuTogglesVimAndPersists() {
@@ -161,6 +244,10 @@ private slots:
         QVERIFY(row && on && off);
         QVERIFY(off->property("active").toBool());
         QVERIFY(!on->property("active").toBool());
+        // Preview is always listed but disabled for non-Markdown files.
+        auto *preview = item("note-preview");
+        QVERIFY(preview && preview->isVisible() && preview->height() > 0);
+        QVERIFY(!preview->isEnabled());
         // Vim is the last entry, after Save as.
         auto *saveAs = panel->findChild<QQuickItem *>("note-save-as");
         QVERIFY(saveAs);
@@ -179,7 +266,7 @@ private slots:
     }
 
     void contextMenuSavesAndMarksDirty() {
-        auto *dot = panel->findChild<QQuickItem *>("note-dirty-dot");
+        auto *dot = item("note-dirty-dot");
         QVERIFY(dot);
         QVERIFY(!dot->isVisible());
         load("saved");
@@ -196,7 +283,7 @@ private slots:
     }
 
     void tabCloseClosesFileThenPanel() {
-        auto *close = panel->findChild<QQuickItem *>("note-tab-close");
+        auto *close = item("note-tab-close");
         QVERIFY(close);
         QVERIFY(panel->findChild<QQuickItem *>("note-close"));
         const QPoint center = close->mapToScene(QPointF(close->width() / 2, close->height() / 2)).toPoint();
@@ -210,6 +297,60 @@ private slots:
         QCOMPARE(card->property("fileName").toString(), "Untitled");
         QCOMPARE(closed.count(), 0);
         QTest::mouseClick(window.get(), Qt::LeftButton, Qt::NoModifier, center);
+        QCOMPARE(closed.count(), 1);
+    }
+
+    void windowCloseAsksForEachUnsavedTab() {
+        const QString a = filePath("a.txt"), b = filePath("b.txt"), c = filePath("c.txt");
+        writeFile(a, "a");
+        writeFile(b, "b");
+        writeFile(c, "c");
+        QVariant opened;
+        for (const QString &path : {a, b, c})
+            QVERIFY(QMetaObject::invokeMethod(card, "openInTab", Q_RETURN_ARG(QVariant, opened),
+                Q_ARG(QVariant, path), Q_ARG(QVariant, true)));
+        QCOMPARE(tabCount(), 3);
+        // Edit a and c; b stays clean.
+        QVERIFY(QMetaObject::invokeMethod(card, "switchTab", Q_ARG(QVariant, 0)));
+        editor->forceActiveFocus();
+        keys("1");
+        QVERIFY(QMetaObject::invokeMethod(card, "switchTab", Q_ARG(QVariant, 2)));
+        editor->forceActiveFocus();
+        keys("3");
+        QVERIFY(QMetaObject::invokeMethod(card, "switchTab", Q_ARG(QVariant, 1)));
+
+        QSignalSpy closed(panel.data(), SIGNAL(closeRequested()));
+        auto *close = item("note-close");
+        QVERIFY(close);
+        click(close);
+        // The next unsaved tab after the current one (c) is focused first.
+        QCOMPARE(card->property("pendingAction").toString(), "close-window");
+        QCOMPARE(card->property("fileName").toString(), "c.txt");
+        auto *prompt = item("note-unsaved-prompt");
+        QVERIFY(prompt);
+        // Save writes c and closes its tab, then a is asked about.
+        QVERIFY(QMetaObject::invokeMethod(card, "save"));
+        QVERIFY(QMetaObject::invokeMethod(card, "afterSave"));
+        QCOMPARE(readFile(c), "3c");
+        QCOMPARE(tabCount(), 2);
+        QCOMPARE(card->property("fileName").toString(), "a.txt");
+        QCOMPARE(card->property("pendingAction").toString(), "close-window");
+        QCOMPARE(closed.count(), 0);
+        // Discard drops a's edit, closes its tab, and with nothing unsaved the panel closes.
+        QVERIFY(QMetaObject::invokeMethod(card, "runAction", Q_ARG(QVariant, "close-window")));
+        QCOMPARE(readFile(a), "a");
+        QCOMPARE(tabCount(), 1);
+        QCOMPARE(card->property("fileName").toString(), "b.txt");
+        QCOMPARE(closed.count(), 1);
+
+        // Cancel stops without closing anything.
+        editor->forceActiveFocus();
+        keys("2");
+        click(close);
+        QCOMPARE(card->property("pendingAction").toString(), "close-window");
+        escape();
+        QCOMPARE(card->property("pendingAction").toString(), QString());
+        QCOMPARE(tabCount(), 1);
         QCOMPARE(closed.count(), 1);
     }
 

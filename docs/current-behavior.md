@@ -164,30 +164,39 @@ With Vim off, text fields keep their standard typing and Escape behavior.
 ## Note
 
 ```text
-Plain-text editor for .txt and .md files, laid out like a terminal window: a tab
-strip shows the file name (a dot marks unsaved edits) and a close ×, with
-minimize, maximize, and close buttons on the right. The tab × closes the file
-(asking to save unsaved edits); on an empty Untitled tab it closes the panel.
-The editor fills the rest.
-Drag the strip to move the window; double-click it to maximize.
+Plain-text editor for .txt and .md files, laid out like a terminal window. The
+tab strip shows one tab per file (a dot marks unsaved edits) with a close × on
+each, a + after the last tab, and minimize, maximize, and close buttons on the
+right. Tabs scroll sideways when they outgrow the bar. Drag the empty strip to
+move the window; double-click it to maximize.
 
-Right-click opens the menu: New, Open, Save, and Save as (Ctrl+N, Ctrl+O,
-Ctrl+S, Ctrl+Shift+S); Markdown files add Preview markdown; "Vim: on off" comes
-last (the inactive choice is faded) and clicking it toggles Vim without closing
-the menu. Open and Save use GNOME's own file chooser through xdg-desktop-portal
-(D-Bus, no extra package); Qt's dialog is only a fallback when the portal is
-unavailable. Untitled notes open the save chooser (Markdown or Text; a name
-without an extension gets the selected filter's). New/Open on unsaved edits asks
-to Save, Discard, or Cancel (Esc cancels). Writes are atomic (QSaveFile); files
-over 8 MB are refused. The last opened or saved file reopens when the panel
-starts.
+Tabs: click to switch, middle-click or × to close. Closing a tab with unsaved
+edits asks Save, Discard, or Cancel (Esc cancels). Closing the last tab clears
+it; on an empty Untitled tab it closes the panel. The window × walks the unsaved
+tabs one at a time: it focuses each and asks; Save or Discard closes that tab and
+moves to the next unsaved one, Cancel stops, and the panel closes once nothing
+unsaved is left. Open reuses an empty Untitled tab, switches to a file that is
+already open, and otherwise opens a new tab. Open tabs (note-open-files) and the
+active one (note-last-file) are restored when the panel starts.
+Keys: Ctrl+N/Ctrl+T new tab, Ctrl+W close tab, Ctrl+Tab/Ctrl+PgDown next,
+Ctrl+Shift+Tab/Ctrl+PgUp previous, Ctrl+O open, Ctrl+S save, Ctrl+Shift+S save as.
+
+Right-click opens the menu: New, Open, Save, Save as, and Preview markdown
+(always listed, disabled unless the file is Markdown); "Vim: on off" comes last (the inactive choice is faded) and
+clicking it toggles Vim without closing the menu. Open and Save use GNOME's own
+file chooser through xdg-desktop-portal (D-Bus, no extra package); Qt's dialog
+is only a fallback when the portal is unavailable. Untitled notes open the save
+chooser (Markdown or Text; a name without an extension gets the selected
+filter's). Writes are atomic (QSaveFile); files over 8 MB are refused.
 
 The Vim setting is separate from Tasks and remembers its state (note-vim-enabled).
 With Vim on, a status line shows the mode in color (-- NORMAL -- blue, -- INSERT --
 green, -- REPLACE -- red, -- COMMAND -- orange), messages or path, and line:column.
 Normal: h j k l, w b e, 0 ^ $, gg G {n}G, counts, i a I A o O, x X s S C D J ~,
-r R, dd cc yy, d/c/y with w e b $ 0 j k G iw aw, p P, u, Ctrl+R, / ? n N.
-Ex: :w [path], :q, :q!, :wq, :x, :e [path], :e!, :enew, :{line}.
+r R, dd cc yy, d/c/y with w e b $ 0 j k G iw aw, p P, u, Ctrl+R, / ? n N,
+gt gT {n}gt.
+Ex: :w [path], :q, :q!, :wq, :x, :e [path], :e!, :enew, :{line}, :tabnew [path],
+:tabn, :tabp, :tabc. :q and :wq close the tab, or the panel on the last tab.
 Normal mode is read-only, so input methods cannot insert text by accident.
 ```
 

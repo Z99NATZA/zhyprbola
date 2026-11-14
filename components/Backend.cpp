@@ -673,6 +673,12 @@ Backend::Backend(QObject *parent, const QString &panelName) : QObject(parent) {
     QFile noteFile(dockConfigPath(QStringLiteral("note-last-file")));
     if (noteFile.open(QIODevice::ReadOnly))
         m_noteLastFile = QString::fromUtf8(noteFile.readAll()).trimmed();
+    QFile noteOpenFile(dockConfigPath(QStringLiteral("note-open-files")));
+    if (noteOpenFile.open(QIODevice::ReadOnly)) {
+        for (const QString &line : QString::fromUtf8(noteOpenFile.readAll()).split(QLatin1Char('\n'))) {
+            if (!line.trimmed().isEmpty()) m_noteOpenFiles.append(line.trimmed());
+        }
+    }
 
     m_location = qEnvironmentVariable("ZHYPRBOLA_LOCATION", "Bangkok");
     m_userName = qEnvironmentVariable("USER", "User");
@@ -1573,6 +1579,18 @@ void Backend::setNoteLastFile(const QString &path) {
         || !writeDockConfig(QStringLiteral("note-last-file"), local)) return;
     m_noteLastFile = local;
     emit noteLastFileChanged();
+}
+
+void Backend::setNoteOpenFiles(const QStringList &paths) {
+    QStringList files;
+    for (const QString &path : paths) {
+        const QString local = localFilePath(path);
+        if (!local.isEmpty() && !files.contains(local)) files.append(local);
+    }
+    if (files == m_noteOpenFiles
+        || !writeDockConfig(QStringLiteral("note-open-files"), files.join(QLatin1Char('\n')))) return;
+    m_noteOpenFiles = files;
+    emit noteOpenFilesChanged();
 }
 
 QString Backend::localFilePath(const QString &pathOrUrl) const {
