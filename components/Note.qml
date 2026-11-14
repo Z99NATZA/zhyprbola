@@ -1,0 +1,1390 @@
+import QtCore
+import QtQuick
+import QtQuick.Window
+import QtQuick.Controls as Controls
+import QtQuick.Dialogs
+import "NoteVim.js" as Vim
+
+Item {
+    id: win
+
+    signal closeRequested()
+
+    implicitWidth: 560
+    implicitHeight: 460
+    width: 560
+    height: 460
+
+    Item {
+        id: card
+        objectName: "note-card"
+        anchors.fill: parent
+
+        property color textColor: Theme.text
+        property color dimColor: Qt.alpha(textColor, 0.72)
+        property color surfaceColor: Theme.componentSurfaceFor("note")
+        property real cornerRadius: 14
+        readonly property string family: Qt.application.font.family
+
+        // Document state.
+        property string filePath: ""
+        property string savedText: ""
+        property bool dirty: false
+        readonly property string fileName: filePath === "" ? "Untitled"
+            : filePath.slice(filePath.lastIndexOf("/") + 1)
+        readonly property bool isMarkdown: /\.(md|markdown)$/i.test(filePath)
+        property bool preview: false
+        property string message: ""
+        property bool messageError: false
+        // Action waiting on the unsaved-changes prompt: "new", "open", or "close".
+        property string pendingAction: ""
+        property string pendingOpenPath: ""
+
+        // Vim state.
+        readonly property bool vimEnabled: backend.noteVimEnabled
+        property string vimMode: "normal"
+        property string vimPending: ""
+        property string vimCount: ""
+        property int goalColumn: 0
+        property var vimRegister: ({text: "", linewise: false})
+        property var undoStack: []
+        property var redoStack: []
+        property var replaceHistory: []
+        property string lastSearch: ""
+        readonly property bool normalMode: vimEnabled && vimMode !== "insert" && vimMode !== "replace"
+
+        readonly property int cursorLine: Vim.lineIndex(editor.text, editor.cursorPosition) + 1
+        readonly property int cursorColumn: Vim.column(editor.text, editor.cursorPosition) + 1
+
+        // TextEdit moves its cursor to the end whenever readOnly flips, so
+        // switch it here and keep the Vim cursor where it was.
+        onNormalModeChanged: syncReadOnly()
+        function syncReadOnly() {
+            const position = editor.cursorPosition
+            editor.readOnly = normalMode
+            editor.cursorPosition = position
+        }
+
+        Component.onCompleted: {
+            syncReadOnly()
+            const last = backend.noteLastFile
+            if (last !== "") openPath(last, true)
+            Qt.callLater(focusEditor)
+        }
+
+        onVimEnabledChanged: {
+            vimMode = "normal"
+            vimPending = ""
+            vimCount = ""
+            if (vimEnabled) editor.cursorPosition = Vim.normalPosition(editor.text, editor.cursorPosition)
+            focusEditor()
+        }
+
+        function focusEditor() {
+            if (vimMode === "command") commandInput.forceActiveFocus()
+            else editor.forceActiveFocus()
+        }
+
+        function showMessage(text, error) {
+            message = text
+            messageError = Boolean(error)
+            messageTimer.restart()
+        }
+
+        function setDocument(text, path) {
+            editor.text = text
+            savedText = text
+            dirty = false
+            filePath = path
+            undoStack = []
+            redoStack = []
+            vimMode = "normal"
+            vimPending = ""
+            vimCount = ""
+            preview = false
+            editor.cursorPosition = 0
+            flick.contentY = 0
+            backend.setNoteLastFile(path)
+        }
+
+        // ---- File actions -------------------------------------------------
+
+        function requestAction(action, path) {
+            pendingOpenPath = path || ""
+            if (dirty) {
+                pendingAction = action
+                return
+            }
+            runAction(action)
+        }
+
+        function closeTab() {
+            if (filePath === "" && editor.text === "") win.closeRequested()
+            else requestAction("close-tab")
+        }
+
+        function runAction(action) {
+            pendingAction = ""
+            if (action === "close-tab") {
+                setDocument("", "")
+            } else if (action === "new") {
+                setDocument("", "")
+                showMessage("New note")
+            } else if (action === "open") {
+                if (pendingOpenPath !== "") openPath(pendingOpenPath, false)
+                else chooseFile("open")
+            } else if (action === "close") {
+                win.closeRequested()
+            }
+            pendingOpenPath = ""
+            focusEditor()
+        }
+
+        function openPath(path, quiet) {
+            const result = backend.readTextFile(path)
+            if (!result.ok) {
+                if (!quiet) showMessage("Cannot open: " + result.error, true)
+                else backend.setNoteLastFile("")
+                return false
+            }
+            setDocument(result.text, result.path)
+            if (!quiet) showMessage("Opened " + fileName)
+            return true
+        }
+
+        function save() {
+            if (filePath === "") {
+                chooseFile("save")
+                return false
+            }
+            return writeTo(filePath)
+        }
+
+        function writeTo(path) {
+            const local = backend.localFilePath(path)
+            const error = backend.writeTextFile(local, editor.text)
+            if (error !== "") {
+                showMessage("Cannot save: " + error, true)
+                return false
+            }
+            savedText = editor.text
+            dirty = false
+            if (local !== filePath) {
+                filePath = local
+                backend.setNoteLastFile(local)
+            }
+            showMessage("Saved " + fileName)
+            return true
+        }
+
+        // GNOME's own chooser via xdg-desktop-portal; Qt's dialog is only a fallback.
+        property bool choosingFile: false
+        function chooseFile(mode) {
+            if (choosingFile) return
+            choosingFile = true
+            backend.chooseNoteFile(mode, filePath)
+        }
+
+        Connections {
+            target: backend
+            function onNoteFileChosen(mode, path, error) {
+                card.choosingFile = false
+                if (error !== "") {
+                    if (mode === "save") saveDialog.open()
+                    else openDialog.open()
+                    return
+                }
+                if (path === "") {
+                    if (mode === "save") card.pendingAction = ""
+                } else if (mode === "save") {
+                    if (card.writeTo(path)) card.afterSave()
+                } else {
+                    card.openPath(path, false)
+                }
+                card.focusEditor()
+            }
+        }
+
+        function cancelPrompt() {
+            pendingAction = ""
+            pendingOpenPath = ""
+            focusEditor()
+        }
+
+        function afterSave() {
+            if (pendingAction !== "") runAction(pendingAction)
+        }
+
+        function folderOf(path) {
+            return path === "" ? StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+                : "file://" + path.slice(0, path.lastIndexOf("/"))
+        }
+
+        // ---- Vim editing ---------------------------------------------------
+
+        function pushUndo() {
+            const stack = undoStack.slice()
+            stack.push({text: editor.text, cursor: editor.cursorPosition})
+            if (stack.length > 200) stack.shift()
+            undoStack = stack
+            redoStack = []
+        }
+
+        function restore(from, to) {
+            if (from.length === 0) return false
+            const source = from.slice()
+            const target = to.slice()
+            const state = source.pop()
+            target.push({text: editor.text, cursor: editor.cursorPosition})
+            editor.text = state.text
+            editor.cursorPosition = Vim.normalPosition(editor.text, state.cursor)
+            return {source: source, target: target}
+        }
+
+        function undo() {
+            const result = restore(undoStack, redoStack)
+            if (!result) { showMessage("Already at oldest change"); return }
+            undoStack = result.source
+            redoStack = result.target
+        }
+
+        function redo() {
+            const result = restore(redoStack, undoStack)
+            if (!result) { showMessage("Already at newest change"); return }
+            redoStack = result.source
+            undoStack = result.target
+        }
+
+        function setCursor(position, keepGoal) {
+            editor.cursorPosition = Vim.normalPosition(editor.text, position)
+            if (!keepGoal) goalColumn = Vim.column(editor.text, editor.cursorPosition)
+        }
+
+        function beginInsert(position, recorded) {
+            if (!recorded) pushUndo()
+            vimMode = "insert"
+            vimPending = ""
+            vimCount = ""
+            editor.cursorPosition = position
+        }
+
+        function leaveInsert() {
+            const text = editor.text
+            let position = editor.cursorPosition
+            if (position > Vim.lineStart(text, position))
+                position = Vim.previousCharacter(text, position)
+            vimMode = "normal"
+            replaceHistory = []
+            setCursor(position)
+        }
+
+        function applyOperator(op, start, end) {
+            if (end <= start) return
+            vimRegister = {text: editor.text.slice(start, end), linewise: false}
+            if (op === "y") { setCursor(start); return }
+            pushUndo()
+            editor.remove(start, end)
+            if (op === "c") beginInsert(start, true)
+            else setCursor(start)
+        }
+
+        function applyLineOperator(op, count) {
+            const text = editor.text
+            const range = Vim.lineRange(text, editor.cursorPosition, count)
+            vimRegister = {text: range.text, linewise: true}
+            if (op === "y") { showMessage(count + (count === 1 ? " line" : " lines") + " yanked"); return }
+            pushUndo()
+            if (op === "c") {
+                const indentEnd = Vim.firstNonBlankRaw(text, range.start)
+                editor.remove(indentEnd, range.end)
+                beginInsert(indentEnd, true)
+                return
+            }
+            editor.remove(range.removeStart, range.removeEnd)
+            setCursor(Vim.firstNonBlank(editor.text, Math.min(range.removeStart, editor.text.length)))
+        }
+
+        function paste(after, count) {
+            const reg = vimRegister
+            if (reg.text === "") return
+            pushUndo()
+            const text = editor.text
+            const cursor = editor.cursorPosition
+            const repeated = reg.text.repeat(count)
+            if (reg.linewise) {
+                if (!after) {
+                    const start = Vim.lineStart(text, cursor)
+                    editor.insert(start, repeated)
+                    setCursor(Vim.firstNonBlank(editor.text, start))
+                } else {
+                    const end = Vim.lineEnd(text, cursor)
+                    if (end < text.length) {
+                        editor.insert(end + 1, repeated)
+                    } else {
+                        editor.insert(end, "\n" + repeated.slice(0, -1))
+                    }
+                    setCursor(Vim.firstNonBlank(editor.text, end + 1))
+                }
+                return
+            }
+            const lineEmpty = Vim.lineStart(text, cursor) === Vim.lineEnd(text, cursor)
+            const at = after && !lineEmpty ? Vim.nextCharacter(text, cursor) : cursor
+            editor.insert(at, repeated)
+            setCursor(at + repeated.length - 1)
+        }
+
+        function deleteCharacters(count, before) {
+            const text = editor.text
+            const cursor = editor.cursorPosition
+            const start = Vim.lineStart(text, cursor)
+            const end = Vim.lineEnd(text, cursor)
+            let from = cursor
+            let to = cursor
+            if (before) {
+                for (let i = 0; i < count && from > start; ++i) from = Vim.previousCharacter(text, from)
+            } else {
+                for (let i = 0; i < count && to < end; ++i) to = Vim.nextCharacter(text, to)
+            }
+            if (to <= from) return
+            pushUndo()
+            vimRegister = {text: text.slice(from, to), linewise: false}
+            editor.remove(from, to)
+            setCursor(from)
+        }
+
+        function joinLines(count) {
+            pushUndo()
+            for (let i = 0; i < Math.max(1, count - 1); ++i) {
+                const text = editor.text
+                const end = Vim.lineEnd(text, editor.cursorPosition)
+                if (end >= text.length) break
+                let next = end + 1
+                while (next < text.length && (text[next] === " " || text[next] === "\t")) next += 1
+                const trailing = end > Vim.lineStart(text, end) && /\s/.test(text[end - 1])
+                const joiner = next < text.length && text[next] !== "\n" && end > Vim.lineStart(text, end)
+                    && !trailing ? " " : ""
+                editor.remove(end, next)
+                editor.insert(end, joiner)
+                editor.cursorPosition = end
+            }
+            setCursor(editor.cursorPosition)
+        }
+
+        function toggleCase(count) {
+            const text = editor.text
+            const cursor = editor.cursorPosition
+            const end = Vim.lineEnd(text, cursor)
+            let to = cursor
+            for (let i = 0; i < count && to < end; ++i) to = Vim.nextCharacter(text, to)
+            if (to <= cursor) return
+            pushUndo()
+            let swapped = ""
+            for (const ch of text.slice(cursor, to))
+                swapped += ch === ch.toUpperCase() ? ch.toLowerCase() : ch.toUpperCase()
+            editor.remove(cursor, to)
+            editor.insert(cursor, swapped)
+            setCursor(to < end ? to : Vim.previousCharacter(editor.text, to))
+        }
+
+        function replaceCharacters(character, count) {
+            const text = editor.text
+            const cursor = editor.cursorPosition
+            const end = Vim.lineEnd(text, cursor)
+            let to = cursor
+            for (let i = 0; i < count && to < end; ++i) to = Vim.nextCharacter(text, to)
+            if (to <= cursor) return
+            pushUndo()
+            editor.remove(cursor, to)
+            editor.insert(cursor, character.repeat(count))
+            setCursor(cursor + character.length * (count - 1))
+        }
+
+        function replaceTyped(character) {
+            const text = editor.text
+            const cursor = editor.cursorPosition
+            const end = Vim.lineEnd(text, cursor)
+            const next = cursor < end ? Vim.nextCharacter(text, cursor) : cursor
+            const history = replaceHistory.slice()
+            history.push({position: cursor, removed: text.slice(cursor, next), inserted: character})
+            replaceHistory = history
+            editor.remove(cursor, next)
+            editor.insert(cursor, character)
+            editor.cursorPosition = cursor + character.length
+        }
+
+        function search(forward) {
+            if (lastSearch === "") { showMessage("No previous search", true); return }
+            const text = editor.text
+            const index = forward ? Vim.findForward(text, lastSearch, editor.cursorPosition)
+                : Vim.findBackward(text, lastSearch, editor.cursorPosition)
+            if (index < 0) { showMessage("Pattern not found: " + lastSearch, true); return }
+            setCursor(index)
+        }
+
+        function openCommandLine(prefix) {
+            vimMode = "command"
+            commandPrefix.text = prefix
+            commandInput.text = ""
+            commandInput.forceActiveFocus()
+        }
+
+        function closeCommandLine() {
+            vimMode = "normal"
+            editor.forceActiveFocus()
+        }
+
+        function runCommandLine() {
+            const prefix = commandPrefix.text
+            const input = commandInput.text.trim()
+            closeCommandLine()
+            if (prefix === "/" || prefix === "?") {
+                if (input !== "") lastSearch = input
+                search(prefix === "/")
+                return
+            }
+            runExCommand(input)
+        }
+
+        function runExCommand(input) {
+            if (input === "") return
+            if (/^\d+$/.test(input)) {
+                setCursor(Vim.firstNonBlank(editor.text, Vim.lineStartAt(editor.text, parseInt(input) - 1)))
+                return
+            }
+            const match = input.match(/^(\S+?)(!?)(?:\s+(.*))?$/)
+            const name = match ? match[1] : input
+            const force = match && match[2] === "!"
+            const argument = match && match[3] ? match[3].trim() : ""
+            if (name === "w" || name === "write") {
+                if (argument !== "") writeTo(argument)
+                else save()
+            } else if (name === "wq" || name === "x" || name === "xit") {
+                pendingAction = "close"
+                const saved = argument !== "" ? writeTo(argument) : save()
+                if (saved) afterSave()
+            } else if (name === "q" || name === "quit") {
+                if (dirty && !force) showMessage("No write since last change (add ! to override)", true)
+                else win.closeRequested()
+            } else if (name === "e" || name === "edit") {
+                if (dirty && !force) { showMessage("No write since last change (add ! to override)", true); return }
+                if (argument !== "") openPath(argument, false)
+                else if (force && filePath !== "") openPath(filePath, false)
+                else chooseFile("open")
+            } else if (name === "enew" || name === "new") {
+                if (dirty && !force) { showMessage("No write since last change (add ! to override)", true); return }
+                setDocument("", "")
+            } else {
+                showMessage("Not an editor command: " + input, true)
+            }
+        }
+
+        function handleVimKey(event) {
+            if (!vimEnabled) return
+            if (event.modifiers & Qt.ControlModifier) {
+                if (normalMode && event.key === Qt.Key_R) { redo(); event.accepted = true }
+                return
+            }
+            if (event.modifiers & (Qt.AltModifier | Qt.MetaModifier)) return
+
+            if (vimMode === "insert") {
+                if (event.key === Qt.Key_Escape) { leaveInsert(); event.accepted = true }
+                return
+            }
+            if (vimMode === "replace") {
+                if (event.key === Qt.Key_Escape) {
+                    leaveInsert()
+                } else if (event.key === Qt.Key_Backspace) {
+                    if (replaceHistory.length > 0) {
+                        const history = replaceHistory.slice()
+                        const edit = history.pop()
+                        editor.remove(edit.position, edit.position + edit.inserted.length)
+                        editor.insert(edit.position, edit.removed)
+                        editor.cursorPosition = edit.position
+                        replaceHistory = history
+                    }
+                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    editor.insert(editor.cursorPosition, "\n")
+                    replaceHistory = []
+                } else if (event.text.length > 0 && event.text.charCodeAt(0) >= 32) {
+                    replaceTyped(event.text)
+                }
+                event.accepted = true
+                return
+            }
+
+            // Normal mode consumes every key so nothing edits the buffer by accident.
+            event.accepted = true
+            handleNormalKey(event)
+        }
+
+        function handleNormalKey(event) {
+            const key = event.text
+            if (event.key === Qt.Key_Escape) {
+                vimPending = ""
+                vimCount = ""
+                return
+            }
+            if (vimPending === "" || vimPending === "d" || vimPending === "c" || vimPending === "y") {
+                if ((key >= "1" && key <= "9") || (key === "0" && vimCount !== "")) {
+                    vimCount += key
+                    return
+                }
+            }
+            const count = Math.max(1, parseInt(vimCount) || 1)
+            const hadCount = vimCount !== ""
+            const pending = vimPending
+            vimPending = ""
+            vimCount = ""
+            const text = editor.text
+            const cursor = editor.cursorPosition
+            const isWord = backend.isWordCharacter
+
+            if (pending === "r") {
+                if (key.length > 0 && key.charCodeAt(0) >= 32) replaceCharacters(key, count)
+                return
+            }
+            if (pending === "g") {
+                if (key === "g")
+                    setCursor(Vim.firstNonBlank(text, hadCount ? Vim.lineStartAt(text, count - 1) : 0))
+                return
+            }
+            if (pending === "d" || pending === "c" || pending === "y") {
+                if (key === pending) { applyLineOperator(pending, count); return }
+                if (key === "i" || key === "a") { vimPending = pending + key; return }
+                let end = cursor
+                if (key === "w" || key === "e") {
+                    // Like Vim, "cw" changes to the end of the word; "dw" stops at the line end.
+                    const toWordEnd = pending === "c" || key === "e"
+                    let position = cursor
+                    for (let i = 0; i < count; ++i) {
+                        position = toWordEnd ? Vim.nextCharacter(text, Vim.wordEnd(text, position, isWord))
+                            : Vim.wordForwardRaw(text, position, isWord)
+                    }
+                    end = Math.min(position, Math.max(Vim.lineEnd(text, cursor), cursor))
+                    applyOperator(pending, cursor, end)
+                } else if (key === "b") {
+                    let start = cursor
+                    for (let i = 0; i < count; ++i) start = Vim.wordBackward(text, start, isWord)
+                    applyOperator(pending, start, cursor)
+                } else if (key === "$") {
+                    applyOperator(pending, cursor, Vim.lineEnd(text, cursor))
+                } else if (key === "0") {
+                    applyOperator(pending, Vim.lineStart(text, cursor), cursor)
+                } else if (key === "j" || key === "k") {
+                    if (key === "k") setCursor(Vim.verticalMove(text, cursor, -count, goalColumn))
+                    applyLineOperator(pending, count + 1)
+                } else if (key === "G") {
+                    const lines = Vim.lineCount(text) - Vim.lineIndex(text, cursor)
+                    applyLineOperator(pending, lines)
+                }
+                return
+            }
+            if (pending.length === 2 && (pending[1] === "i" || pending[1] === "a")) {
+                if (key === "w") {
+                    const word = Vim.innerWord(text, cursor, isWord)
+                    let end = word.end
+                    if (pending[1] === "a")
+                        while (end < Vim.lineEnd(text, cursor) && (text[end] === " " || text[end] === "\t")) end += 1
+                    applyOperator(pending[0], word.start, end)
+                }
+                return
+            }
+
+            const lineStart = Vim.lineStart(text, cursor)
+            const lineEnd = Vim.lineEnd(text, cursor)
+            if (key === "h" || event.key === Qt.Key_Left || event.key === Qt.Key_Backspace) {
+                let position = cursor
+                for (let i = 0; i < count && position > lineStart; ++i) position = Vim.previousCharacter(text, position)
+                setCursor(position)
+            } else if (key === "l" || event.key === Qt.Key_Right || key === " ") {
+                let position = cursor
+                for (let i = 0; i < count; ++i) position = Vim.nextCharacter(text, position)
+                setCursor(Math.min(position, lineEnd))
+            } else if (key === "j" || event.key === Qt.Key_Down || event.key === Qt.Key_Return) {
+                setCursor(Vim.verticalMove(text, cursor, count, goalColumn), true)
+            } else if (key === "k" || event.key === Qt.Key_Up) {
+                setCursor(Vim.verticalMove(text, cursor, -count, goalColumn), true)
+            } else if (event.key === Qt.Key_PageDown) {
+                setCursor(Vim.verticalMove(text, cursor, pageLines(), goalColumn), true)
+            } else if (event.key === Qt.Key_PageUp) {
+                setCursor(Vim.verticalMove(text, cursor, -pageLines(), goalColumn), true)
+            } else if (key === "0" || event.key === Qt.Key_Home) {
+                setCursor(lineStart)
+            } else if (key === "^") {
+                setCursor(Vim.firstNonBlank(text, cursor))
+            } else if (key === "$" || event.key === Qt.Key_End) {
+                setCursor(lineEnd)
+                goalColumn = 1 << 30
+            } else if (key === "w") {
+                let position = cursor
+                for (let i = 0; i < count; ++i) position = Vim.wordForward(text, position, isWord)
+                setCursor(position)
+            } else if (key === "b") {
+                let position = cursor
+                for (let i = 0; i < count; ++i) position = Vim.wordBackward(text, position, isWord)
+                setCursor(position)
+            } else if (key === "e") {
+                let position = cursor
+                for (let i = 0; i < count; ++i) position = Vim.wordEnd(text, position, isWord)
+                setCursor(position)
+            } else if (key === "G") {
+                const line = hadCount ? count - 1 : Vim.lineCount(text) - 1
+                setCursor(Vim.firstNonBlank(text, Vim.lineStartAt(text, line)))
+            } else if (key === "i") {
+                beginInsert(cursor)
+            } else if (key === "a") {
+                beginInsert(Math.min(Vim.nextCharacter(text, cursor), lineEnd))
+            } else if (key === "I") {
+                beginInsert(Vim.firstNonBlankRaw(text, cursor))
+            } else if (key === "A") {
+                beginInsert(lineEnd)
+            } else if (key === "o") {
+                pushUndo()
+                editor.insert(lineEnd, "\n")
+                beginInsert(lineEnd + 1, true)
+            } else if (key === "O") {
+                pushUndo()
+                editor.insert(lineStart, "\n")
+                beginInsert(lineStart, true)
+            } else if (key === "x" || event.key === Qt.Key_Delete) {
+                deleteCharacters(count, false)
+            } else if (key === "X") {
+                deleteCharacters(count, true)
+            } else if (key === "D") {
+                applyOperator("d", cursor, lineEnd)
+            } else if (key === "C") {
+                applyOperator("c", cursor, lineEnd)
+                if (cursor === lineEnd) beginInsert(cursor)
+            } else if (key === "s") {
+                pushUndo()
+                let end = cursor
+                for (let i = 0; i < count && end < lineEnd; ++i) end = Vim.nextCharacter(text, end)
+                editor.remove(cursor, end)
+                beginInsert(cursor, true)
+            } else if (key === "S") {
+                applyLineOperator("c", count)
+            } else if (key === "J") {
+                joinLines(hadCount ? count : 2)
+            } else if (key === "~") {
+                toggleCase(count)
+            } else if (key === "p" || key === "P") {
+                paste(key === "p", count)
+            } else if (key === "u") {
+                undo()
+            } else if (key === "R") {
+                pushUndo()
+                replaceHistory = []
+                vimMode = "replace"
+            } else if (key === "n" || key === "N") {
+                search(key === "n")
+            } else if (key === ":" || key === "/" || key === "?") {
+                openCommandLine(key)
+            } else if (key === "d" || key === "c" || key === "y" || key === "g" || key === "r") {
+                vimPending = key
+                vimCount = hadCount ? String(count) : ""
+            }
+        }
+
+        function pageLines() {
+            return Math.max(1, Math.floor(flick.height / Math.max(1, editorMetrics.height)) - 2)
+        }
+
+        Timer {
+            id: messageTimer
+            interval: 3200
+            onTriggered: card.message = ""
+        }
+
+        FileDialog {
+            id: openDialog
+            title: "Open note"
+            fileMode: FileDialog.OpenFile
+            nameFilters: ["Text and Markdown (*.txt *.md *.markdown)", "Text (*.txt)",
+                "Markdown (*.md *.markdown)", "All files (*)"]
+            currentFolder: card.folderOf(card.filePath)
+            onAccepted: card.openPath(selectedFile.toString(), false)
+            onRejected: card.focusEditor()
+        }
+
+        FileDialog {
+            id: saveDialog
+            title: "Save note"
+            fileMode: FileDialog.SaveFile
+            nameFilters: ["Markdown (*.md)", "Text (*.txt)"]
+            defaultSuffix: selectedNameFilter.extensions.length > 0
+                ? selectedNameFilter.extensions[0] : "md"
+            currentFolder: card.folderOf(card.filePath)
+            onAccepted: {
+                if (card.writeTo(selectedFile.toString())) card.afterSave()
+                card.focusEditor()
+            }
+            onRejected: {
+                card.pendingAction = ""
+                card.focusEditor()
+            }
+        }
+
+        Shortcut {
+            sequences: [StandardKey.Save]
+            onActivated: card.save()
+        }
+        Shortcut {
+            sequence: "Ctrl+Shift+S"
+            onActivated: card.chooseFile("save")
+        }
+        Shortcut {
+            sequences: [StandardKey.Open]
+            onActivated: card.requestAction("open")
+        }
+        Shortcut {
+            sequences: [StandardKey.New]
+            onActivated: card.requestAction("new")
+        }
+
+        // ---- Layout --------------------------------------------------------
+        // Terminal-like: a tab strip with the file name, the editor filling the
+        // rest, and every file action in the right-click menu.
+
+        readonly property color barTint: Qt.alpha(Theme.text, 0.06)
+        readonly property color tabTint: Qt.alpha(Theme.text, 0.11)
+        readonly property int barHeight: 38
+
+        Rectangle {
+            anchors.fill: parent
+            radius: card.cornerRadius
+            color: card.surfaceColor
+            border.width: Theme.cardBorderWidth
+            border.color: Theme.cardBorder
+        }
+
+        Item {
+            id: tabBar
+            objectName: "note-tab-bar"
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: card.barHeight
+            clip: true
+
+            // Rounded on top only, following the card corners.
+            Rectangle {
+                anchors.fill: parent
+                anchors.bottomMargin: -card.cornerRadius
+                radius: card.cornerRadius
+                color: card.barTint
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                onPressed: if (win.Window.window) win.Window.window.startSystemMove()
+                onDoubleClicked: card.toggleMaximized()
+            }
+
+            Rectangle {
+                id: tab
+                x: 0
+                width: Math.min(tabText.implicitWidth + 82, tabBar.width - windowButtons.width - 32)
+                height: parent.height
+                color: card.tabTint
+
+                // Only the outer corner follows the card's rounding.
+                topLeftRadius: card.cornerRadius
+
+                Text {
+                    id: tabText
+                    objectName: "note-title"
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 28
+                    anchors.rightMargin: 48
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: card.fileName
+                    elide: Text.ElideMiddle
+                    color: card.textColor
+                    font.family: "monospace"
+                    font.pixelSize: 13
+                }
+
+                Rectangle {
+                    objectName: "note-dirty-dot"
+                    anchors.right: tabText.left
+                    anchors.rightMargin: 9
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 7
+                    height: 7
+                    radius: 3.5
+                    color: Theme.accent
+                    visible: card.dirty
+                }
+
+                // Closing the tab closes the file; on an empty Untitled tab it
+                // closes the panel, like the last tab of a terminal.
+                Rectangle {
+                    id: tabClose
+                    objectName: "note-tab-close"
+                    anchors.right: parent.right
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 22
+                    height: 22
+                    radius: 6
+                    color: tabCloseMouse.containsMouse ? Theme.controlHover : "transparent"
+
+                    FlatIcon {
+                        anchors.centerIn: parent
+                        width: 12
+                        height: 12
+                        name: "close"
+                        ink: Theme.text
+                    }
+
+                    MouseArea {
+                        id: tabCloseMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: card.closeTab()
+                    }
+                }
+            }
+
+
+            Row {
+                id: windowButtons
+                anchors.right: parent.right
+                anchors.rightMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 10
+
+                WindowButton {
+                    objectName: "note-minimize"
+                    glyph: "minimize"
+                    onClicked: if (win.Window.window) win.Window.window.showMinimized()
+                }
+                WindowButton {
+                    objectName: "note-maximize"
+                    glyph: "maximize"
+                    onClicked: card.toggleMaximized()
+                }
+                WindowButton {
+                    objectName: "note-close"
+                    glyph: "close"
+                    onClicked: win.closeRequested()
+                }
+            }
+        }
+
+        Item {
+            id: editorFrame
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: tabBar.bottom
+            anchors.bottom: statusLine.top
+
+            Flickable {
+                id: flick
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 10
+                anchors.topMargin: 14
+                anchors.bottomMargin: 8
+                visible: !card.preview
+                clip: true
+                contentWidth: width
+                contentHeight: editor.height
+                boundsBehavior: Flickable.StopAtBounds
+                Controls.ScrollBar.vertical: Controls.ScrollBar {}
+
+                function ensureVisible(rect) {
+                    if (rect.y < contentY) contentY = rect.y
+                    else if (rect.y + rect.height > contentY + height)
+                        contentY = rect.y + rect.height - height
+                }
+
+                TextEdit {
+                    id: editor
+                    objectName: "note-editor"
+                    width: flick.width - 8
+                    height: Math.max(implicitHeight, flick.height)
+                    wrapMode: TextEdit.Wrap
+                    textFormat: TextEdit.PlainText
+                    color: card.textColor
+                    selectionColor: Theme.selected
+                    selectedTextColor: card.textColor
+                    selectByMouse: true
+                    persistentSelection: false
+                    font.family: "monospace"
+                    font.pixelSize: 15
+                    tabStopDistance: editorMetrics.advanceWidth * 4
+                    cursorVisible: activeFocus
+                    focus: true
+                    Accessible.name: "Note text"
+
+                    Keys.priority: Keys.BeforeItem
+                    Keys.onPressed: event => card.handleVimKey(event)
+
+                    onTextChanged: card.dirty = text !== card.savedText
+                    onCursorRectangleChanged: flick.ensureVisible(cursorRectangle)
+                    onCursorPositionChanged: {
+                        // Mouse clicks may land on a line break in normal mode.
+                        if (card.normalMode && card.vimMode === "normal" && selectedText === "") {
+                            const normal = Vim.normalPosition(text, cursorPosition)
+                            if (normal !== cursorPosition) cursorPosition = normal
+                        }
+                    }
+
+                    // Terminal-style cursor: a solid block in normal mode, a bar while inserting.
+                    cursorDelegate: Rectangle {
+                        readonly property bool block: card.normalMode
+                        width: block ? Math.max(8, blockMetrics.advanceWidth) : 2
+                        height: editor.cursorRectangle.height
+                        color: block ? Qt.alpha(Theme.accent, 0.55) : Theme.accent
+                        visible: editor.activeFocus
+                    }
+                }
+
+                TextMetrics {
+                    id: editorMetrics
+                    font: editor.font
+                    text: " "
+                }
+
+                TextMetrics {
+                    id: blockMetrics
+                    font: editor.font
+                    text: {
+                        const next = Vim.nextCharacter(editor.text, editor.cursorPosition)
+                        const ch = editor.text.slice(editor.cursorPosition, next)
+                        return ch === "" || ch === "\n" ? " " : ch === "\t" ? "    " : ch
+                    }
+                }
+            }
+
+            Flickable {
+                id: previewFlick
+                anchors.fill: flick
+                visible: card.preview
+                clip: true
+                contentWidth: width
+                contentHeight: previewText.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                Controls.ScrollBar.vertical: Controls.ScrollBar {}
+
+                TextEdit {
+                    id: previewText
+                    width: previewFlick.width - 8
+                    readOnly: true
+                    selectByMouse: true
+                    wrapMode: TextEdit.Wrap
+                    textFormat: TextEdit.MarkdownText
+                    text: card.preview ? editor.text : ""
+                    color: card.textColor
+                    selectionColor: Theme.selected
+                    font.family: card.family
+                    font.pixelSize: 14
+                    onLinkActivated: link => Qt.openUrlExternally(link)
+                }
+            }
+
+            // With Vim off there is no status line; messages float at the bottom.
+            Text {
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 14
+                visible: !card.vimEnabled && card.message !== ""
+                text: card.message
+                color: card.messageError ? "#C0392B" : card.dimColor
+                font.family: card.family
+                font.pixelSize: 12
+            }
+        }
+
+        MouseArea {
+            objectName: "note-context-area"
+            anchors.fill: editorFrame
+            acceptedButtons: Qt.RightButton
+            onClicked: mouse => {
+                const point = mapToItem(card, mouse.x, mouse.y)
+                contextMenu.popup(point.x, point.y)
+            }
+        }
+
+        // Status line: Vim mode or command line on the left, position on the right.
+        Item {
+            id: statusLine
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.leftMargin: 16
+            // Clear of the panel's bottom-right resize grip.
+            anchors.rightMargin: 34
+            anchors.bottomMargin: card.vimEnabled ? 12 : 0
+            height: card.vimEnabled ? 28 : 6
+            visible: card.vimEnabled
+
+            // Each Vim mode has its own text color.
+            readonly property color modeColor: card.vimMode === "insert" ? "#3FA34D"
+                : card.vimMode === "replace" ? "#D9534F"
+                : card.vimMode === "command" ? "#D08A1E" : "#4A86C8"
+
+            Text {
+                id: modeText
+                objectName: "note-mode"
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                text: "-- " + card.vimMode.toUpperCase() + " --"
+                color: statusLine.modeColor
+                font.family: "monospace"
+                font.pixelSize: 12
+                font.weight: Font.Bold
+            }
+
+            Text {
+                anchors.left: modeText.right
+                anchors.leftMargin: 12
+                anchors.right: positionText.left
+                anchors.rightMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                visible: card.vimMode !== "command"
+                text: card.message !== "" ? card.message
+                    : (card.vimCount + card.vimPending) !== "" ? card.vimCount + card.vimPending
+                    : card.filePath
+                elide: Text.ElideMiddle
+                color: card.messageError ? "#C0392B" : card.dimColor
+                font.family: "monospace"
+                font.pixelSize: 12
+            }
+
+            Row {
+                anchors.left: modeText.right
+                anchors.leftMargin: 12
+                anchors.right: positionText.left
+                anchors.verticalCenter: parent.verticalCenter
+                visible: card.vimMode === "command"
+
+                Text {
+                    id: commandPrefix
+                    text: ":"
+                    color: card.textColor
+                    font.family: "monospace"
+                    font.pixelSize: 13
+                }
+
+                TextInput {
+                    id: commandInput
+                    objectName: "note-command"
+                    width: parent.width - commandPrefix.width
+                    color: card.textColor
+                    selectionColor: Theme.selected
+                    font.family: "monospace"
+                    font.pixelSize: 13
+                    clip: true
+                    Keys.onReturnPressed: card.runCommandLine()
+                    Keys.onEnterPressed: card.runCommandLine()
+                    Keys.onEscapePressed: card.closeCommandLine()
+                    Keys.onPressed: event => {
+                        if (event.key === Qt.Key_Backspace && text.length === 0) {
+                            card.closeCommandLine()
+                            event.accepted = true
+                        }
+                    }
+                    onActiveFocusChanged: {
+                        if (!activeFocus && card.vimMode === "command") card.vimMode = "normal"
+                    }
+                }
+            }
+
+            Text {
+                id: positionText
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                text: card.cursorLine + ":" + card.cursorColumn
+                color: card.dimColor
+                font.family: "monospace"
+                font.pixelSize: 12
+            }
+        }
+
+        Controls.Menu {
+            id: contextMenu
+            objectName: "note-menu"
+            width: 224
+            padding: 4
+            closePolicy: Controls.Popup.CloseOnEscape | Controls.Popup.CloseOnPressOutside
+            onClosed: card.focusEditor()
+
+            background: Rectangle {
+                radius: 10
+                color: Theme.cardSurface
+                border.width: 1
+                border.color: Theme.line
+            }
+
+            NoteMenuItem {
+                objectName: "note-new"
+                text: "New"
+                shortcut: "Ctrl+N"
+                onTriggered: card.requestAction("new")
+            }
+            NoteMenuItem {
+                objectName: "note-open"
+                text: "Open"
+                shortcut: "Ctrl+O"
+                onTriggered: card.requestAction("open")
+            }
+            NoteMenuItem {
+                objectName: "note-save"
+                text: "Save"
+                shortcut: "Ctrl+S"
+                onTriggered: card.save()
+            }
+            NoteMenuItem {
+                objectName: "note-save-as"
+                text: "Save as"
+                shortcut: "Ctrl+Shift+S"
+                onTriggered: card.chooseFile("save")
+            }
+            NoteMenuItem {
+                objectName: "note-preview"
+                text: card.preview ? "Edit markdown" : "Preview markdown"
+                visible: card.isMarkdown
+                height: visible ? implicitHeight : 0
+                onTriggered: card.preview = !card.preview
+            }
+
+            // "Vim: on off" as plain text: the active choice is solid, the other
+            // faded. Clicking the row toggles Vim and keeps the menu open.
+            Rectangle {
+                id: vimRow
+                objectName: "note-vim-toggle"
+                width: contextMenu.availableWidth
+                height: 34
+                radius: 7
+                color: vimRowMouse.containsMouse ? Theme.controlHover : "transparent"
+
+                Row {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 8
+
+                    Text {
+                        text: "Vim:"
+                        color: Theme.text
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 14
+                    }
+                    Text {
+                        objectName: "note-vim-on"
+                        readonly property bool active: card.vimEnabled
+                        text: "on"
+                        color: Theme.text
+                        opacity: active ? 1 : 0.35
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 14
+                    }
+                    Text {
+                        objectName: "note-vim-off"
+                        readonly property bool active: !card.vimEnabled
+                        text: "off"
+                        color: Theme.text
+                        opacity: active ? 1 : 0.35
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 14
+                    }
+                }
+
+                MouseArea {
+                    id: vimRowMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: backend.setNoteVimEnabled(!card.vimEnabled)
+                }
+            }
+        }
+
+        function toggleMaximized() {
+            const window = win.Window.window
+            if (!window) return
+            if (window.visibility === Window.Maximized) window.showNormal()
+            else window.showMaximized()
+        }
+
+        // Unsaved-changes prompt for New, Open, and :wq-style closes.
+        Item {
+            id: unsavedPrompt
+            objectName: "note-unsaved-prompt"
+            anchors.fill: parent
+            z: 20
+            visible: card.pendingAction !== "" && !saveDialog.visible && !card.choosingFile
+            enabled: visible
+            // Take keyboard focus while shown so Esc cancels instead of reaching Vim.
+            onVisibleChanged: if (visible) forceActiveFocus()
+            Keys.onEscapePressed: card.cancelPrompt()
+
+            Rectangle {
+                anchors.fill: parent
+                radius: card.cornerRadius
+                // Dim with black so the backdrop darkens on light and dark themes alike.
+                color: Qt.rgba(0, 0, 0, 0.45)
+            }
+
+            MouseArea { anchors.fill: parent }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(parent.width - 64, 360)
+                height: 108
+                radius: 18
+                color: Theme.cardSurface
+                border.width: Theme.cardBorderWidth
+                border.color: Theme.cardBorder
+
+                Text {
+                    x: 20
+                    y: 18
+                    width: parent.width - 40
+                    text: "Save changes to " + card.fileName + "?"
+                    elide: Text.ElideMiddle
+                    color: card.textColor
+                    font.family: card.family
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
+                }
+
+                Row {
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.margins: 16
+                    spacing: 6
+
+                    NoteButton {
+                        label: "Cancel"
+                        onClicked: card.cancelPrompt()
+                    }
+                    NoteButton {
+                        label: "Discard"
+                        onClicked: card.runAction(card.pendingAction)
+                    }
+                    NoteButton {
+                        label: "Save"
+                        primary: true
+                        onClicked: { if (card.save()) card.afterSave() }
+                    }
+                }
+            }
+        }
+    }
+
+    component NoteMenuItem: Controls.MenuItem {
+        id: menuItem
+        property string shortcut: ""
+        implicitHeight: 34
+        leftPadding: 12
+        rightPadding: 12
+        hoverEnabled: true
+
+        contentItem: Item {
+            Text {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                text: menuItem.text
+                color: Theme.text
+                font.family: Qt.application.font.family
+                font.pixelSize: 14
+            }
+            Text {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                text: menuItem.shortcut
+                color: Qt.alpha(Theme.text, 0.45)
+                font.family: Qt.application.font.family
+                font.pixelSize: 12
+            }
+        }
+        background: Rectangle {
+            radius: 7
+            color: menuItem.hovered ? Theme.controlHover : "transparent"
+        }
+    }
+
+    component WindowButton: Rectangle {
+        id: windowButton
+        property string glyph: ""
+        signal clicked()
+
+        width: 24
+        height: 24
+        radius: 12
+        color: buttonMouse.containsMouse ? Theme.controlHover : Qt.alpha(Theme.text, 0.08)
+
+        Rectangle {
+            visible: windowButton.glyph === "minimize"
+            anchors.centerIn: parent
+            width: 8
+            height: 1.5
+            color: Theme.text
+        }
+        Rectangle {
+            visible: windowButton.glyph === "maximize"
+            anchors.centerIn: parent
+            width: 8
+            height: 8
+            radius: 1
+            color: "transparent"
+            border.width: 1.5
+            border.color: Theme.text
+        }
+        FlatIcon {
+            visible: windowButton.glyph === "close"
+            anchors.centerIn: parent
+            width: 12
+            height: 12
+            name: "close"
+            ink: Theme.text
+        }
+
+        MouseArea {
+            id: buttonMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: windowButton.clicked()
+        }
+    }
+
+    component NoteButton: Rectangle {
+        id: button
+        property string label: ""
+        property bool primary: false
+        property bool active: false
+        signal clicked()
+
+        width: buttonLabel.implicitWidth + 24
+        height: 30
+        radius: 15
+        color: primary || active ? Theme.accent
+            : buttonHover.hovered ? Theme.controlHover : Theme.control
+        scale: buttonHover.hovered ? 1.04 : 1.0
+        Behavior on scale { NumberAnimation { duration: 120 } }
+
+        Text {
+            id: buttonLabel
+            anchors.centerIn: parent
+            text: button.label
+            color: button.primary || button.active ? Theme.accentText : Theme.text
+            font.family: Qt.application.font.family
+            font.pixelSize: 13
+            font.weight: Font.Medium
+        }
+
+        HoverHandler { id: buttonHover }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: button.clicked()
+        }
+    }
+}

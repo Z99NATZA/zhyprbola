@@ -4,7 +4,7 @@
 Zhyprbola combines a GNOME Shell dock with focused Qt/QML panels.
 Shell handles sound, brightness, and battery popups; Screenshots is a resident QML browser.
 Other QML panels cover connections, clock, weather, keys, status, spectrum, music,
-tasks, calendar, and settings.
+tasks, notes, calendar, and settings.
 Each focused host loads only its requested component and starts only its needed
 data services. Data refreshes asynchronously; hiding/minimizing pauses polling
 and spectrum while retaining the component for a quick restore.
@@ -161,6 +161,36 @@ and cursor; clicking a task resumes Vim navigation.
 With Vim off, text fields keep their standard typing and Escape behavior.
 ```
 
+## Note
+
+```text
+Plain-text editor for .txt and .md files, laid out like a terminal window: a tab
+strip shows the file name (a dot marks unsaved edits) and a close ×, with
+minimize, maximize, and close buttons on the right. The tab × closes the file
+(asking to save unsaved edits); on an empty Untitled tab it closes the panel.
+The editor fills the rest.
+Drag the strip to move the window; double-click it to maximize.
+
+Right-click opens the menu: New, Open, Save, and Save as (Ctrl+N, Ctrl+O,
+Ctrl+S, Ctrl+Shift+S); Markdown files add Preview markdown; "Vim: on off" comes
+last (the inactive choice is faded) and clicking it toggles Vim without closing
+the menu. Open and Save use GNOME's own file chooser through xdg-desktop-portal
+(D-Bus, no extra package); Qt's dialog is only a fallback when the portal is
+unavailable. Untitled notes open the save chooser (Markdown or Text; a name
+without an extension gets the selected filter's). New/Open on unsaved edits asks
+to Save, Discard, or Cancel (Esc cancels). Writes are atomic (QSaveFile); files
+over 8 MB are refused. The last opened or saved file reopens when the panel
+starts.
+
+The Vim setting is separate from Tasks and remembers its state (note-vim-enabled).
+With Vim on, a status line shows the mode in color (-- NORMAL -- blue, -- INSERT --
+green, -- REPLACE -- red, -- COMMAND -- orange), messages or path, and line:column.
+Normal: h j k l, w b e, 0 ^ $, gg G {n}G, counts, i a I A o O, x X s S C D J ~,
+r R, dd cc yy, d/c/y with w e b $ 0 j k G iw aw, p P, u, Ctrl+R, / ? n N.
+Ex: :w [path], :q, :q!, :wq, :x, :e [path], :e!, :enew, :{line}.
+Normal mode is read-only, so input methods cannot insert text by accident.
+```
+
 ## Screenshots
 
 ```text
@@ -206,7 +236,7 @@ make dock                         # Build, install, and enable the dock
 make check                        # QML lint; existing warnings may be printed
 
 # Other panel names: clock, weather, system-status, audio-spectrum, sound,
-# tasks, calendar, music, screenshots
+# tasks, note, calendar, music, screenshots
 ```
 
 ## Integrations

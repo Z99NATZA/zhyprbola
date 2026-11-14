@@ -46,6 +46,15 @@ make
 QT_QPA_PLATFORM=offscreen ./todo-vim-test
 ```
 
+```bash
+# Note file I/O, Vim motions/operators, search, and :w/:q commands
+mkdir -p build/note-vim-tests
+cd build/note-vim-tests
+qmake6 ../../tests/note-vim.pro
+make
+QT_QPA_PLATFORM=offscreen ./note-vim-test
+```
+
 ```text
 Panel startup
 ==========

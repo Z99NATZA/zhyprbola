@@ -23,12 +23,55 @@
 #include <QVariantMap>
 #include <QUrlQuery>
 #include <QtMath>
+#include <QDBusArgument>
 #include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusMetaType>
 #include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <algorithm>
 #include <memory>
+
+// xdg-desktop-portal FileChooser filter: (name, [(type, pattern)]).
+struct NotePortalFilterRule {
+    uint type = 0;
+    QString pattern;
+};
+struct NotePortalFilter {
+    QString name;
+    QList<NotePortalFilterRule> rules;
+};
+Q_DECLARE_METATYPE(NotePortalFilterRule)
+Q_DECLARE_METATYPE(NotePortalFilter)
+
+QDBusArgument &operator<<(QDBusArgument &argument, const NotePortalFilterRule &rule) {
+    argument.beginStructure();
+    argument << rule.type << rule.pattern;
+    argument.endStructure();
+    return argument;
+}
+
+const QDBusArgument &operator>>(const QDBusArgument &argument, NotePortalFilterRule &rule) {
+    argument.beginStructure();
+    argument >> rule.type >> rule.pattern;
+    argument.endStructure();
+    return argument;
+}
+
+QDBusArgument &operator<<(QDBusArgument &argument, const NotePortalFilter &filter) {
+    argument.beginStructure();
+    argument << filter.name << filter.rules;
+    argument.endStructure();
+    return argument;
+}
+
+const QDBusArgument &operator>>(const QDBusArgument &argument, NotePortalFilter &filter) {
+    argument.beginStructure();
+    argument >> filter.name >> filter.rules;
+    argument.endStructure();
+    return argument;
+}
 
 namespace {
 QString dockConfigPath(const QString &name) {
@@ -311,7 +354,7 @@ QStringList dockComponentKeys() {
         QStringLiteral("system-status"), QStringLiteral("audio-spectrum"),
         QStringLiteral("music"), QStringLiteral("sound"), QStringLiteral("brightness"),
         QStringLiteral("battery"),
-        QStringLiteral("todo"),
+        QStringLiteral("todo"), QStringLiteral("note"),
         QStringLiteral("calendar"), QStringLiteral("input-source"),
         QStringLiteral("power"), QStringLiteral("components"),
         QStringLiteral("key-visualizer")};
@@ -362,7 +405,8 @@ QStringList defaultOpacityEnabledComponents() {
         QStringLiteral("wifi"), QStringLiteral("clock"), QStringLiteral("weather"),
         QStringLiteral("key-visualizer"), QStringLiteral("system-status"),
         QStringLiteral("audio-spectrum"), QStringLiteral("music"),
-        QStringLiteral("todo"), QStringLiteral("calendar"), QStringLiteral("screenshots")};
+        QStringLiteral("todo"), QStringLiteral("note"), QStringLiteral("calendar"),
+        QStringLiteral("screenshots")};
 }
 
 QStringList opacityComponentKeys() {
@@ -623,6 +667,12 @@ Backend::Backend(QObject *parent, const QString &panelName) : QObject(parent) {
     QFile taskVimFile(dockConfigPath(QStringLiteral("task-vim-enabled")));
     if (taskVimFile.open(QIODevice::ReadOnly))
         m_taskVimEnabled = taskVimFile.readAll().trimmed() == "true";
+    QFile noteVimFile(dockConfigPath(QStringLiteral("note-vim-enabled")));
+    if (noteVimFile.open(QIODevice::ReadOnly))
+        m_noteVimEnabled = noteVimFile.readAll().trimmed() == "true";
+    QFile noteFile(dockConfigPath(QStringLiteral("note-last-file")));
+    if (noteFile.open(QIODevice::ReadOnly))
+        m_noteLastFile = QString::fromUtf8(noteFile.readAll()).trimmed();
 
     m_location = qEnvironmentVariable("ZHYPRBOLA_LOCATION", "Bangkok");
     m_userName = qEnvironmentVariable("USER", "User");
@@ -1356,6 +1406,7 @@ void Backend::openDockComponent(const QString &key) {
         QStringLiteral("brightness"),
         QStringLiteral("battery"),
         QStringLiteral("todo"),
+        QStringLiteral("note"),
         QStringLiteral("calendar"),
         QStringLiteral("key-visualizer"),
     };
@@ -1506,6 +1557,175 @@ void Backend::setTaskVimEnabled(bool enabled) {
             enabled ? QStringLiteral("true") : QStringLiteral("false"))) return;
     m_taskVimEnabled = enabled;
     emit taskVimEnabledChanged();
+}
+
+void Backend::setNoteVimEnabled(bool enabled) {
+    if (enabled == m_noteVimEnabled
+        || !writeDockConfig(QStringLiteral("note-vim-enabled"),
+            enabled ? QStringLiteral("true") : QStringLiteral("false"))) return;
+    m_noteVimEnabled = enabled;
+    emit noteVimEnabledChanged();
+}
+
+void Backend::setNoteLastFile(const QString &path) {
+    const QString local = localFilePath(path);
+    if (local == m_noteLastFile
+        || !writeDockConfig(QStringLiteral("note-last-file"), local)) return;
+    m_noteLastFile = local;
+    emit noteLastFileChanged();
+}
+
+QString Backend::localFilePath(const QString &pathOrUrl) const {
+    const QString trimmed = pathOrUrl.trimmed();
+    if (trimmed.isEmpty()) return {};
+    const QUrl url(trimmed);
+    if (url.isLocalFile()) return url.toLocalFile();
+    if (trimmed.startsWith(QLatin1String("~/")))
+        return QDir::home().absoluteFilePath(trimmed.mid(2));
+    return QFileInfo(trimmed).absoluteFilePath();
+}
+
+QVariantMap Backend::readTextFile(const QString &path) const {
+    const QString local = localFilePath(path);
+    QFile file(local);
+    if (local.isEmpty() || !file.open(QIODevice::ReadOnly))
+        return {{"ok", false}, {"path", local},
+            {"error", local.isEmpty() ? QStringLiteral("No file selected") : file.errorString()}};
+    // Notes are small text files; refuse anything that would stall the UI.
+    if (file.size() > 8 * 1024 * 1024)
+        return {{"ok", false}, {"path", local}, {"error", QStringLiteral("File is larger than 8 MB")}};
+    return {{"ok", true}, {"path", local}, {"text", QString::fromUtf8(file.readAll())}};
+}
+
+QString Backend::writeTextFile(const QString &path, const QString &text) const {
+    const QString local = localFilePath(path);
+    if (local.isEmpty()) return QStringLiteral("No file selected");
+    QSaveFile file(local);
+    if (!file.open(QIODevice::WriteOnly)) return file.errorString();
+    const QByteArray data = text.toUtf8();
+    if (file.write(data) != data.size()) {
+        file.cancelWriting();
+        return file.errorString();
+    }
+    return file.commit() ? QString() : file.errorString();
+}
+
+namespace {
+const QString portalService = QStringLiteral("org.freedesktop.portal.Desktop");
+const QString portalRequestInterface = QStringLiteral("org.freedesktop.portal.Request");
+const char *noteFileResponseSlot = SLOT(handleNoteFileResponse(uint,QVariantMap,QDBusMessage));
+
+NotePortalFilter notePortalFilter(const QString &name, const QStringList &patterns) {
+    NotePortalFilter filter{name, {}};
+    for (const QString &pattern : patterns) filter.rules.append({0, pattern});
+    return filter;
+}
+}
+
+void Backend::chooseNoteFile(const QString &mode, const QString &currentPath) {
+    static const bool registered = [] {
+        qDBusRegisterMetaType<NotePortalFilterRule>();
+        qDBusRegisterMetaType<QList<NotePortalFilterRule>>();
+        qDBusRegisterMetaType<NotePortalFilter>();
+        qDBusRegisterMetaType<QList<NotePortalFilter>>();
+        return true;
+    }();
+    Q_UNUSED(registered)
+
+    auto bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected()) {
+        emit noteFileChosen(mode, QString(), QStringLiteral("No session bus"));
+        return;
+    }
+    const bool save = mode == QLatin1String("save");
+    const QString local = localFilePath(currentPath);
+    const QString folder = local.isEmpty()
+        ? QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+        : QFileInfo(local).absolutePath();
+
+    const NotePortalFilter markdown = notePortalFilter(QStringLiteral("Markdown"),
+        {QStringLiteral("*.md"), QStringLiteral("*.markdown")});
+    const NotePortalFilter text = notePortalFilter(QStringLiteral("Text"), {QStringLiteral("*.txt")});
+    const NotePortalFilter both = notePortalFilter(QStringLiteral("Text and Markdown"),
+        {QStringLiteral("*.txt"), QStringLiteral("*.md"), QStringLiteral("*.markdown")});
+    const NotePortalFilter all = notePortalFilter(QStringLiteral("All files"), {QStringLiteral("*")});
+    const bool isText = local.endsWith(QLatin1String(".txt"), Qt::CaseInsensitive);
+
+    // Subscribe before calling: the portal may answer before the call returns.
+    const QString token = QStringLiteral("zhyprbola_note_")
+        + QUuid::createUuid().toString(QUuid::Id128);
+    const QString sender = bus.baseService().mid(1).replace(QLatin1Char('.'), QLatin1Char('_'));
+    const QString requestPath = QStringLiteral("/org/freedesktop/portal/desktop/request/")
+        + sender + QLatin1Char('/') + token;
+    bus.connect(portalService, requestPath, portalRequestInterface, QStringLiteral("Response"),
+        this, noteFileResponseSlot);
+    m_noteFileRequests.insert(requestPath, mode);
+
+    QVariantMap options{
+        {QStringLiteral("handle_token"), token},
+        {QStringLiteral("modal"), true},
+        {QStringLiteral("current_folder"), QVariant(folder.toUtf8() + '\0')},
+    };
+    if (save) {
+        options.insert(QStringLiteral("filters"), QVariant::fromValue(QList<NotePortalFilter>{markdown, text}));
+        options.insert(QStringLiteral("current_filter"), QVariant::fromValue(isText ? text : markdown));
+        options.insert(QStringLiteral("current_name"), local.isEmpty()
+            ? QStringLiteral("Untitled.md") : QFileInfo(local).fileName());
+    } else {
+        options.insert(QStringLiteral("filters"), QVariant::fromValue(QList<NotePortalFilter>{both, text, markdown, all}));
+        options.insert(QStringLiteral("current_filter"), QVariant::fromValue(both));
+    }
+
+    QDBusMessage call = QDBusMessage::createMethodCall(portalService,
+        QStringLiteral("/org/freedesktop/portal/desktop"),
+        QStringLiteral("org.freedesktop.portal.FileChooser"),
+        save ? QStringLiteral("SaveFile") : QStringLiteral("OpenFile"));
+    call << QString() << (save ? QStringLiteral("Save note") : QStringLiteral("Open note")) << options;
+    auto *watcher = new QDBusPendingCallWatcher(bus.asyncCall(call), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+        [this, mode, requestPath](QDBusPendingCallWatcher *finished) {
+            finished->deleteLater();
+            auto bus = QDBusConnection::sessionBus();
+            const QDBusPendingReply<QDBusObjectPath> reply = *finished;
+            if (reply.isError()) {
+                bus.disconnect(portalService, requestPath, portalRequestInterface,
+                    QStringLiteral("Response"), this, noteFileResponseSlot);
+                m_noteFileRequests.remove(requestPath);
+                emit noteFileChosen(mode, QString(), reply.error().message());
+                return;
+            }
+            // Old portals ignore handle_token and pick their own request path.
+            const QString actual = reply.value().path();
+            if (actual != requestPath && m_noteFileRequests.contains(requestPath)) {
+                bus.disconnect(portalService, requestPath, portalRequestInterface,
+                    QStringLiteral("Response"), this, noteFileResponseSlot);
+                m_noteFileRequests.remove(requestPath);
+                bus.connect(portalService, actual, portalRequestInterface,
+                    QStringLiteral("Response"), this, noteFileResponseSlot);
+                m_noteFileRequests.insert(actual, mode);
+            }
+        });
+}
+
+void Backend::handleNoteFileResponse(uint response, const QVariantMap &results,
+    const QDBusMessage &message) {
+    const QString requestPath = message.path();
+    if (!m_noteFileRequests.contains(requestPath)) return;
+    const QString mode = m_noteFileRequests.take(requestPath);
+    QDBusConnection::sessionBus().disconnect(portalService, requestPath, portalRequestInterface,
+        QStringLiteral("Response"), this, noteFileResponseSlot);
+
+    QString path;
+    const QStringList uris = results.value(QStringLiteral("uris")).toStringList();
+    if (response == 0 && !uris.isEmpty()) path = QUrl(uris.first()).toLocalFile();
+    // GNOME's chooser does not add an extension; use the selected filter's.
+    if (mode == QLatin1String("save") && !path.isEmpty() && QFileInfo(path).suffix().isEmpty()) {
+        NotePortalFilter filter;
+        const QVariant current = results.value(QStringLiteral("current_filter"));
+        if (current.canConvert<QDBusArgument>()) current.value<QDBusArgument>() >> filter;
+        path += filter.name == QLatin1String("Text") ? QStringLiteral(".txt") : QStringLiteral(".md");
+    }
+    emit noteFileChosen(mode, path, QString());
 }
 
 bool Backend::isWordCharacter(const QString &text) const {

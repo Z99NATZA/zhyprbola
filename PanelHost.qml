@@ -8,7 +8,7 @@ Window {
     property string requestedPanel: "bluetooth"
     readonly property string panelName: requestedPanel === "tasks" || requestedPanel === "task"
         ? "todo" : requestedPanel
-    readonly property bool resizablePanel: panelName === "todo"
+    readonly property bool resizablePanel: panelName === "todo" || panelName === "note"
     readonly property bool horizontallyResizable: panelName === "key-visualizer"
     readonly property Item panelItem: panelLoader.item as Item
     property bool hostInitialized: false
@@ -23,6 +23,7 @@ Window {
         case "music": return 414
         case "sound": return 384
         case "settings": return 660
+        case "note": return 560
         case "todo":
         case "calendar": return 384
         default: return 430
@@ -41,6 +42,7 @@ Window {
         case "sound": return sound.error.length > 0 ? 214 : 184
         case "settings": return panelItem ? panelItem.implicitHeight : 510
         case "todo": return 360
+        case "note": return 460
         case "calendar": return 314
         default: return 548
         }
@@ -66,6 +68,8 @@ Window {
             return "Zhyprbola Sound"
         if (panelName === "todo")
             return "Zhyprbola Tasks"
+        if (panelName === "note")
+            return "Zhyprbola Note"
         if (panelName === "calendar")
             return "Zhyprbola Calendar"
         if (panelName === "settings")
@@ -92,7 +96,7 @@ Window {
             clock: "Clock.qml", weather: "Weather.qml",
             "clock-weather": "ClockWeather.qml", "key-visualizer": "KeyVisualizer.qml",
             "system-status": "SystemStatus.qml", "audio-spectrum": "AudioSpectrumBubble.qml",
-            music: "MusicPlayer.qml", sound: "SoundPanel.qml", todo: "Todo.qml",
+            music: "MusicPlayer.qml", sound: "SoundPanel.qml", todo: "Todo.qml", note: "Note.qml",
             calendar: "Calendar.qml", settings: "SettingsPanel.qml"
         }
         const radio = panelName === "wifi" || panelName === "bluetooth"

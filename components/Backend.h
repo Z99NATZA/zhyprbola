@@ -10,7 +10,10 @@
 #include <QVariantMap>
 #include <QSet>
 #include <QQueue>
+#include <QHash>
 #include <functional>
+
+class QDBusMessage;
 
 class Backend : public QObject {
     Q_OBJECT
@@ -72,6 +75,8 @@ class Backend : public QObject {
     Q_PROPERTY(QString edgeSpectrumSize READ edgeSpectrumSize NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QVariantList tasks READ tasks NOTIFY tasksChanged)
     Q_PROPERTY(bool taskVimEnabled READ taskVimEnabled NOTIFY taskVimEnabledChanged)
+    Q_PROPERTY(bool noteVimEnabled READ noteVimEnabled NOTIFY noteVimEnabledChanged)
+    Q_PROPERTY(QString noteLastFile READ noteLastFile NOTIFY noteLastFileChanged)
     Q_PROPERTY(QVariantMap keyVisualizerSettings READ keyVisualizerSettings NOTIFY keyVisualizerSettingsChanged)
     Q_PROPERTY(QVariantMap dateTimeSettings READ dateTimeSettings NOTIFY dateTimeSettingsChanged)
     Q_PROPERTY(QString settingsSectionRequest READ settingsSectionRequest NOTIFY settingsSectionRequestChanged)
@@ -137,6 +142,8 @@ public:
     QString edgeSpectrumSize() const { return m_edgeSpectrumSize; }
     QVariantList tasks() const { return m_tasks; }
     bool taskVimEnabled() const { return m_taskVimEnabled; }
+    bool noteVimEnabled() const { return m_noteVimEnabled; }
+    QString noteLastFile() const { return m_noteLastFile; }
     QVariantMap keyVisualizerSettings() const { return m_keyVisualizerSettings; }
     QVariantMap dateTimeSettings() const { return m_dateTimeSettings; }
     QString settingsSectionRequest() const { return m_settingsSectionRequest; }
@@ -187,6 +194,15 @@ public:
     Q_INVOKABLE void setEdgeSpectrumSize(const QString &size);
     Q_INVOKABLE void addTask(const QString &text);
     Q_INVOKABLE void setTaskVimEnabled(bool enabled);
+    Q_INVOKABLE void setNoteVimEnabled(bool enabled);
+    Q_INVOKABLE void setNoteLastFile(const QString &path);
+    // Note file I/O: accepts local paths or file:// URLs.
+    Q_INVOKABLE QVariantMap readTextFile(const QString &path) const;
+    Q_INVOKABLE QString writeTextFile(const QString &path, const QString &text) const;
+    Q_INVOKABLE QString localFilePath(const QString &pathOrUrl) const;
+    // Opens GNOME's file chooser through xdg-desktop-portal; the answer arrives
+    // as noteFileChosen. mode is "open" or "save".
+    Q_INVOKABLE void chooseNoteFile(const QString &mode, const QString &currentPath);
     Q_INVOKABLE bool isWordCharacter(const QString &text) const;
     Q_INVOKABLE void toggleTask(const QString &id);
     Q_INVOKABLE void renameTask(const QString &id, const QString &text);
@@ -222,6 +238,10 @@ signals:
     void edgeSpectrumSettingsChanged();
     void tasksChanged();
     void taskVimEnabledChanged();
+    void noteVimEnabledChanged();
+    void noteLastFileChanged();
+    // path is empty when cancelled; error is set when the portal is unavailable.
+    void noteFileChosen(const QString &mode, const QString &path, const QString &error);
     void keyVisualizerSettingsChanged();
     void dateTimeSettingsChanged();
     void settingsSectionRequestChanged();
@@ -230,6 +250,10 @@ signals:
     void globalKeyPressed(const QString &name, const QString &text,
         bool shift, bool ctrl, bool alt, bool super);
     void globalKeyReleased(const QString &name);
+
+private slots:
+    void handleNoteFileResponse(uint response, const QVariantMap &results,
+        const QDBusMessage &message);
 
 private:
     using Completion = std::function<void()>;
@@ -365,6 +389,9 @@ private:
     QString m_edgeSpectrumSize = QStringLiteral("lg");
     QVariantList m_tasks;
     bool m_taskVimEnabled = false;
+    bool m_noteVimEnabled = false;
+    QString m_noteLastFile;
+    QHash<QString, QString> m_noteFileRequests;
     QFileSystemWatcher m_keyVisualizerWatcher;
     QVariantMap m_keyVisualizerSettings;
     QFileSystemWatcher m_dateTimeWatcher;

@@ -61,6 +61,7 @@ const DOCK_COMPONENTS = [
     ['brightness', 'Brightness'],
     ['battery', 'Battery'],
     ['todo', 'Tasks'],
+    ['note', 'Note'],
     ['calendar', 'Calendar'],
     ['input-source', 'Input Source'],
     ['power', 'Power'],
@@ -115,6 +116,7 @@ const PANEL_TITLES = Object.freeze({
     sound: 'Zhyprbola Sound',
     battery: 'Zhyprbola Battery',
     todo: 'Zhyprbola Tasks',
+    note: 'Zhyprbola Note',
     calendar: 'Zhyprbola Calendar',
     settings: 'Zhyprbola Settings',
 });

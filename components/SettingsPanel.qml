@@ -137,7 +137,7 @@ Item {
             settings: "Settings", bluetooth: "Bluetooth", wifi: "Wi-Fi",
             clock: "Clock", weather: "Weather", "system-status": "System status",
             "audio-spectrum": "Spectrum", music: "Music", sound: "Sound",
-            brightness: "Brightness", battery: "Battery", todo: "Tasks", calendar: "Calendar",
+            brightness: "Brightness", battery: "Battery", todo: "Tasks", note: "Note", calendar: "Calendar",
             "input-source": "Language", power: "Power", components: "Quick menu",
             "key-visualizer": "Keys"}
         return labels[key] || key
