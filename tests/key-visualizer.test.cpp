@@ -2,6 +2,7 @@
 
 #include <QFile>
 #include <QGuiApplication>
+#include <QJSValue>
 #include <QKeyEvent>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -245,6 +246,115 @@ private slots:
         QTest::qWait(5600);
         QVERIFY(!object->property("previewing").toBool());
         QCOMPARE(object->property("displayText").toString(), QStringLiteral("ok"));
+    }
+
+    void clearsHistoryFromContextMenu_data() {
+        QTest::addColumn<bool>("preview");
+        QTest::newRow("typed-history") << false;
+        QTest::newRow("settings-preview") << true;
+    }
+
+    void clearsHistoryFromContextMenu() {
+        QFETCH(bool, preview);
+        QTemporaryDir config;
+        QVERIFY(config.isValid());
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+        const auto restoreConfig = qScopeGuard([previous] {
+            if (previous.isNull()) qunsetenv("XDG_CONFIG_HOME");
+            else qputenv("XDG_CONFIG_HOME", previous);
+        });
+        Backend backend;
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        QQmlComponent component(&engine,
+            QUrl::fromLocalFile(QFINDTESTDATA("../components/KeyVisualizer.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto *visualizer = qobject_cast<QQuickItem *>(object.data());
+        QVERIFY(visualizer);
+        QQuickWindow window;
+        window.resize(480, 78);
+        visualizer->setParentItem(window.contentItem());
+        visualizer->setSize(QSizeF(480, 78));
+        window.show();
+        window.requestActivate();
+        visualizer->forceActiveFocus();
+        QTRY_VERIFY(visualizer->hasActiveFocus());
+
+        // Fill beyond the visible text so Clear must also discard hidden history.
+        for (int i = 0; i < 48; ++i)
+            emit backend.globalKeyPressed(QStringLiteral("a"), QStringLiteral("a"),
+                false, false, false, false);
+        QCOMPARE(object->property("displayText").toString(), QString(48, QLatin1Char('a')));
+        if (preview) {
+            backend.setKeyVisualizerSetting(QStringLiteral("alignment"), QStringLiteral("left"));
+            QVERIFY(object->property("previewing").toBool());
+            QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
+        }
+
+        auto *menu = object->findChild<QObject *>(QStringLiteral("key-visualizer-context-menu"));
+        auto *clear = object->findChild<QQuickItem *>(QStringLiteral("key-visualizer-clear"));
+        auto *display = object->findChild<QQuickItem *>(QStringLiteral("key-visualizer-display"));
+        QVERIFY(menu);
+        QVERIFY(clear);
+        QVERIFY(display);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(240, 39));
+        QVERIFY(!menu->property("visible").toBool());
+        QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier, QPoint(240, 39));
+        QTRY_VERIFY(menu->property("opened").toBool());
+        QVERIFY(clear->isVisible());
+        const QString textBeforeDismiss = object->property("displayText").toString();
+        // Clicking the bubble must dismiss the menu without clearing the keys.
+        for (Qt::MouseButton button : {Qt::LeftButton, Qt::MiddleButton}) {
+            QTest::mouseClick(&window, button, Qt::NoModifier, QPoint(20, 20));
+            QTRY_VERIFY(!menu->property("visible").toBool());
+            QCOMPARE(object->property("displayText").toString(), textBeforeDismiss);
+            QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier, QPoint(240, 39));
+            QTRY_VERIFY(menu->property("opened").toBool());
+        }
+        // Also dismiss for clicks outside the bubble and in another window.
+        window.resize(640, 160);
+        QTRY_COMPARE(window.contentItem()->width(), 640.0);
+        QTRY_COMPARE(window.contentItem()->height(), 160.0);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(600, 120));
+        QTRY_VERIFY(!menu->property("visible").toBool());
+        QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier, QPoint(240, 39));
+        QTRY_VERIFY(menu->property("opened").toBool());
+        QQuickWindow otherWindow;
+        otherWindow.resize(100, 100);
+        otherWindow.show();
+        otherWindow.requestActivate();
+        QTRY_VERIFY(otherWindow.isActive());
+        QTest::mouseClick(&otherWindow, Qt::LeftButton, Qt::NoModifier, QPoint(50, 50));
+        QTRY_VERIFY(!menu->property("visible").toBool());
+        QCOMPARE(object->property("displayText").toString(), textBeforeDismiss);
+        otherWindow.close();
+        window.resize(480, 78);
+        window.requestActivate();
+        QTRY_VERIFY(window.isActive());
+        QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier, QPoint(240, 39));
+        QTRY_VERIFY(menu->property("opened").toBool());
+        const QPoint click = clear->mapToScene(
+            QPointF(clear->width() / 2, clear->height() / 2)).toPoint();
+        QTest::mouseClick(clear->window(), Qt::LeftButton, Qt::NoModifier, click);
+        QTRY_VERIFY(!menu->property("visible").toBool());
+        QTRY_VERIFY(visualizer->hasActiveFocus());
+        QVERIFY(!object->property("previewing").toBool());
+        QCOMPARE(object->property("history").value<QJSValue>().property("length").toInt(), 0);
+        QCOMPARE(object->property("keptHistory").value<QJSValue>().property("length").toInt(), 0);
+        QCOMPARE(object->property("displayText").toString(), QString());
+        QCOMPARE(display->property("text").toString(), QString());
+
+        // Neither the old preview timeout nor new input may bring old keys back.
+        if (preview) QTest::qWait(5200);
+        QCOMPARE(object->property("displayText").toString(), QString());
+        QTest::keyClick(&window, Qt::Key_N);
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("n"));
+        emit backend.globalKeyPressed(QStringLiteral("g"), QStringLiteral("g"),
+            false, false, false, false);
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("ng"));
     }
 
     void keepsCompactHeightStableForThaiAndSymbols() {

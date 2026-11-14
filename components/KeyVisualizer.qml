@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls as Controls
 
 Item {
     id: visualizer
@@ -64,6 +65,13 @@ Item {
         previewing = false
         history = keptHistory
         keptHistory = []
+    }
+
+    function clearHistory() {
+        previewTimer.stop()
+        previewing = false
+        keptHistory = []
+        history = []
     }
 
     function appendKey(value) {
@@ -296,6 +304,56 @@ Item {
                 enabled: !backend.keyCaptureGrantPending
                 onClicked: backend.grantKeyCaptureAccess()
             }
+        }
+    }
+
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.RightButton
+        onClicked: mouse => contextMenu.popup(mouse.x, mouse.y)
+    }
+
+    Controls.Menu {
+        id: contextMenu
+        objectName: "key-visualizer-context-menu"
+        width: 140
+        padding: 4
+        closePolicy: Controls.Popup.CloseOnEscape | Controls.Popup.CloseOnPressOutside
+        onClosed: visualizer.forceActiveFocus()
+
+        background: Rectangle {
+            radius: 10
+            color: Theme.cardSurface
+            border.width: 1
+            border.color: Theme.line
+        }
+
+        Controls.MenuItem {
+            id: clearAction
+            objectName: "key-visualizer-clear"
+            text: "Clear"
+            implicitHeight: 36
+            hoverEnabled: true
+            onTriggered: visualizer.clearHistory()
+
+            contentItem: Text {
+                text: clearAction.text
+                color: Theme.text
+                font.family: Qt.application.font.family
+                font.pixelSize: 14
+                verticalAlignment: Text.AlignVCenter
+            }
+            background: Rectangle {
+                radius: 7
+                color: clearAction.hovered ? Theme.controlHover : "transparent"
+            }
+        }
+    }
+
+    Connections {
+        target: visualizer.Window.window
+        function onActiveChanged() {
+            if (!visualizer.Window.window.active) contextMenu.close()
         }
     }
 
