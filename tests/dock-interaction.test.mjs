@@ -2119,3 +2119,49 @@ test('battery in overflow gets a live indicator and changing themes preserves th
     dock._applyTheme();
     assert.equal(icon.gicon, 'live battery reading');
 });
+
+test('Key Visualizer stays on every workspace', () => {
+    const {dock} = fixture();
+    const panel = (title, wmClass = 'org.zhyprbola.Zhyprbola') => ({
+        title, wmClass, sticks: 0, sticky: false, signals: new Map(),
+        get_title() { return this.title; }, get_wm_class() { return this.wmClass; },
+        is_on_all_workspaces() { return this.sticky; },
+        stick() { this.sticks++; this.sticky = true; },
+        connectObject(...args) {
+            for (let i = 0; i < args.length - 1; i += 2)
+                this.signals.set(args[i], args[i + 1]);
+        },
+        disconnectObject() { this.signals.clear(); },
+    });
+
+    const keys = panel('Zhyprbola Key Visualizer');
+    dock._pinKeyVisualizer(keys);
+    dock._pinKeyVisualizer(keys);
+    assert.equal(keys.sticks, 1);
+    assert.equal(keys.signals.size, 0);
+
+    // Other windows are watched only until they are shown.
+    const editor = panel('Editor', 'org.example.Editor');
+    dock._pinKeyVisualizer(editor);
+    editor.signals.get('shown')();
+    assert.equal(editor.sticks, 0);
+    assert.equal(editor.signals.size, 0);
+
+    // Wayland can create the window before its title and app id arrive.
+    const late = panel(null, null);
+    dock._pinKeyVisualizer(late);
+    assert.equal(late.sticks, 0);
+    Object.assign(late, {title: 'Zhyprbola Key Visualizer', wmClass: 'org.zhyprbola.Zhyprbola'});
+    late.signals.get('notify::title')();
+    assert.equal(late.sticks, 1);
+    assert.equal(late.signals.size, 0);
+});
+
+test('switching workspace pins a Key Visualizer missed at creation', () => {
+    const {dock, context} = workspaceFixture();
+    const keys = {sticky: false, get_title: () => 'Zhyprbola Key Visualizer',
+        is_on_all_workspaces() { return this.sticky; }, stick() { this.sticky = true; }};
+    context.global.display = {list_all_windows: () => [keys]};
+    context.global.workspace_manager.emit('active-workspace-changed');
+    assert.equal(keys.sticky, true);
+});

@@ -314,7 +314,10 @@ export default class ZhyprbolaExtension extends Extension {
 
         global.display.connectObject(
             'workareas-changed', () => this._queueLayout(),
-            'window-created', () => this._queueAppRefresh(),
+            'window-created', (_display, window) => {
+                this._pinKeyVisualizer(window);
+                this._queueAppRefresh();
+            },
             'notify::focus-window', () => {
                 const focused = global.display.focus_window;
                 // Clicking a launcher in Settings gives Settings focus first.
@@ -328,6 +331,8 @@ export default class ZhyprbolaExtension extends Extension {
                 this._queueAppRefresh();
             }, this);
         this._watchWorkspaces();
+        for (const window of global.display.list_all_windows())
+            this._pinKeyVisualizer(window);
         Main.layoutManager.connectObject('monitors-changed', () => {
             this._screenshotEdge?.layout();
             this._showDesktopEdge?.layout();
@@ -361,6 +366,9 @@ export default class ZhyprbolaExtension extends Extension {
         this._showDesktopEdge?.destroy();
         this._showDesktopEdge = null;
         global.display.disconnectObject(this);
+        for (const window of this._keyVisualizerTitleWatches ?? [])
+            window.disconnectObject(this);
+        this._keyVisualizerTitleWatches?.clear();
         global.workspace_manager.disconnectObject(this);
         Main.layoutManager.disconnectObject(this);
         this._appSystem.disconnectObject(this);
@@ -532,6 +540,41 @@ export default class ZhyprbolaExtension extends Extension {
         const title = window.get_title() ?? '';
         const wmClass = window.get_wm_class() ?? '';
         return title.startsWith('Zhyprbola ') || /zhyprbola/i.test(wmClass);
+    }
+
+    // Typed keys stay visible while switching workspaces.
+    _pinKeyVisualizer(window) {
+        if (!window || this._keyVisualizerTitleWatches?.has(window) ||
+            this._stickKeyVisualizer(window))
+            return;
+        // Wayland windows can be created before Qt sends their title or app id.
+        this._keyVisualizerTitleWatches ??= new Set();
+        this._keyVisualizerTitleWatches.add(window);
+        const unwatch = () => {
+            window.disconnectObject(this);
+            this._keyVisualizerTitleWatches.delete(window);
+        };
+        const retry = () => {
+            if (this._stickKeyVisualizer(window))
+                unwatch();
+        };
+        window.connectObject(
+            'notify::title', retry,
+            'shown', () => {
+                retry();
+                if (this._keyVisualizerTitleWatches.has(window) &&
+                    !this._isComponentWindow(window))
+                    unwatch();
+            },
+            'unmanaged', unwatch, this);
+    }
+
+    _stickKeyVisualizer(window) {
+        if (window.get_title() !== PANEL_TITLES['key-visualizer'])
+            return false;
+        if (!window.is_on_all_workspaces())
+            window.stick();
+        return true;
     }
 
     _setPanelAnimationTarget(window) {
@@ -2682,6 +2725,9 @@ export default class ZhyprbolaExtension extends Extension {
     _watchWorkspaces() {
         global.workspace_manager.connectObject(
             'active-workspace-changed', () => {
+                // Fallback for a Key Visualizer whose creation was missed.
+                for (const window of global.display.list_all_windows())
+                    this._stickKeyVisualizer(window);
                 this._updateShowDesktopState();
                 this._refreshWorkspaceIndicators();
             },

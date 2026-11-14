@@ -113,7 +113,7 @@ Unavailable audio/brightness controls are disabled; missing batteries show unava
 ## Key Visualizer
 
 ```text
-Floating key bubble; typed keys stay until newer keys push them out.
+Floating key bubble shown on every workspace; typed keys stay until newer keys push them out.
 Settings: font size, Padding X/Y, and text alignment.
 Drag the bubble's left or right edge to set its width (minimum 200 px); the
 cursor changes near an edge, with no visible handle. The width persists.
