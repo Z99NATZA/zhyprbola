@@ -16,7 +16,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Keyboard from 'resource:///org/gnome/shell/ui/status/keyboard.js';
 import {SoundMenu} from './soundMenu.js';
 import {BrightnessMenu} from './brightnessMenu.js';
-import {BatteryMenu} from './batteryMenu.js';
+import {BatteryIndicator, BatteryMenu} from './batteryMenu.js';
 import {ScreenshotEdge, ShowDesktopEdge} from './screenshotEdge.js';
 
 const DockPosition = Object.freeze({
@@ -2097,8 +2097,10 @@ export default class ZhyprbolaExtension extends Extension {
             this._dock.remove_style_class_name('zhyprbola-dock-silver-dawn');
         }
         this._applyDockBackground();
-        for (const [name, icon] of this._panelIcons)
-            icon.gicon = this._panelGicon(name);
+        for (const [name, icon] of this._panelIcons) {
+            if (name !== 'battery')
+                icon.gicon = this._panelGicon(name);
+        }
         this._overflowMenu?.destroy();
         this._overflowMenu = null;
         this._quickMenu?.destroy();
@@ -2630,6 +2632,8 @@ export default class ZhyprbolaExtension extends Extension {
             accessible_name: this._connectionAccessibleName(panelName, accessibleName),
         });
         button._panelName = panelName;
+        if (panelName === 'battery')
+            new BatteryIndicator(icon, button);
         const name = this._connectionName(panelName);
         if (name) {
             const vertical = [DockPosition.LEFT, DockPosition.RIGHT].includes(this._dockPosition);
@@ -3036,6 +3040,7 @@ export default class ZhyprbolaExtension extends Extension {
             // A null icon still creates the same icon column for text-only rows.
             const action = menu.addAction(label, callback, icon ?? null);
             this._styleOverflowAction(menu, action, menuAccent(theme));
+            return action;
         };
         for (const item of items) {
             if (item.kind === 'workspaces') {
@@ -3064,7 +3069,7 @@ export default class ZhyprbolaExtension extends Extension {
             const icon = item.kind !== 'app'
                 ? this._panelGicon(this._connectionIconName(item.name), menuAccent(theme))
                 : item.app.get_icon();
-            addAction(item.label, () => {
+            const action = addAction(item.label, () => {
                 if (item.name === 'power') {
                     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
                         if (this._dock)
@@ -3088,6 +3093,13 @@ export default class ZhyprbolaExtension extends Extension {
                 else
                     item.window ? this._activateWindow(item.window) : this._activateApp(item.app);
             }, icon);
+            if (item.kind === 'panel' && item.name === 'battery') {
+                new BatteryIndicator(action._icon, action, theme.iconColor, info => {
+                    action.label.text = info.present
+                        ? `Battery: ${info.percentage === null ? 'Charge unknown' : `${info.percentage}%`} · ${info.status}`
+                        : info.status;
+                }, true);
+            }
         }
         Main.uiGroup.add_child(menu.actor);
         menu.actor.hide();
@@ -3143,6 +3155,8 @@ export default class ZhyprbolaExtension extends Extension {
                         accessible_name: this._connectionAccessibleName(
                             name, new Map(DOCK_COMPONENTS).get(name)),
                     });
+                    if (name === 'battery')
+                        new BatteryIndicator(icon, buttonItem);
                     buttonItem.connect('clicked', () => {
                         menu.close();
                         GLib.idle_add_once(GLib.PRIORITY_DEFAULT_IDLE, () => {

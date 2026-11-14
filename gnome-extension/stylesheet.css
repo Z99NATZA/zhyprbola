@@ -394,6 +394,10 @@
     -slider-handle-radius: 6px;
 }
 
+.zhyprbola-dock-icon.zhyprbola-battery-indicator {
+    icon-size: 20px;
+}
+
 .zhyprbola-battery-menu .popup-menu-content {
     border-radius: 14px;
     min-width: 0;

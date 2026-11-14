@@ -101,7 +101,8 @@ class StaticPopupMenu {
     }
     addMenuItem(item) { this.items.push(item); this.box.add_child(item); }
     addAction(label, callback, icon) {
-        const action = new Actor({label: new Actor({text: label}), activate: callback, icon});
+        const action = new Actor({label: new Actor({text: label}), activate: callback, icon,
+            _icon: new Actor({gicon: icon})});
         this.items.push(action);
         return action;
     }
@@ -159,6 +160,12 @@ function fixture(length = 400) {
         SoundMenu: NativeAppMenu,
         BrightnessMenu: NativeAppMenu,
         BatteryMenu: NativeAppMenu,
+        BatteryIndicator: class {
+            constructor(icon, button, foreground, onChange, lightBackground = false) {
+                icon.batterySource = button;
+                icon.batteryLightBackground = lightBackground;
+            }
+        },
         PopupMenu: {PopupMenuManager: class {}, PopupMenu: StaticPopupMenu,
             PopupBaseMenuItem: StaticPopupMenuItem},
         BoxPointer: {PopupAnimation: {NONE: 'none'}},
@@ -2074,4 +2081,41 @@ test('Clock and Weather keep the legacy shared region or menu and can move indep
     assert.equal(layout.regions[0].includes('clock'), true);
     assert.equal(layout.hidden.includes('weather'), true);
     assert.equal(layout.regions.flat().includes('weather'), false);
+});
+
+
+test('battery buttons attach a live indicator on every dock edge and in Quick', () => {
+    for (const side of ['bottom', 'top', 'left', 'right']) {
+        const {dock} = fixture();
+        dock._dockPosition = side;
+        dock._panelGicon = name => name;
+        const button = dock._createPanelButton({iconName: 'battery',
+            panelName: 'battery', accessibleName: 'Battery'});
+        assert.equal(button.children[0].batterySource, button);
+        assert.equal(button.children[0].batteryLightBackground, false);
+        dock._themeName = 'mauve';
+        dock._dockComponents.quick = ['battery'];
+        dock._openQuickMenu(button);
+        const item = dock._quickMenu.items[0];
+        const quickButton = item.children[0].children[0].children[0];
+        assert.equal(quickButton.children[0].batterySource, quickButton);
+        assert.equal(quickButton.children[0].batteryLightBackground, false);
+        button.destroy();
+    }
+});
+
+
+test('battery in overflow gets a live indicator and changing themes preserves the dock reading', () => {
+    const {dock} = fixture();
+    dock._themeName = 'mauve';
+    dock._dockBgOpacity = 50;
+    dock._panelGicon = name => name;
+    dock._showOverflow(new Actor(), [{kind: 'panel', name: 'battery', label: 'Battery'}]);
+    const action = dock._overflowMenu.items[0];
+    assert.equal(action._icon.batterySource, action);
+    assert.equal(action._icon.batteryLightBackground, true);
+    const icon = new Actor({gicon: 'live battery reading'});
+    dock._panelIcons.set('battery', icon);
+    dock._applyTheme();
+    assert.equal(icon.gicon, 'live battery reading');
 });
