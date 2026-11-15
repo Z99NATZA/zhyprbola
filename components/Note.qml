@@ -55,6 +55,20 @@ Item {
         property var redoStack: []
         property var replaceHistory: []
         property string lastSearch: ""
+        property bool lastSearchForward: true
+        property bool lastSearchWhole: false
+        // "." repeat: every change calls pushUndo, which bumps changeTick, so a
+        // finished key sequence that moved the tick is the last change. Inserts
+        // also keep the text typed before Escape.
+        property int changeTick: 0
+        property var lastChange: null
+        property var recordKeys: []
+        property string recordCount: ""
+        property int recordTick: 0
+        property var pendingChange: null
+        property string insertBase: ""
+        property int insertStart: 0
+        property bool replaying: false
         readonly property bool normalMode: vimEnabled && vimMode !== "insert" && vimMode !== "replace"
 
         readonly property int cursorLine: Vim.lineIndex(editor.text, editor.cursorPosition) + 1
@@ -376,6 +390,7 @@ Item {
             if (stack.length > 200) stack.shift()
             undoStack = stack
             redoStack = []
+            changeTick += 1
         }
 
         function restore(from, to) {
@@ -414,9 +429,23 @@ Item {
             vimPending = ""
             vimCount = ""
             editor.cursorPosition = position
+            trackInsert(position)
+        }
+
+        function trackInsert(position) {
+            insertBase = replaying ? "" : editor.text
+            insertStart = position
         }
 
         function leaveInsert() {
+            if (!replaying && pendingChange !== null) {
+                const change = pendingChange
+                change.insert = Vim.insertEdit(insertBase, editor.text, insertStart)
+                change.insert.replace = vimMode === "replace"
+                lastChange = change
+            }
+            pendingChange = null
+            insertBase = ""
             const text = editor.text
             let position = editor.cursorPosition
             if (position > Vim.lineStart(text, position))
@@ -560,13 +589,85 @@ Item {
             editor.cursorPosition = cursor + character.length
         }
 
-        function search(forward) {
-            if (lastSearch === "") { showMessage("No previous search", true); return }
+        function replaceWithLineBreak(count) {
             const text = editor.text
-            const index = forward ? Vim.findForward(text, lastSearch, editor.cursorPosition)
-                : Vim.findBackward(text, lastSearch, editor.cursorPosition)
-            if (index < 0) { showMessage("Pattern not found: " + lastSearch, true); return }
+            const cursor = editor.cursorPosition
+            const end = Vim.lineEnd(text, cursor)
+            let to = cursor
+            for (let i = 0; i < count && to < end; ++i) to = Vim.nextCharacter(text, to)
+            if (to <= cursor) return
+            pushUndo()
+            editor.remove(cursor, to)
+            editor.insert(cursor, "\n")
+            setCursor(cursor + 1)
+        }
+
+        function shiftLines(direction, count) {
+            const text = editor.text
+            const range = Vim.lineRange(text, editor.cursorPosition, count)
+            const block = text.slice(range.start, range.end)
+            const shifted = block.split("\n").map(line => Vim.shiftLine(line, direction)).join("\n")
+            if (shifted === block) return
+            pushUndo()
+            editor.remove(range.start, range.end)
+            editor.insert(range.start, shifted)
+            setCursor(Vim.firstNonBlank(editor.text, range.start))
+        }
+
+        function moveLines(delta) {
+            const move = Vim.moveLine(editor.text, editor.cursorPosition, delta)
+            if (!move) return
+            pushUndo()
+            editor.remove(move.start, move.end)
+            editor.insert(move.start, move.text)
+            setCursor(move.cursor, true)
+        }
+
+        function search(forward, count) {
+            if (lastSearch === "") { showMessage("No previous search", true); return false }
+            const text = editor.text
+            let index = editor.cursorPosition
+            for (let i = 0; i < Math.max(1, count || 1); ++i) {
+                index = lastSearchWhole
+                    ? Vim.findWord(text, lastSearch, index, forward, backend.isWordCharacter)
+                    : forward ? Vim.findForward(text, lastSearch, index) : Vim.findBackward(text, lastSearch, index)
+                if (index < 0) { showMessage("Pattern not found: " + lastSearch, true); return false }
+            }
             setCursor(index)
+            return true
+        }
+
+        // "*" and "#": search for the whole keyword under or after the cursor.
+        function searchWord(forward, count) {
+            const text = editor.text
+            const word = Vim.keywordAt(text, editor.cursorPosition, backend.isWordCharacter)
+            if (!word) { showMessage("No string under cursor", true); return }
+            lastSearch = text.slice(word.start, word.end)
+            lastSearchWhole = true
+            lastSearchForward = forward
+            editor.cursorPosition = word.start
+            if (search(forward, count)) showMessage((forward ? "/" : "?") + lastSearch)
+        }
+
+        function repeatLastChange(count) {
+            const change = lastChange
+            if (!change) return
+            const total = count > 0 ? String(count) : change.count
+            replaying = true
+            for (const digit of total) runNormalKey({text: digit, key: 0})
+            for (const entry of change.keys) runNormalKey(entry)
+            if (change.insert && (vimMode === "insert" || vimMode === "replace")) {
+                const text = editor.text
+                const cursor = editor.cursorPosition
+                const limit = change.insert.replace ? Vim.lineEnd(text, cursor) : text.length
+                const from = Math.max(0, cursor - change.insert.back)
+                const to = Math.min(limit, cursor + change.insert.forward)
+                editor.remove(from, Math.max(from, to))
+                editor.insert(from, change.insert.text)
+                editor.cursorPosition = from + change.insert.text.length
+                leaveInsert()
+            }
+            replaying = false
         }
 
         function openCommandLine(prefix) {
@@ -586,8 +687,12 @@ Item {
             const input = commandInput.text.trim()
             closeCommandLine()
             if (prefix === "/" || prefix === "?") {
-                if (input !== "") lastSearch = input
-                search(prefix === "/")
+                if (input !== "") {
+                    lastSearch = input
+                    lastSearchWhole = false
+                }
+                lastSearchForward = prefix === "/"
+                search(lastSearchForward)
                 return
             }
             runExCommand(input)
@@ -639,8 +744,22 @@ Item {
 
         function handleVimKey(event) {
             if (!vimEnabled) return
+            // Pressing Shift (or another modifier) on its own must not cancel a
+            // pending "r", "d", "g", ... before the shifted key arrives.
+            if (isModifierKey(event.key)) return
             if (event.modifiers & Qt.ControlModifier) {
                 if (normalMode && event.key === Qt.Key_R) { redo(); event.accepted = true }
+                return
+            }
+            if ((event.modifiers & Qt.AltModifier) && !(event.modifiers & Qt.MetaModifier)
+                && vimMode === "normal"
+                && (event.key === Qt.Key_J || event.key === Qt.Key_K
+                    || event.key === Qt.Key_Down || event.key === Qt.Key_Up)) {
+                const count = Math.max(1, parseInt(vimCount) || 1)
+                vimPending = ""
+                vimCount = ""
+                moveLines(event.key === Qt.Key_J || event.key === Qt.Key_Down ? count : -count)
+                event.accepted = true
                 return
             }
             if (event.modifiers & (Qt.AltModifier | Qt.MetaModifier)) return
@@ -676,7 +795,40 @@ Item {
             handleNormalKey(event)
         }
 
+        function isModifierKey(key) {
+            return key === Qt.Key_Shift || key === Qt.Key_Control || key === Qt.Key_Alt
+                || key === Qt.Key_AltGr || key === Qt.Key_Meta || key === Qt.Key_Super_L
+                || key === Qt.Key_Super_R || key === Qt.Key_CapsLock || key === Qt.Key_NumLock
+                || key === Qt.Key_Mode_switch
+        }
+
+        // Records each finished change so "." can replay it.
         function handleNormalKey(event) {
+            if (vimPending === "" && event.text === ".") {
+                const count = parseInt(vimCount) || 0
+                vimCount = ""
+                repeatLastChange(count)
+                return
+            }
+            if (vimPending === "" && vimCount === "") {
+                recordKeys = []
+                recordCount = ""
+                recordTick = changeTick
+            }
+            const countBefore = vimCount
+            runNormalKey(event)
+            if (event.key === Qt.Key_Escape) return
+            if (/^[0-9]$/.test(event.text) && vimCount === countBefore + event.text)
+                recordCount += event.text
+            else
+                recordKeys = recordKeys.concat([{text: event.text, key: event.key}])
+            if (vimPending !== "" || vimCount !== "" || changeTick === recordTick) return
+            const change = {keys: recordKeys, count: recordCount, insert: null}
+            if (vimMode === "insert" || vimMode === "replace") pendingChange = change
+            else if (vimMode === "normal") lastChange = change
+        }
+
+        function runNormalKey(event) {
             const key = event.text
             if (event.key === Qt.Key_Escape) {
                 vimPending = ""
@@ -699,7 +851,12 @@ Item {
             const isWord = backend.isWordCharacter
 
             if (pending === "r") {
-                if (key.length > 0 && key.charCodeAt(0) >= 32) replaceCharacters(key, count)
+                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) replaceWithLineBreak(count)
+                else if (key.length > 0 && key.charCodeAt(0) >= 32) replaceCharacters(key, count)
+                return
+            }
+            if (pending === ">" || pending === "<") {
+                if (key === pending) shiftLines(pending === ">" ? 1 : -1, count)
                 return
             }
             if (pending === "g") {
@@ -838,11 +995,15 @@ Item {
                 pushUndo()
                 replaceHistory = []
                 vimMode = "replace"
+                trackInsert(cursor)
             } else if (key === "n" || key === "N") {
-                search(key === "n")
+                search(key === "n" ? lastSearchForward : !lastSearchForward, count)
+            } else if (key === "*" || key === "#") {
+                searchWord(key === "*", count)
             } else if (key === ":" || key === "/" || key === "?") {
                 openCommandLine(key)
-            } else if (key === "d" || key === "c" || key === "y" || key === "g" || key === "r") {
+            } else if (key === "d" || key === "c" || key === "y" || key === "g" || key === "r"
+                || key === ">" || key === "<") {
                 vimPending = key
                 vimCount = hadCount ? String(count) : ""
             }

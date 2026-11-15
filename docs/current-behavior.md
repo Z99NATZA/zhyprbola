@@ -193,8 +193,13 @@ The Vim setting is separate from Tasks and remembers its state (note-vim-enabled
 With Vim on, a status line shows the mode in color (-- NORMAL -- blue, -- INSERT --
 green, -- REPLACE -- red, -- COMMAND -- orange), messages or path, and line:column.
 Normal: h j k l, w b e, 0 ^ $, gg G {n}G, counts, i a I A o O, x X s S C D J ~,
-r R, dd cc yy, d/c/y with w e b $ 0 j k G iw aw, p P, u, Ctrl+R, / ? n N,
-gt gT {n}gt.
+r R (r Enter splits the line), dd cc yy, d/c/y with w e b $ 0 j k G iw aw, p P,
+u, Ctrl+R, >> << (a tab if the indent starts with one, else four spaces),
+Alt+j/Alt+k (or Alt+Down/Up) move the line down/up, / ? n N (n keeps the last
+search's direction), * # (whole word under or after the cursor), . (repeats the
+last change, including the text typed in insert or replace mode; a count
+replaces the original one), gt gT {n}gt. A bare Shift press does not cancel a
+pending command, so rA, d$, dG, and gT work as typed.
 Ex: :w [path], :q, :q!, :wq, :x, :e [path], :e!, :enew, :{line}, :tabnew [path],
 :tabn, :tabp, :tabc. :q and :wq close the tab, or the panel on the last tab.
 Normal mode is read-only, so input methods cannot insert text by accident.

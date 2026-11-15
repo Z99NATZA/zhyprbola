@@ -154,3 +154,85 @@ function findBackward(text, needle, position) {
     const index = position > 0 ? text.lastIndexOf(needle, position - 1) : -1
     return index >= 0 ? index : text.lastIndexOf(needle)
 }
+
+// Keyword under or after the cursor on its line, for "*" and "#".
+function keywordAt(text, position, isWordCharacter) {
+    const end = lineEnd(text, position)
+    let cursor = position
+    while (cursor < end && TaskVim.characterKind(text, cursor, isWordCharacter) !== 1)
+        cursor = nextCharacter(text, cursor)
+    if (cursor >= end) return null
+    return innerWord(text, cursor, isWordCharacter)
+}
+
+function isWholeWord(text, index, length, isWordCharacter) {
+    if (index > 0 && TaskVim.characterKind(text, previousCharacter(text, index), isWordCharacter) === 1)
+        return false
+    const end = index + length
+    return end >= text.length || TaskVim.characterKind(text, end, isWordCharacter) !== 1
+}
+
+// Whole-word search that wraps around the document, like Vim's \<word\>.
+function findWord(text, needle, position, forward, isWordCharacter) {
+    if (needle.length === 0) return -1
+    const whole = index => isWholeWord(text, index, needle.length, isWordCharacter)
+    const before = index => index > 0 ? text.lastIndexOf(needle, index - 1) : -1
+    if (forward) {
+        for (let i = text.indexOf(needle, position + 1); i >= 0; i = text.indexOf(needle, i + 1))
+            if (whole(i)) return i
+        for (let i = text.indexOf(needle); i >= 0 && i <= position; i = text.indexOf(needle, i + 1))
+            if (whole(i)) return i
+    } else {
+        for (let i = before(position); i >= 0; i = before(i))
+            if (whole(i)) return i
+        for (let i = text.lastIndexOf(needle); i >= 0 && i >= position; i = before(i))
+            if (whole(i)) return i
+    }
+    return -1
+}
+
+// One ">>" or "<<" step: a tab when the indent starts with one, else four spaces.
+function shiftLine(line, direction) {
+    if (direction > 0) return line.length === 0 ? line : (line[0] === "\t" ? "\t" : "    ") + line
+    if (line[0] === "\t") return line.slice(1)
+    let count = 0
+    while (count < 4 && line[count] === " ") count += 1
+    return line.slice(count)
+}
+
+// Move the cursor's line `delta` lines down (positive) or up, keeping its
+// column. Returns the region to replace, or null at the document edge.
+function moveLine(text, position, delta) {
+    const start = lineStart(text, position)
+    const end = lineEnd(text, position)
+    const current = text.slice(start, end)
+    const offset = position - start
+    if (delta > 0) {
+        if (end >= text.length) return null
+        let last = end
+        for (let step = 0; step < delta && last < text.length; ++step) last = lineEnd(text, last + 1)
+        const below = text.slice(end + 1, last)
+        return {start: start, end: last, text: below + "\n" + current, cursor: start + below.length + 1 + offset}
+    }
+    if (start === 0) return null
+    let first = start
+    for (let step = 0; step < -delta && first > 0; ++step) first = lineStart(text, first - 1)
+    const above = text.slice(first, start - 1)
+    return {start: first, end: end, text: current + "\n" + above, cursor: first + offset}
+}
+
+// Text typed during one insert or replace session, as an edit relative to
+// where it started: `back` units removed before it, `forward` after it, then
+// `text` inserted. Used to replay the session with ".".
+function insertEdit(before, after, start) {
+    let prefix = 0
+    const prefixLimit = Math.min(start, before.length, after.length)
+    while (prefix < prefixLimit && before.charCodeAt(prefix) === after.charCodeAt(prefix)) prefix += 1
+    let suffix = 0
+    const suffixLimit = Math.min(before.length - start, after.length - prefix)
+    while (suffix < suffixLimit
+        && before.charCodeAt(before.length - 1 - suffix) === after.charCodeAt(after.length - 1 - suffix))
+        suffix += 1
+    return {back: start - prefix, forward: before.length - suffix - start,
+        text: after.slice(prefix, after.length - suffix)}
+}

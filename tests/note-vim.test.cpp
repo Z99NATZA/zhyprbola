@@ -433,6 +433,91 @@ private slots:
         keys("u"); QCOMPARE(text(), "abTA one three");
     }
 
+    void shiftKeyKeepsPendingCommand() {
+        load("abc\nxyz");
+        enableVim();
+        // Real keyboards send a Shift press before the shifted character.
+        const auto shifted = [this](char character) {
+            QTest::keyPress(window.get(), Qt::Key_Shift);
+            QTest::keyClick(window.get(), character, Qt::ShiftModifier);
+            QTest::keyRelease(window.get(), Qt::Key_Shift);
+        };
+        keys("r"); shifted('X');
+        QCOMPARE(text(), "Xbc\nxyz");
+        keys("ld"); shifted('$');
+        QCOMPARE(text(), "X\nxyz");
+        load("ab cd");
+        keys("llr"); enter();
+        QCOMPARE(text(), "ab\ncd");
+        QCOMPARE(cursor(), 3);
+    }
+
+    void shiftAndMoveLines() {
+        load("one\ntwo\nthree");
+        enableVim();
+        keys(">>"); QCOMPARE(text(), "    one\ntwo\nthree");
+        QCOMPARE(cursor(), 4);
+        keys("j2>>"); QCOMPARE(text(), "    one\n    two\n    three");
+        keys("<<"); QCOMPARE(text(), "    one\ntwo\n    three");
+        load("\tx\n  y");
+        keys(">>"); QCOMPARE(text(), "\t\tx\n  y");
+        keys("<<j<<"); QCOMPARE(text(), "\tx\ny");
+
+        const auto alt = [this](Qt::Key key) { QTest::keyClick(window.get(), key, Qt::AltModifier); };
+        load("a1\nb2\nc3");
+        keys("l");
+        alt(Qt::Key_J); QCOMPARE(text(), "b2\na1\nc3"); QCOMPARE(cursor(), 4);
+        alt(Qt::Key_J); QCOMPARE(text(), "b2\nc3\na1"); QCOMPARE(cursor(), 7);
+        alt(Qt::Key_J); QCOMPARE(text(), "b2\nc3\na1");
+        alt(Qt::Key_K); QCOMPARE(text(), "b2\na1\nc3"); QCOMPARE(cursor(), 4);
+        keys("2"); alt(Qt::Key_K); QCOMPARE(text(), "a1\nb2\nc3"); QCOMPARE(cursor(), 1);
+        keys("u"); QCOMPARE(text(), "b2\na1\nc3");
+    }
+
+    void starSearchesWholeWord() {
+        load("foo food foo\nbar foo");
+        enableVim();
+        keys("*"); QCOMPARE(cursor(), 9);
+        keys("n"); QCOMPARE(cursor(), 17);
+        keys("n"); QCOMPARE(cursor(), 0);
+        keys("#"); QCOMPARE(cursor(), 17);
+        keys("n"); QCOMPARE(cursor(), 9); // "#" makes n search backward
+        keys("N"); QCOMPARE(cursor(), 17);
+        keys("gg3l*"); QCOMPARE(cursor(), 4); // keyword after the cursor
+        QCOMPARE(card->property("message").toString(), "/food");
+    }
+
+    void dotRepeatsLastChange() {
+        load("abcdef");
+        enableVim();
+        keys("x"); keys("3."); QCOMPARE(text(), "ef");
+        load("one two three");
+        keys("ciwXY"); escape();
+        keys("w."); QCOMPARE(text(), "XY XY three");
+        keys("w."); QCOMPARE(text(), "XY XY XY");
+        keys("u"); QCOMPARE(text(), "XY XY three");
+        load("a\nb");
+        keys("onew"); escape();
+        keys("j."); QCOMPARE(text(), "a\nnew\nb\nnew");
+        load("x\ny");
+        keys(">>j."); QCOMPARE(text(), "    x\n    y");
+        load("abc");
+        keys("rZl."); QCOMPARE(text(), "ZZc");
+        load("abcd\nabcd");
+        keys("Rxy"); escape();
+        keys("j0."); QCOMPARE(text(), "xycd\nxycd");
+        // Backspacing over existing text is replayed too.
+        load("hello\nworld");
+        keys("A");
+        QTest::keyClick(window.get(), Qt::Key_Backspace);
+        QTest::keyClick(window.get(), Qt::Key_Backspace);
+        keys("p"); escape();
+        QCOMPARE(text(), "help\nworld");
+        keys("j."); QCOMPARE(text(), "help\nworp");
+        // Motions and yanks do not replace the last change.
+        keys("0yyw."); QCOMPARE(text(), "help\nwop");
+    }
+
     void searchAndCommandLine() {
         load("find me\nand me too");
         enableVim();
