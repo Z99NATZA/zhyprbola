@@ -69,6 +69,14 @@ Item {
         property string insertBase: ""
         property int insertStart: 0
         property bool replaying: false
+        // Visual mode: the anchor and the moving end, both inclusive. The
+        // TextEdit selection draws the highlight; visualSync marks our own
+        // selection updates so they are not mistaken for mouse selections.
+        property int visualAnchor: 0
+        property int visualCursor: 0
+        property bool visualLine: false
+        property bool visualSync: false
+        property var lastVisual: null
         readonly property bool normalMode: vimEnabled && vimMode !== "insert" && vimMode !== "replace"
 
         readonly property int cursorLine: Vim.lineIndex(editor.text, editor.cursorPosition) + 1
@@ -90,6 +98,9 @@ Item {
         }
 
         onVimEnabledChanged: {
+            visualSync = true
+            editor.deselect()
+            visualSync = false
             vimMode = "normal"
             vimPending = ""
             vimCount = ""
@@ -748,7 +759,7 @@ Item {
             // pending "r", "d", "g", ... before the shifted key arrives.
             if (isModifierKey(event.key)) return
             if (event.modifiers & Qt.ControlModifier) {
-                if (normalMode && event.key === Qt.Key_R) { redo(); event.accepted = true }
+                if (vimMode === "normal" && event.key === Qt.Key_R) { redo(); event.accepted = true }
                 return
             }
             if ((event.modifiers & Qt.AltModifier) && !(event.modifiers & Qt.MetaModifier)
@@ -764,6 +775,11 @@ Item {
             }
             if (event.modifiers & (Qt.AltModifier | Qt.MetaModifier)) return
 
+            if (vimMode === "visual") {
+                event.accepted = true
+                handleVisualKey(event)
+                return
+            }
             if (vimMode === "insert") {
                 if (event.key === Qt.Key_Escape) { leaveInsert(); event.accepted = true }
                 return
@@ -866,6 +882,7 @@ Item {
                     if (hadCount) switchTab(count - 1)
                     else nextTab(1)
                 } else if (key === "T") nextTab(-count)
+                else if (key === "v") reselectVisual()
                 return
             }
             if (pending === "d" || pending === "c" || pending === "y") {
@@ -1000,6 +1017,8 @@ Item {
                 search(key === "n" ? lastSearchForward : !lastSearchForward, count)
             } else if (key === "*" || key === "#") {
                 searchWord(key === "*", count)
+            } else if (key === "v" || key === "V") {
+                enterVisual(cursor, cursor, key === "V")
             } else if (key === ":" || key === "/" || key === "?") {
                 openCommandLine(key)
             } else if (key === "d" || key === "c" || key === "y" || key === "g" || key === "r"
@@ -1007,6 +1026,208 @@ Item {
                 vimPending = key
                 vimCount = hadCount ? String(count) : ""
             }
+        }
+
+        // ---- Visual mode ---------------------------------------------------
+
+        function enterVisual(anchor, position, linewise) {
+            visualAnchor = anchor
+            visualCursor = position
+            visualLine = linewise
+            vimPending = ""
+            vimCount = ""
+            vimMode = "visual"
+            updateVisualSelection()
+        }
+
+        function reselectVisual() {
+            if (!lastVisual) { showMessage("No previous Visual area", true); return }
+            const text = editor.text
+            enterVisual(Vim.normalPosition(text, lastVisual.anchor),
+                Vim.normalPosition(text, lastVisual.cursor), lastVisual.line)
+        }
+
+        function exitVisual(position) {
+            lastVisual = {anchor: visualAnchor, cursor: visualCursor, line: visualLine}
+            visualSync = true
+            editor.deselect()
+            vimMode = "normal"
+            vimPending = ""
+            vimCount = ""
+            visualSync = false
+            setCursor(position === undefined ? visualCursor : position)
+        }
+
+        function visualBounds() {
+            const text = editor.text
+            const lo = Math.min(visualAnchor, visualCursor)
+            const hi = Math.max(visualAnchor, visualCursor)
+            return {lo: lo, hi: hi,
+                lines: Vim.lineIndex(text, hi) - Vim.lineIndex(text, lo) + 1,
+                start: visualLine ? Vim.lineStart(text, lo) : lo,
+                end: visualLine ? Vim.lineEnd(text, hi) : Math.min(text.length, Vim.nextCharacter(text, hi))}
+        }
+
+        function updateVisualSelection() {
+            const text = editor.text
+            const bounds = visualBounds()
+            // Linewise selections take the line break too, so empty lines show.
+            const end = visualLine ? Math.min(text.length, bounds.end + 1) : bounds.end
+            visualSync = true
+            if (visualCursor >= visualAnchor) editor.select(bounds.start, end)
+            else editor.select(end, bounds.start)
+            visualSync = false
+            flick.ensureVisible(editor.positionToRectangle(visualCursor))
+        }
+
+        // A mouse drag or double-click selection in normal mode starts Visual
+        // mode; a click that clears the selection leaves it.
+        function syncVisualFromSelection() {
+            if (visualSync || !vimEnabled || (vimMode !== "normal" && vimMode !== "visual")) return
+            if (editor.selectedText === "") {
+                if (vimMode === "visual") {
+                    vimMode = "normal"
+                    setCursor(editor.cursorPosition)
+                }
+                return
+            }
+            const start = editor.selectionStart
+            const last = Vim.previousCharacter(editor.text, editor.selectionEnd)
+            const backward = editor.cursorPosition === start
+            visualAnchor = backward ? last : start
+            visualCursor = backward ? start : last
+            visualLine = false
+            vimPending = ""
+            vimCount = ""
+            vimMode = "visual"
+        }
+
+        function isVisualMotion(event) {
+            const key = event.text
+            if (key.length === 1 && "hjklwbe0123456789^$GgnN*# ".indexOf(key) >= 0) return true
+            return [Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down, Qt.Key_Home, Qt.Key_End,
+                Qt.Key_PageUp, Qt.Key_PageDown, Qt.Key_Backspace, Qt.Key_Return, Qt.Key_Enter]
+                .indexOf(event.key) >= 0
+        }
+
+        // Motions reuse the normal-mode handler on the moving end.
+        function visualMotion(event) {
+            visualSync = true
+            editor.cursorPosition = visualCursor
+            runNormalKey(event)
+            visualCursor = editor.cursorPosition
+            visualSync = false
+            updateVisualSelection()
+        }
+
+        function visualOperator(op, linewise) {
+            const bounds = visualBounds()
+            const lines = linewise || visualLine
+            exitVisual(bounds.lo)
+            if (lines) applyLineOperator(op, bounds.lines)
+            else applyOperator(op, bounds.start, bounds.end)
+        }
+
+        function visualShift(direction) {
+            const bounds = visualBounds()
+            exitVisual(bounds.lo)
+            shiftLines(direction, bounds.lines)
+        }
+
+        function visualEdit(transform) {
+            const bounds = visualBounds()
+            const text = editor.text
+            exitVisual(bounds.start)
+            const before = text.slice(bounds.start, bounds.end)
+            const after = transform(before)
+            if (after === before) return
+            pushUndo()
+            editor.remove(bounds.start, bounds.end)
+            editor.insert(bounds.start, after)
+            setCursor(bounds.start)
+        }
+
+        function changeCase(value, how) {
+            let out = ""
+            for (const ch of value) {
+                if (how === "u") out += ch.toLowerCase()
+                else if (how === "U") out += ch.toUpperCase()
+                else out += ch === ch.toUpperCase() ? ch.toLowerCase() : ch.toUpperCase()
+            }
+            return out
+        }
+
+        function replaceAll(value, character) {
+            let out = ""
+            for (const ch of value) out += ch === "\n" ? ch : character
+            return out
+        }
+
+        // "p" swaps the selection into the register; "P" keeps the register.
+        function visualPut(swap) {
+            const reg = vimRegister
+            if (reg.text === "") { exitVisual(); return }
+            const bounds = visualBounds()
+            const linewise = visualLine
+            const text = editor.text
+            const removed = text.slice(bounds.start, bounds.end)
+            let inserted = reg.text
+            if (linewise && reg.linewise) inserted = reg.text.slice(0, -1)
+            else if (!linewise && reg.linewise) inserted = "\n" + reg.text
+            exitVisual(bounds.start)
+            pushUndo()
+            editor.remove(bounds.start, bounds.end)
+            editor.insert(bounds.start, inserted)
+            if (swap) vimRegister = {text: linewise ? removed + "\n" : removed, linewise: linewise}
+            if (linewise || reg.linewise)
+                setCursor(Vim.firstNonBlank(editor.text, bounds.start + (linewise ? 0 : 1)))
+            else
+                setCursor(bounds.start + inserted.length - 1)
+        }
+
+        function handleVisualKey(event) {
+            const key = event.text
+            if (event.key === Qt.Key_Escape) { exitVisual(); return }
+            if (vimPending === "r") {
+                vimPending = ""
+                if (key.length > 0 && key.charCodeAt(0) >= 32) visualEdit(value => replaceAll(value, key))
+                return
+            }
+            if (vimPending === "g" && key !== "g") { vimPending = ""; vimCount = ""; return }
+            if (vimPending === "" && "vVo".indexOf(key) >= 0 && key !== "") {
+                vimCount = ""
+                if (key === "o") {
+                    const anchor = visualAnchor
+                    visualAnchor = visualCursor
+                    visualCursor = anchor
+                } else if ((key === "V") === visualLine) {
+                    exitVisual()
+                    return
+                } else {
+                    visualLine = key === "V"
+                }
+                updateVisualSelection()
+                return
+            }
+            if (vimPending === "") {
+                if (key === "d" || key === "x" || event.key === Qt.Key_Delete) { visualOperator("d", false); return }
+                if (key === "X" || key === "D") { visualOperator("d", true); return }
+                if (key === "c" || key === "s") { visualOperator("c", false); return }
+                if (key === "C" || key === "S" || key === "R") { visualOperator("c", true); return }
+                if (key === "y") { visualOperator("y", false); return }
+                if (key === "Y") { visualOperator("y", true); return }
+                if (key === ">" || key === "<") { visualShift(key === ">" ? 1 : -1); return }
+                if (key === "~" || key === "u" || key === "U") { visualEdit(value => changeCase(value, key)); return }
+                if (key === "J") {
+                    const bounds = visualBounds()
+                    exitVisual(bounds.lo)
+                    joinLines(Math.max(2, bounds.lines))
+                    return
+                }
+                if (key === "p" || key === "P") { visualPut(key === "p"); return }
+                if (key === "r") { vimPending = "r"; vimCount = ""; return }
+            }
+            if (isVisualMotion(event)) visualMotion(event)
         }
 
         function pageLines() {
@@ -1348,6 +1569,7 @@ Item {
 
                     onTextChanged: card.dirty = text !== card.savedText
                     onCursorRectangleChanged: flick.ensureVisible(cursorRectangle)
+                    onSelectedTextChanged: card.syncVisualFromSelection()
                     onCursorPositionChanged: {
                         // Mouse clicks may land on a line break in normal mode.
                         if (card.normalMode && card.vimMode === "normal" && selectedText === "") {
@@ -1362,7 +1584,24 @@ Item {
                         width: block ? Math.max(8, blockMetrics.advanceWidth) : 2
                         height: editor.cursorRectangle.height
                         color: block ? Qt.alpha(Theme.accent, 0.55) : Theme.accent
-                        visible: editor.activeFocus
+                        // Visual mode draws its own block at the moving end below.
+                        visible: editor.activeFocus && card.vimMode !== "visual"
+                    }
+
+                    Rectangle {
+                        objectName: "note-visual-cursor"
+                        readonly property rect at: {
+                            editor.text
+                            editor.width
+                            if (card.vimMode !== "visual") return Qt.rect(0, 0, 0, 0)
+                            return editor.positionToRectangle(Math.min(card.visualCursor, editor.length))
+                        }
+                        visible: card.vimMode === "visual" && editor.activeFocus
+                        x: at.x
+                        y: at.y
+                        width: Math.max(8, blockMetrics.advanceWidth)
+                        height: at.height
+                        color: Qt.alpha(Theme.accent, 0.55)
                     }
                 }
 
@@ -1376,9 +1615,10 @@ Item {
                     id: blockMetrics
                     font: editor.font
                     text: {
-                        const next = Vim.nextCharacter(editor.text, editor.cursorPosition)
-                        const ch = editor.text.slice(editor.cursorPosition, next)
-                        return ch === "" || ch === "\n" ? " " : ch === "\t" ? "    " : ch
+                        const at = card.vimMode === "visual" ? card.visualCursor : editor.cursorPosition
+                        const ch = editor.text.slice(at, Vim.nextCharacter(editor.text, at))
+                        // A tab spans several columns; keep the block one cell wide.
+                        return ch === "" || ch === "\n" || ch === "\t" ? " " : ch
                     }
                 }
             }
@@ -1448,14 +1688,16 @@ Item {
             // Each Vim mode has its own text color.
             readonly property color modeColor: card.vimMode === "insert" ? "#3FA34D"
                 : card.vimMode === "replace" ? "#D9534F"
-                : card.vimMode === "command" ? "#D08A1E" : "#4A86C8"
+                : card.vimMode === "command" ? "#D08A1E"
+                : card.vimMode === "visual" ? "#A65FC0" : "#4A86C8"
 
             Text {
                 id: modeText
                 objectName: "note-mode"
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
-                text: "-- " + card.vimMode.toUpperCase() + " --"
+                text: "-- " + (card.vimMode === "visual" && card.visualLine ? "VISUAL LINE"
+                    : card.vimMode.toUpperCase()) + " --"
                 color: statusLine.modeColor
                 font.family: "monospace"
                 font.pixelSize: 12

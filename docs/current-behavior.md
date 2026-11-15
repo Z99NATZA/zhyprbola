@@ -200,6 +200,14 @@ search's direction), * # (whole word under or after the cursor), . (repeats the
 last change, including the text typed in insert or replace mode; a count
 replaces the original one), gt gT {n}gt. A bare Shift press does not cancel a
 pending command, so rA, d$, dG, and gT work as typed.
+Visual: v (characters) and V (whole lines) highlight the selection with the
+theme's selection color and show -- VISUAL -- or -- VISUAL LINE -- in purple;
+the block cursor marks the moving end. Normal-mode motions and counts extend it.
+o swaps ends, v/V switch kind (or leave when repeated), Escape leaves with the
+cursor on the moving end, gv reselects the last area. Operators: d x Delete,
+X D (lines), c s, C S R (lines), y, Y (lines), > <, ~ u U, J, r{char}, p (puts
+the register and keeps the replaced text) and P (keeps the register). A mouse
+drag or double-click selection in normal mode enters Visual mode.
 Ex: :w [path], :q, :q!, :wq, :x, :e [path], :e!, :enew, :{line}, :tabnew [path],
 :tabn, :tabp, :tabc. :q and :wq close the tab, or the panel on the last tab.
 Normal mode is read-only, so input methods cannot insert text by accident.

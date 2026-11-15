@@ -518,6 +518,65 @@ private slots:
         keys("0yyw."); QCOMPARE(text(), "help\nwop");
     }
 
+    void visualMode() {
+        load("one two three\nfour five\nsix");
+        enableVim();
+        auto *modeLabel = panel->findChild<QQuickItem *>("note-mode");
+        auto *visualCursor = panel->findChild<QQuickItem *>("note-visual-cursor");
+        QVERIFY(modeLabel && visualCursor);
+        const auto selected = [this] { return editor->property("selectedText").toString(); };
+
+        keys("ve");
+        QCOMPARE(mode(), "visual");
+        QCOMPARE(modeLabel->property("text").toString(), "-- VISUAL --");
+        QCOMPARE(selected(), "one");
+        QVERIFY(visualCursor->isVisible());
+        keys("o"); QCOMPARE(card->property("visualCursor").toInt(), 0);
+        keys("d");
+        QCOMPARE(text(), " two three\nfour five\nsix");
+        QCOMPARE(mode(), "normal");
+        QCOMPARE(selected(), QString());
+        QVERIFY(!visualCursor->isVisible());
+        keys("u");
+
+        // Motions with counts extend the selection; case operators keep the text.
+        keys("wv2lU"); QCOMPARE(text(), "one TWO three\nfour five\nsix");
+        QCOMPARE(cursor(), 4);
+
+        keys("jV");
+        QCOMPARE(modeLabel->property("text").toString(), "-- VISUAL LINE --");
+        QCOMPARE(selected(), "four five\n");
+        keys("d"); QCOMPARE(text(), "one TWO three\nsix");
+        keys("ggVj>"); QCOMPARE(text(), "    one TWO three\n    six");
+        keys("Vj<"); QCOMPARE(text(), "one TWO three\nsix");
+
+        // Escape leaves the cursor on the moving end; gv reselects.
+        load("hello world");
+        keys("vll"); escape();
+        QCOMPARE(mode(), "normal"); QCOMPARE(cursor(), 2);
+        keys("gv"); QCOMPARE(mode(), "visual"); QCOMPARE(selected(), "hel");
+        keys("v"); QCOMPARE(mode(), "normal");
+
+        // y yanks; p replaces the selection and swaps the register.
+        keys("0vey"); QCOMPARE(card->property("vimRegister").toMap().value("text").toString(), "hello");
+        keys("wvep"); QCOMPARE(text(), "hello hello");
+        QCOMPARE(card->property("vimRegister").toMap().value("text").toString(), "world");
+        keys("0v$~"); QCOMPARE(text(), "HELLO HELLO");
+
+        load("abc\ndef");
+        keys("vjrx"); QCOMPARE(text(), "xxx\nxef");
+
+        // A mouse selection enters Visual mode; clearing it leaves.
+        load("hello");
+        QVERIFY(QMetaObject::invokeMethod(editor, "select", Q_ARG(int, 1), Q_ARG(int, 3)));
+        QCOMPARE(mode(), "visual");
+        keys("d"); QCOMPARE(text(), "hlo");
+        QVERIFY(QMetaObject::invokeMethod(editor, "select", Q_ARG(int, 0), Q_ARG(int, 2)));
+        QCOMPARE(mode(), "visual");
+        QVERIFY(QMetaObject::invokeMethod(editor, "deselect"));
+        QCOMPARE(mode(), "normal");
+    }
+
     void searchAndCommandLine() {
         load("find me\nand me too");
         enableVim();
