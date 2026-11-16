@@ -193,16 +193,13 @@ esac
         QVERIFY(!calls().contains("bluetoothctl"));
         QVERIFY(!calls().contains("playerctl"));
     }
-    void edgeSpectrumUsesLighterCavaSmoothing() {
-        clearCalls();
-        {
-            Backend backend(nullptr, QStringLiteral("audio-spectrum"));
-            backend.setPanelActive(true);
-            QTRY_VERIFY(calls().contains("components/cava.conf"));
-        }
+    void spectrumsShareLightCavaSmoothing() {
+        QFile config(QFINDTESTDATA("../components/cava.conf"));
+        QVERIFY(config.open(QIODevice::ReadOnly));
+        QVERIFY(config.readAll().contains("noise_reduction = 30"));
         clearCalls();
         Backend edge(nullptr, QStringLiteral("edge-spectrum"));
-        QTRY_VERIFY(calls().contains("components/cava-edge.conf"));
+        QTRY_VERIFY(calls().contains("components/cava.conf"));
     }
     void mprisFallbackSelectsPlayingPlayerAndControlsItAsynchronously() {
         const QString playerctl = directory.filePath("playerctl");

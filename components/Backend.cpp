@@ -478,8 +478,6 @@ Backend::Backend(QObject *parent, const QString &panelName) : QObject(parent) {
     m_pollMusic = desktop || panelName == QLatin1String("music");
     m_pollSpectrum = m_pollMusic || panelName == QLatin1String("audio-spectrum")
         || panelName == QLatin1String("edge-spectrum");
-    if (panelName == QLatin1String("edge-spectrum"))
-        m_cavaConfig = QStringLiteral("cava-edge.conf");
     connect(&m_themeWatcher, &QFileSystemWatcher::directoryChanged,
         this, &Backend::refreshTheme);
     connect(&m_themeWatcher, &QFileSystemWatcher::fileChanged,
@@ -744,7 +742,7 @@ void Backend::setPanelActive(bool active) {
 
 void Backend::startSpectrum() {
     const QString config = QDir(QCoreApplication::applicationDirPath())
-        .absoluteFilePath(QStringLiteral("../components/") + m_cavaConfig);
+        .absoluteFilePath(QStringLiteral("../components/cava.conf"));
     if (m_cava.state() == QProcess::NotRunning && QFileInfo::exists(config)
         && !QStandardPaths::findExecutable(QStringLiteral("cava")).isEmpty()) {
         m_cavaBuffer.clear();

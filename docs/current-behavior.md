@@ -142,9 +142,10 @@ Style: bars (default) or wave (one gap-free filled shape; neighbouring bars merg
 about every 48 px and join with smooth curves). Saved as edge-spectrum-style.
 Changes apply live and persist. Bar width, spacing, and the edge baseline stay fixed.
 Bars move only where a bin rises above the recent average (~200 ms running
-mean), so the strip bounces at a few points; the edge strip runs cava with
-cava-edge.conf (noise_reduction 30, default 77) and quick rise/fall (30/70 ms)
-so it follows the beat.
+mean), so the strip bounces at a few points. The music player and spectrum
+bubble bars work the same way (sensitivity 2.6 and 1.8). Every spectrum runs
+cava with noise_reduction 30 (cava's default is 77) and quick rise/fall
+(30/70 ms) so it follows the beat.
 ```
 
 ## Tasks

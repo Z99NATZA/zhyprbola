@@ -205,8 +205,13 @@ Item {
                 barCount: 24
                 gap: 3
                 minimumBarHeight: 2
-                sensitivity: 1.3
-                smoothingDuration: 160
+                // Like the edge strip: move only at peaks, quick rise and fall.
+                // Few bars sample few bins, so the sensitivity is higher.
+                peakFocus: true
+                sensitivity: 2.6
+                adaptiveSmoothing: true
+                riseDuration: 30
+                fallDuration: 70
                 barColor: Theme.accent
                 barOpacity: 0.85
             }

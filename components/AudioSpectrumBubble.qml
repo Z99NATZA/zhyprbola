@@ -35,7 +35,12 @@ Item {
         orientation: SpectrumBars.Inward
         gap: 4
         minimumBarHeight: 4
-        sensitivity: 1.35
+        // Like the edge strip: move only at peaks, quick rise and fall.
+        peakFocus: true
+        sensitivity: 1.8
+        adaptiveSmoothing: true
+        riseDuration: 30
+        fallDuration: 70
         barColor: Theme.accent
         barOpacity: 0.9
     }
