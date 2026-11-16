@@ -46,6 +46,20 @@ Item {
         readonly property int taskPitch: taskRowHeight + taskRowGap
         readonly property int taskContentHeight: backend.tasks.length === 0 ? 0
             : backend.tasks.length * taskPitch - taskRowGap
+        // Task text sits on a fixed baseline measured from Latin text, so
+        // fallback fonts (Thai stacked marks) cannot make it jump while typing.
+        readonly property real taskTextBaseline: taskTextMetric.baselineOffset
+
+        Text {
+            id: taskTextMetric
+            visible: false
+            height: card.taskRowHeight
+            verticalAlignment: Text.AlignVCenter
+            text: "Ag"
+            font.family: card.family
+            font.pixelSize: 14
+            font.weight: Font.Medium
+        }
 
         readonly property bool vimEnabled: backend.taskVimEnabled
         readonly property bool vimHasFocus: vimEnabled && (activeFocus || vimInput.activeFocus)
@@ -530,7 +544,11 @@ Item {
             TextInput {
                 id: newTaskInput
                 objectName: "new-task-input"
-                anchors.fill: parent
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.baseline: parent.top
+                anchors.baselineOffset: card.taskTextBaseline
+                height: parent.height
                 anchors.leftMargin: 12
                 anchors.rightMargin: 12
                 verticalAlignment: TextInput.AlignVCenter
@@ -550,7 +568,8 @@ Item {
 
             Text {
                 anchors.left: newTaskInput.left
-                anchors.verticalCenter: parent.verticalCenter
+                anchors.baseline: parent.top
+                anchors.baselineOffset: card.taskTextBaseline
                 visible: newTaskInput.text.length === 0 && !newTaskInput.activeFocus
                 text: "New task"
                 color: card.dimColor
@@ -638,6 +657,7 @@ Item {
                     objectName: "task-vim-editor"
                     x: 42
                     y: Math.max(0, card.selectedTaskIndex) * card.taskPitch
+                        + card.taskTextBaseline - baselineOffset
                     width: Math.max(0, taskContent.width - x - 66)
                     height: card.taskRowHeight
                     z: 2
@@ -917,7 +937,8 @@ Item {
                 id: label
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
+                anchors.baseline: parent.top
+                anchors.baselineOffset: card.taskTextBaseline
                 visible: !row.editing && !(card.vimHasFocus && card.selectedTaskId === row.taskId)
                 text: row.taskText
                 color: row.checked ? card.checkedTextColor : card.textColor
@@ -1006,9 +1027,11 @@ Item {
 
             TextInput {
                 id: editInput
-                anchors.fill: parent
-                anchors.leftMargin: 0
-                anchors.rightMargin: 0
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.baseline: parent.top
+                anchors.baselineOffset: card.taskTextBaseline
+                height: parent.height
                 verticalAlignment: TextInput.AlignVCenter
                 clip: true
                 color: card.textColor
