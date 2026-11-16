@@ -203,6 +203,7 @@ public:
     // Note file I/O: accepts local paths or file:// URLs.
     Q_INVOKABLE QVariantMap readTextFile(const QString &path) const;
     Q_INVOKABLE QString writeTextFile(const QString &path, const QString &text) const;
+    Q_INVOKABLE QVariantMap renameTextFile(const QString &path, const QString &newName) const;
     Q_INVOKABLE QString localFilePath(const QString &pathOrUrl) const;
     // Opens GNOME's file chooser through xdg-desktop-portal; the answer arrives
     // as noteFileChosen. mode is "open" or "save".

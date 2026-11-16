@@ -36,6 +36,12 @@ Item {
         property bool preview: false
         property string message: ""
         property bool messageError: false
+        // Inline rename field in the context menu; Vim keys apply when Vim is on.
+        property bool renaming: false
+        property string renameMode: "normal"
+        property string renamePending: ""
+        property var renameUndo: []
+        property var renameReplaced: []
         // Action waiting on the unsaved-changes prompt: "close-tab" or "quit".
         property string pendingAction: ""
 
@@ -391,6 +397,195 @@ Item {
         function folderOf(path) {
             return path === "" ? StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
                 : "file://" + path.slice(0, path.lastIndexOf("/"))
+        }
+
+        // ---- Rename -------------------------------------------------------
+
+        // Opens the name field under "Rename" with the current name, the cursor
+        // (or selection without Vim) on the part before the extension.
+        function beginRename() {
+            if (filePath === "") return
+            renameInput.text = fileName
+            const dot = fileName.lastIndexOf(".")
+            const stem = dot > 0 ? dot : fileName.length
+            renameMode = "normal"
+            renamePending = ""
+            renameUndo = []
+            renameReplaced = []
+            renaming = true
+            renameInput.forceActiveFocus()
+            if (vimEnabled) {
+                renameInput.deselect()
+                renameInput.cursorPosition = Vim.normalPosition(fileName, Vim.previousCharacter(fileName, stem))
+            } else renameInput.select(0, stem)
+        }
+
+        function commitRename() {
+            const name = renameInput.text.trim()
+            if (name === "" || name === fileName) {
+                contextMenu.close()
+                return
+            }
+            const result = backend.renameTextFile(filePath, name)
+            if (!result.ok) {
+                showMessage("Cannot rename: " + result.error, true)
+                return
+            }
+            filePath = result.path
+            if (!isMarkdown) preview = false
+            backend.setNoteLastFile(filePath)
+            persistTabs()
+            showMessage("Renamed to " + fileName)
+            contextMenu.close()
+        }
+
+        function renameEdit(start, end, insert) {
+            const undo = renameUndo.slice()
+            undo.push({text: renameInput.text, cursor: renameInput.cursorPosition})
+            renameUndo = undo
+            renameInput.remove(start, end)
+            if (insert) renameInput.insert(start, insert)
+        }
+
+        function renameInsert(mode, position) {
+            const undo = renameUndo.slice()
+            undo.push({text: renameInput.text, cursor: renameInput.cursorPosition})
+            renameUndo = undo
+            renameReplaced = []
+            renameMode = mode
+            renameInput.cursorPosition = position
+        }
+
+        function handleRenameKey(event) {
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                commitRename()
+                event.accepted = true
+                return
+            }
+            if (!vimEnabled || (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)))
+                return
+            const text = renameInput.text
+            const cursor = renameInput.cursorPosition
+            if (event.key === Qt.Key_Escape) {
+                event.accepted = true
+                if (renameMode !== "normal") {
+                    renameMode = "normal"
+                    renameInput.cursorPosition = Vim.normalPosition(renameInput.text,
+                        Vim.previousCharacter(renameInput.text, cursor))
+                } else if (renamePending !== "") renamePending = ""
+                else contextMenu.close()
+                return
+            }
+            if (renameMode === "insert") return
+            if (renameMode === "replace") {
+                if (event.key === Qt.Key_Backspace) {
+                    const replaced = renameReplaced.slice()
+                    const edit = replaced.pop()
+                    if (edit) {
+                        renameInput.remove(edit.position, edit.position + edit.inserted.length)
+                        renameInput.insert(edit.position, edit.removed)
+                        renameInput.cursorPosition = edit.position
+                    } else renameInput.cursorPosition = Vim.previousCharacter(text, cursor)
+                    renameReplaced = replaced
+                    event.accepted = true
+                } else if (event.text.length > 0 && event.text.charCodeAt(0) >= 32) {
+                    const end = Vim.nextCharacter(text, cursor)
+                    const replaced = renameReplaced.slice()
+                    replaced.push({position: cursor, removed: text.slice(cursor, end), inserted: event.text})
+                    renameReplaced = replaced
+                    renameInput.remove(cursor, end)
+                    renameInput.insert(cursor, event.text)
+                    renameInput.cursorPosition = cursor + event.text.length
+                    event.accepted = true
+                }
+                return
+            }
+
+            // Normal mode: every key is a command, never typed text.
+            event.accepted = true
+            const key = event.text
+            const isWord = backend.isWordCharacter
+            const pending = renamePending
+            renamePending = ""
+            if (pending === "r") {
+                if (key.length > 0 && key.charCodeAt(0) >= 32 && text.length > 0) {
+                    renameEdit(cursor, Vim.nextCharacter(text, cursor), key)
+                    renameInput.cursorPosition = cursor
+                }
+                return
+            }
+            if (pending !== "") {
+                const command = pending + key
+                const change = pending[0] === "c"
+                if (command === "ci" || command === "di") {
+                    renamePending = command
+                    return
+                }
+                let range = null
+                if (command === "dd" || command === "cc") range = {start: 0, end: text.length}
+                else if (command === "diw" || command === "ciw") range = Vim.innerWord(text, cursor, isWord)
+                else if (command === "dw") range = {start: cursor, end: Vim.wordForwardRaw(text, cursor, isWord)}
+                else if (command === "cw" || command === "de" || command === "ce")
+                    range = {start: cursor, end: Vim.nextCharacter(text, Vim.wordEnd(text, cursor, isWord))}
+                else if (command === "d$" || command === "c$") range = {start: cursor, end: text.length}
+                else if (command === "d0" || command === "c0") range = {start: 0, end: cursor}
+                else if (command === "db" || command === "cb")
+                    range = {start: renameWordBackward(text, cursor), end: cursor}
+                if (!range) return
+                if (change) {
+                    renameInsert("insert", range.start)
+                    renameInput.remove(range.start, range.end)
+                    renameInput.cursorPosition = range.start
+                } else {
+                    renameEdit(range.start, range.end, "")
+                    renameInput.cursorPosition = Vim.normalPosition(renameInput.text, range.start)
+                }
+                return
+            }
+            const next = Vim.nextCharacter(text, cursor)
+            if (key === "h" || event.key === Qt.Key_Left || event.key === Qt.Key_Backspace)
+                renameInput.cursorPosition = Vim.previousCharacter(text, cursor)
+            else if (key === "l" || key === " " || event.key === Qt.Key_Right)
+                renameInput.cursorPosition = Vim.normalPosition(text, next)
+            else if (key === "0" || event.key === Qt.Key_Home) renameInput.cursorPosition = 0
+            else if (key === "^") renameInput.cursorPosition = Vim.firstNonBlank(text, 0)
+            else if (key === "$" || event.key === Qt.Key_End)
+                renameInput.cursorPosition = Vim.normalPosition(text, text.length)
+            else if (key === "w") renameInput.cursorPosition = Vim.wordForward(text, cursor, isWord)
+            else if (key === "b") renameInput.cursorPosition = renameWordBackward(text, cursor)
+            else if (key === "e") renameInput.cursorPosition = Vim.wordEnd(text, cursor, isWord)
+            else if (key === "i") renameInsert("insert", cursor)
+            else if (key === "a") renameInsert("insert", next)
+            else if (key === "I") renameInsert("insert", 0)
+            else if (key === "A") renameInsert("insert", text.length)
+            else if (key === "R") renameInsert("replace", cursor)
+            else if (key === "x" && text.length > 0) {
+                renameEdit(cursor, next, "")
+                renameInput.cursorPosition = Vim.normalPosition(renameInput.text, cursor)
+            } else if (key === "X" && cursor > 0) {
+                const previous = Vim.previousCharacter(text, cursor)
+                renameEdit(previous, cursor, "")
+                renameInput.cursorPosition = previous
+            } else if (key === "D") {
+                renameEdit(cursor, text.length, "")
+                renameInput.cursorPosition = Vim.normalPosition(renameInput.text, cursor)
+            } else if (key === "C" || key === "s" || key === "S") {
+                const start = key === "S" ? 0 : cursor
+                const end = key === "s" ? next : text.length
+                renameInsert("insert", start)
+                renameInput.remove(start, end)
+                renameInput.cursorPosition = start
+            } else if (key === "u" && renameUndo.length > 0) {
+                const undo = renameUndo.slice()
+                const state = undo.pop()
+                renameUndo = undo
+                renameInput.text = state.text
+                renameInput.cursorPosition = Vim.normalPosition(state.text, state.cursor)
+            } else if (key === "d" || key === "c" || key === "r") renamePending = key
+        }
+
+        function renameWordBackward(text, position) {
+            return Vim.wordBackward(text, position, backend.isWordCharacter)
         }
 
         // ---- Vim editing ---------------------------------------------------
@@ -1776,7 +1971,10 @@ Item {
             width: 224
             padding: 4
             closePolicy: Controls.Popup.CloseOnEscape | Controls.Popup.CloseOnPressOutside
-            onClosed: card.focusEditor()
+            onClosed: {
+                card.renaming = false
+                card.focusEditor()
+            }
 
             background: Rectangle {
                 radius: 10
@@ -1808,6 +2006,89 @@ Item {
                 text: "Save as"
                 shortcut: "Ctrl+Shift+S"
                 onTriggered: card.chooseFile("save")
+            }
+
+            // "Rename" keeps the menu open and shows a name field right below it.
+            Rectangle {
+                objectName: "note-rename"
+                width: contextMenu.availableWidth
+                height: 34
+                radius: 7
+                // Only a file on disk can be renamed.
+                enabled: card.filePath !== ""
+                color: renameRowMouse.containsMouse && enabled ? Theme.controlHover : "transparent"
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    opacity: parent.enabled ? 1 : 0.35
+                    text: "Rename"
+                    color: Theme.text
+                    font.family: Qt.application.font.family
+                    font.pixelSize: 14
+                }
+
+                MouseArea {
+                    id: renameRowMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: card.beginRename()
+                }
+            }
+
+            // Just an input with an underline; Enter saves.
+            Item {
+                objectName: "note-rename-field"
+                width: contextMenu.availableWidth
+                height: card.renaming ? 34 : 0
+                visible: card.renaming
+
+                TextInput {
+                    id: renameInput
+                    objectName: "note-rename-input"
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 12
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    clip: true
+                    color: Theme.text
+                    selectionColor: Theme.selected
+                    selectedTextColor: Theme.text
+                    selectByMouse: true
+                    font.family: Qt.application.font.family
+                    font.pixelSize: 14
+                    Accessible.name: "New file name"
+                    Keys.priority: Keys.BeforeItem
+                    Keys.onPressed: event => card.handleRenameKey(event)
+
+                    // Block cursor in Vim normal mode, a bar while typing.
+                    cursorDelegate: Rectangle {
+                        readonly property bool block: card.vimEnabled && card.renameMode !== "insert"
+                        width: block ? Math.max(7, renameMetrics.advanceWidth) : 2
+                        height: renameInput.cursorRectangle.height
+                        color: block ? Qt.alpha(Theme.accent, 0.55) : Theme.accent
+                        visible: renameInput.activeFocus
+                    }
+
+                    TextMetrics {
+                        id: renameMetrics
+                        font: renameInput.font
+                        text: renameInput.text.slice(renameInput.cursorPosition,
+                            Vim.nextCharacter(renameInput.text, renameInput.cursorPosition)) || " "
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: renameInput.left
+                    anchors.right: parent.right
+                    anchors.rightMargin: 12
+                    anchors.top: renameInput.bottom
+                    anchors.topMargin: 3
+                    height: 1
+                    color: renameInput.activeFocus ? Theme.accent : Theme.line
+                }
             }
             NoteMenuItem {
                 objectName: "note-preview"

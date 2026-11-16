@@ -1628,6 +1628,26 @@ QString Backend::writeTextFile(const QString &path, const QString &text) const {
     return file.commit() ? QString() : file.errorString();
 }
 
+// Renames a note file within its folder; newName is a bare file name.
+QVariantMap Backend::renameTextFile(const QString &path, const QString &newName) const {
+    const QString local = localFilePath(path);
+    const QString name = newName.trimmed();
+    auto fail = [&](const QString &error) {
+        return QVariantMap{{"ok", false}, {"path", local}, {"error", error}};
+    };
+    if (local.isEmpty()) return fail(QStringLiteral("No file selected"));
+    if (name.isEmpty()) return fail(QStringLiteral("Name is empty"));
+    if (name.contains(QLatin1Char('/')) || name == QStringLiteral(".") || name == QStringLiteral(".."))
+        return fail(QStringLiteral("Invalid name"));
+    const QFileInfo info(local);
+    const QString target = info.dir().filePath(name);
+    if (target == local) return {{"ok", true}, {"path", local}};
+    if (QFileInfo::exists(target)) return fail(name + QStringLiteral(" already exists"));
+    QFile file(local);
+    if (!file.rename(target)) return fail(file.errorString());
+    return {{"ok", true}, {"path", target}};
+}
+
 namespace {
 const QString portalService = QStringLiteral("org.freedesktop.portal.Desktop");
 const QString portalRequestInterface = QStringLiteral("org.freedesktop.portal.Request");

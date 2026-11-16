@@ -181,9 +181,13 @@ active one (note-last-file) are restored when the panel starts.
 Keys: Ctrl+N/Ctrl+T new tab, Ctrl+W close tab, Ctrl+Tab/Ctrl+PgDown next,
 Ctrl+Shift+Tab/Ctrl+PgUp previous, Ctrl+O open, Ctrl+S save, Ctrl+Shift+S save as.
 
-Right-click opens the menu: New, Open, Save, Save as, and Preview markdown
+Right-click opens the menu: New, Open, Save, Save as, Rename, and Preview markdown
 (always listed, disabled unless the file is Markdown); "Vim: on off" comes last (the inactive choice is faded) and
-clicking it toggles Vim without closing the menu. Open and Save use GNOME's own
+clicking it toggles Vim without closing the menu. Rename (disabled for Untitled)
+keeps the menu open and shows an underline-only name field right below it; Enter
+renames the file in its folder (existing names are refused). With Vim on the field
+starts in Normal mode (h l 0 ^ $ w b e, i a I A, x X D C s S, r R, dw cw diw ciw
+dd cc, u) and Esc in Normal closes the menu. Open and Save use GNOME's own
 file chooser through xdg-desktop-portal (D-Bus, no extra package); Qt's dialog
 is only a fallback when the portal is unavailable. Untitled notes open the save
 chooser (Markdown or Text; a name without an extension gets the selected

@@ -265,6 +265,92 @@ private slots:
         QVERIFY(menu->property("visible").toBool());
     }
 
+    void backendRenamesTextFiles() {
+        const QString path = filePath("old.txt");
+        writeFile(path, "x");
+        writeFile(filePath("taken.txt"), "y");
+        QVERIFY(!backend->renameTextFile(path, "").value("ok").toBool());
+        QVERIFY(!backend->renameTextFile(path, "a/b.txt").value("ok").toBool());
+        QVERIFY(!backend->renameTextFile(path, "taken.txt").value("ok").toBool());
+        const QVariantMap result = backend->renameTextFile(path, "ไทย.md");
+        QVERIFY(result.value("ok").toBool());
+        QCOMPARE(result.value("path").toString(), filePath("ไทย.md"));
+        QVERIFY(!QFile::exists(path));
+        QCOMPARE(readFile(filePath("ไทย.md")), "x");
+    }
+
+    QQuickItem *openRename() {
+        auto *menu = panel->findChild<QObject *>("note-menu");
+        QTest::mouseClick(window.get(), Qt::RightButton, Qt::NoModifier, QPoint(200, 200));
+        if (!QTest::qWaitFor([&] { return menu->property("opened").toBool(); })) return nullptr;
+        auto *row = panel->findChild<QQuickItem *>("note-rename");
+        auto *input = panel->findChild<QQuickItem *>("note-rename-input");
+        if (!row || !input || input->isVisible()) return nullptr;
+        click(row);
+        return input->isVisible() && input->hasActiveFocus() ? input : nullptr;
+    }
+
+    void contextMenuRenamesFile() {
+        // Untitled notes have nothing on disk to rename.
+        QTest::mouseClick(window.get(), Qt::RightButton, Qt::NoModifier, QPoint(200, 200));
+        auto *row = panel->findChild<QQuickItem *>("note-rename");
+        QTRY_VERIFY(row && row->isVisible());
+        QVERIFY(!row->isEnabled());
+        QTest::keyClick(window.get(), Qt::Key_Escape);
+
+        load("body");
+        auto *input = openRename();
+        QVERIFY(input);
+        // The field sits right under "Rename", and the name before the extension is selected.
+        QVERIFY(input->mapToScene(QPointF(0, 0)).y() > row->mapToScene(QPointF(0, row->height())).y() - 1);
+        QCOMPARE(input->property("text").toString(), "load.txt");
+        QCOMPARE(input->property("selectedText").toString(), "load");
+        keys("renamed");
+        enter();
+        QCOMPARE(card->property("filePath").toString(), filePath("renamed.txt"));
+        QVERIFY(!QFile::exists(filePath("load.txt")));
+        QCOMPARE(readFile(filePath("renamed.txt")), "body");
+        QTRY_VERIFY(!panel->findChild<QObject *>("note-menu")->property("visible").toBool());
+        QCOMPARE(backend->noteOpenFiles(), QStringList{filePath("renamed.txt")});
+    }
+
+    void renameFieldUsesVimKeys() {
+        load("body");
+        enableVim();
+        auto *input = openRename();
+        QVERIFY(input);
+        auto mode = [&] { return card->property("renameMode").toString(); };
+        QCOMPARE(mode(), "normal");
+        // Normal mode: the cursor rests on the end of the name, keys are commands.
+        QCOMPARE(input->property("cursorPosition").toInt(), 3);
+        keys("ciw");
+        QCOMPARE(mode(), "insert");
+        QCOMPARE(input->property("text").toString(), ".txt");
+        keys("notes");
+        escape();
+        QCOMPARE(mode(), "normal");
+        keys("x");
+        QCOMPARE(input->property("text").toString(), "note.txt");
+        keys("u");
+        QCOMPARE(input->property("text").toString(), "notes.txt");
+        keys("$rd");
+        QCOMPARE(input->property("text").toString(), "notes.txd");
+        keys("u");
+        enter();
+        QCOMPARE(card->property("filePath").toString(), filePath("notes.txt"));
+        QCOMPARE(readFile(filePath("notes.txt")), "body");
+        QCOMPARE(text(), "body");
+
+        // Esc in normal mode closes the menu without renaming.
+        input = openRename();
+        QVERIFY(input);
+        keys("D");
+        escape();
+        QTRY_VERIFY(!panel->findChild<QObject *>("note-menu")->property("visible").toBool());
+        QCOMPARE(card->property("filePath").toString(), filePath("notes.txt"));
+        QCOMPARE(mode(), "normal");
+    }
+
     void contextMenuSavesAndMarksDirty() {
         auto *dot = item("note-dirty-dot");
         QVERIFY(dot);
