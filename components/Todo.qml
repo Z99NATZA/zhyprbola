@@ -593,7 +593,7 @@ Item {
             x: 24
             y: card.adding ? 112 : 62
             width: parent.width - 48
-            height: parent.height - y - 18
+            height: (card.vimEnabled ? statusLine.y - 4 : parent.height - 18) - y
             clip: true
             interactive: card.draggingTaskId === "" && contentHeight > height
             boundsBehavior: Flickable.DragAndOvershootBounds
@@ -696,6 +696,61 @@ Item {
                     text: vimInput.text.slice(vimInput.cursorPosition,
                         Vim.nextCharacter(vimInput.text, vimInput.cursorPosition)) || " "
                 }
+            }
+        }
+
+        // Status line like Note: Vim mode on the left, pending keys, position on the right.
+        Item {
+            id: statusLine
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.leftMargin: 24
+            // Clear of the panel's bottom-right resize grip.
+            anchors.rightMargin: 34
+            anchors.bottomMargin: 10
+            height: 24
+            visible: card.vimEnabled
+
+            // Same per-mode colors as Note.
+            readonly property color modeColor: card.vimMode === "insert" ? "#3FA34D"
+                : card.vimMode === "replace" ? "#D9534F" : "#4A86C8"
+
+            Text {
+                id: modeText
+                objectName: "task-mode"
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                text: "-- " + card.vimMode.toUpperCase() + " --"
+                color: statusLine.modeColor
+                font.family: "monospace"
+                font.pixelSize: 12
+                font.weight: Font.Bold
+            }
+
+            Text {
+                anchors.left: modeText.right
+                anchors.leftMargin: 12
+                anchors.right: positionText.left
+                anchors.rightMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                text: card.vimCommand
+                elide: Text.ElideRight
+                color: card.dimColor
+                font.family: "monospace"
+                font.pixelSize: 12
+            }
+
+            Text {
+                id: positionText
+                objectName: "task-position"
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                text: card.totalCount === 0 ? "0/0"
+                    : (Math.max(0, card.selectedTaskIndex) + 1) + "/" + card.totalCount
+                color: card.dimColor
+                font.family: "monospace"
+                font.pixelSize: 12
             }
         }
 

@@ -112,6 +112,21 @@ private slots:
         QVERIFY(card->hasActiveFocus());
         keys("j"); QCOMPARE(card->property("selectedTaskIndex").toInt(), 1);
     }
+    void statusLineShowsModeAndPosition() {
+        auto *mode = panel->findChild<QQuickItem *>("task-mode");
+        auto *position = panel->findChild<QQuickItem *>("task-position");
+        QVERIFY(mode && position);
+        QVERIFY(!mode->isVisible());
+        enableVim();
+        QVERIFY(mode->isVisible());
+        QCOMPARE(mode->property("text").toString(), "-- NORMAL --");
+        QCOMPARE(position->property("text").toString(), "1/3");
+        keys("j"); QCOMPARE(position->property("text").toString(), "2/3");
+        keys("i"); QCOMPARE(mode->property("text").toString(), "-- INSERT --");
+        escape(); keys("R");
+        QCOMPARE(mode->property("text").toString(), "-- REPLACE --");
+        escape(); QCOMPARE(mode->property("text").toString(), "-- NORMAL --");
+    }
     void appendAfterCharacterAndAtEnd() {
         enableVim();
         keys("a");
