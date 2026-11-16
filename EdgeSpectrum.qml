@@ -43,10 +43,12 @@ Window {
             gap: 4
             flatBaseline: true
             minimumBarHeight: 6
-            sensitivity: 1.35
+            // Bounce only where the music peaks, not along the whole edge.
+            peakFocus: true
+            sensitivity: 1.8
             adaptiveSmoothing: true
-            riseDuration: 45
-            fallDuration: 100
+            riseDuration: 30
+            fallDuration: 70
             orientation: SpectrumBars.Inward
             barColor: Theme.accent
             barOpacity: 0.9

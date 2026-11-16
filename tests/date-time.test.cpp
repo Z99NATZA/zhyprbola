@@ -313,6 +313,26 @@ private slots:
                 QCOMPARE(reopened.edgeSpectrumSize(), size);
             }
         }
+        // Peak focus: an even background stays flat and only the peak bounces.
+        QVERIFY(bars->property("peakFocus").toBool());
+        QVariantList levels;
+        for (int index = 0; index < 128; ++index)
+            levels.append(index >= 60 && index <= 68 ? 0.95 : 0.4);
+        bars->setProperty("levels", levels);
+        const qreal minimum = bars->property("minimumBarHeight").toReal();
+        int moving = 0;
+        qreal tallest = 0;
+        const int count = bars->property("inwardBarCount").toInt();
+        for (int index = 0; index < count; ++index) {
+            QVariant height;
+            QVERIFY(QMetaObject::invokeMethod(bars, "inwardHeight",
+                Q_RETURN_ARG(QVariant, height), Q_ARG(QVariant, index)));
+            if (height.toReal() > minimum + 0.5) ++moving;
+            tallest = std::max(tallest, height.toReal());
+        }
+        QVERIFY2(moving > 0 && moving <= count / 4, qPrintable(QString::number(moving)));
+        QVERIFY(tallest > minimum + (bars->height() - minimum) * 0.8);
+
         settings.setEdgeSpectrumSize(QStringLiteral("invalid"));
         QCOMPARE(settings.edgeSpectrumSize(), QStringLiteral("lg"));
         QFile saved(directory.filePath(QStringLiteral("zhyprbola/edge-spectrum-size")));

@@ -321,6 +321,8 @@ private:
     bool m_pollWeather = false;
     bool m_pollMusic = false;
     bool m_pollSpectrum = false;
+    // The edge strip uses lighter cava smoothing so it follows the beat.
+    QString m_cavaConfig = QStringLiteral("cava.conf");
     bool m_wifiStatusRefreshing = false;
     bool m_wifiNetworksRefreshing = false;
     bool m_bluetoothRefreshing = false;

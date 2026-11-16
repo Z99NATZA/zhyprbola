@@ -24,13 +24,40 @@ Item {
     property bool adaptiveSmoothing: false
     property int riseDuration: 45
     property int fallDuration: 100
+    // Peak focus: only bins that stand above the recent average move, so a
+    // wide strip bounces at a few points instead of along its whole length.
+    // The floor is a running average (peakFollow per frame, ~200 ms at 60 fps)
+    // times peakFloor, so a beat that lifts every bin still pops out; what is
+    // left is raised to peakCurve (above 1 keeps small rises small).
+    property bool peakFocus: false
+    property real peakFloor: 1.0
+    property real peakCurve: 1.2
+    property real peakFollow: 0.08
+    property real recentAverage: -1
+    property var focusedLevels: []
     readonly property int inwardBarCount: Math.max(2, barCount - barCount % 2)
     readonly property int inwardHalfCount: inwardBarCount / 2
     readonly property real inwardBarWidth: Math.max(2,
         (width - (inwardBarCount - 1) * gap) / inwardBarCount)
 
+    function focusPeaks(source) {
+        if (!source || source.length === 0)
+            return []
+        let sum = 0
+        for (let index = 0; index < source.length; index++)
+            sum += Math.max(0, source[index])
+        const average = sum / source.length
+        recentAverage = recentAverage < 0 ? average
+            : recentAverage + (average - recentAverage) * peakFollow
+        const floor = Math.min(0.9, recentAverage * peakFloor)
+        const shaped = []
+        for (let index = 0; index < source.length; index++)
+            shaped.push(Math.pow(Math.max(0, source[index] - floor) / (1 - floor), peakCurve))
+        return shaped
+    }
+
     function inwardHeight(index) {
-        const source = levels || []
+        const source = (peakFocus ? focusedLevels : levels) || []
         if (source.length === 0)
             return minimumBarHeight
 
@@ -39,8 +66,8 @@ Item {
             : 1 - mirroredIndex / (inwardHalfCount - 1)
         const sample = Math.min(source.length - 1,
             Math.floor(sourceT * (source.length - 1)))
-        const level = Math.min(1,
-            Math.sqrt(Math.max(0, source[sample])) * sensitivity)
+        const value = Math.max(0, source[sample])
+        const level = Math.min(1, (peakFocus ? value : Math.sqrt(value)) * sensitivity)
         return minimumBarHeight + (height - minimumBarHeight) * level
     }
 
@@ -62,6 +89,8 @@ Item {
     }
 
     onLevelsChanged: {
+        if (peakFocus)
+            focusedLevels = focusPeaks(levels)
         if (orientation !== SpectrumBars.Inward)
             bars.requestPaint()
     }
