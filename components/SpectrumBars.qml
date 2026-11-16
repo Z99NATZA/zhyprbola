@@ -35,6 +35,13 @@ Item {
     property real peakFollow: 0.08
     property real recentAverage: -1
     property var focusedLevels: []
+    // Wave (Inward only): one filled shape with no gaps. Neighbouring bars are
+    // merged about every waveSpacing px (their tallest wins) and joined with
+    // smooth curves, so peaks rise as broad hills; rise/fall timing matches bars.
+    property bool wave: false
+    property real waveSpacing: 48
+    property var waveHeights: []
+    readonly property bool showWave: wave && orientation === SpectrumBars.Inward
     readonly property int inwardBarCount: Math.max(2, barCount - barCount % 2)
     readonly property int inwardHalfCount: inwardBarCount / 2
     readonly property real inwardBarWidth: Math.max(2,
@@ -54,6 +61,27 @@ Item {
         for (let index = 0; index < source.length; index++)
             shaped.push(Math.pow(Math.max(0, source[index] - floor) / (1 - floor), peakCurve))
         return shaped
+    }
+
+    function updateWave() {
+        const step = inwardBarWidth + gap
+        const group = Math.max(1, Math.round(waveSpacing / step))
+        const count = Math.ceil(inwardBarCount / group)
+        const frame = 1000 / 60
+        const rise = 1 - Math.exp(-3 * frame / Math.max(1, riseDuration))
+        const fall = 1 - Math.exp(-3 * frame / Math.max(1, fallDuration))
+        const previous = waveHeights.length === count ? waveHeights : []
+        const next = []
+        for (let point = 0; point < count; point++) {
+            let target = minimumBarHeight
+            const end = Math.min(inwardBarCount, (point + 1) * group)
+            for (let index = point * group; index < end; index++)
+                target = Math.max(target, inwardHeight(index))
+            const current = point < previous.length ? previous[point] : target
+            next.push(current + (target - current) * (target > current ? rise : fall))
+        }
+        waveHeights = next
+        waveCanvas.requestPaint()
     }
 
     function inwardHeight(index) {
@@ -91,6 +119,8 @@ Item {
     onLevelsChanged: {
         if (peakFocus)
             focusedLevels = focusPeaks(levels)
+        if (showWave)
+            updateWave()
         if (orientation !== SpectrumBars.Inward)
             bars.requestPaint()
     }
@@ -155,14 +185,56 @@ Item {
         }
     }
 
+    onShowWaveChanged: if (showWave) updateWave()
+
+    Canvas {
+        id: waveCanvas
+        objectName: "spectrum-wave"
+        anchors.fill: parent
+        visible: visualizer.showWave
+
+        onPaint: {
+            const ctx = getContext("2d")
+            ctx.reset()
+            ctx.clearRect(0, 0, width, height)
+            const heights = visualizer.waveHeights
+            if (heights.length === 0)
+                return
+            const span = width / heights.length
+            const pointX = index => (index + 0.5) * span
+            const pointY = index => height - heights[index]
+
+            ctx.globalAlpha = visualizer.barOpacity
+            ctx.fillStyle = visualizer.barColor
+            ctx.beginPath()
+            ctx.moveTo(0, height)
+            ctx.lineTo(0, pointY(0))
+            ctx.lineTo(pointX(0), pointY(0))
+            // Curves pass through midpoints with the samples as control
+            // points, so the surface never dips below the baseline.
+            for (let index = 1; index < heights.length - 1; index++) {
+                ctx.quadraticCurveTo(pointX(index), pointY(index),
+                    (pointX(index) + pointX(index + 1)) / 2,
+                    (pointY(index) + pointY(index + 1)) / 2)
+            }
+            const last = heights.length - 1
+            ctx.lineTo(pointX(last), pointY(last))
+            ctx.lineTo(width, pointY(last))
+            ctx.lineTo(width, height)
+            ctx.closePath()
+            ctx.fill()
+        }
+    }
+
     Item {
         id: inwardBars
         anchors.fill: parent
-        visible: visualizer.orientation === SpectrumBars.Inward
+        visible: visualizer.orientation === SpectrumBars.Inward && !visualizer.showWave
         opacity: visualizer.barOpacity
 
         Repeater {
-            model: visualizer.inwardBarCount
+            // No bar delegates (and their per-frame bindings) while the wave shows.
+            model: visualizer.showWave ? 0 : visualizer.inwardBarCount
 
             delegate: Item {
                 id: bar

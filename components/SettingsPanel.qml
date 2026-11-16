@@ -1829,6 +1829,58 @@ Item {
                     }
                 }
             }
+
+            // Style: the current bars, or one gap-free wave.
+            Row {
+                width: parent.width
+                spacing: 8
+
+                Repeater {
+                    model: ["bars", "wave"]
+
+                    delegate: Rectangle {
+                        id: spectrumStyleChoice
+                        required property string modelData
+                        width: (panel.contentWidth - 8) / 2
+                        height: panel.sidebarRowHeight
+                        radius: panel.controlRadius
+                        color: backend.edgeSpectrumStyle === spectrumStyleChoice.modelData
+                            ? Theme.selected : (spectrumStyleMouse.containsMouse
+                                ? Theme.controlHover : Theme.control)
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: spectrumStyleChoice.modelData
+                            color: Theme.text
+                            font.family: Qt.application.font.family
+                            font.pixelSize: panel.controlFontSize
+                            font.weight: panel.controlFontWeight
+                        }
+
+                        Text {
+                            objectName: "spectrum-style-check-" + spectrumStyleChoice.modelData
+                            anchors.right: parent.right
+                            anchors.rightMargin: 11
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: backend.edgeSpectrumStyle === spectrumStyleChoice.modelData
+                            text: "✓"
+                            color: Theme.accent
+                            font.family: Qt.application.font.family
+                            font.pixelSize: panel.controlFontSize
+                            font.weight: Font.Bold
+                        }
+
+                        MouseArea {
+                            id: spectrumStyleMouse
+                            objectName: "spectrum-style-" + spectrumStyleChoice.modelData
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: backend.setEdgeSpectrumStyle(spectrumStyleChoice.modelData)
+                        }
+                    }
+                }
+            }
         }
 
         Column {

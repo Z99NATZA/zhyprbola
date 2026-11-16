@@ -495,11 +495,11 @@ Backend::Backend(QObject *parent, const QString &panelName) : QObject(parent) {
     connect(&m_dateTimeWatcher, &QFileSystemWatcher::fileChanged,
         this, &Backend::refreshDateTimeSettings);
     refreshDateTimeSettings();
-    connect(&m_edgeSpectrumSizeWatcher, &QFileSystemWatcher::directoryChanged,
-        this, &Backend::refreshEdgeSpectrumSize);
-    connect(&m_edgeSpectrumSizeWatcher, &QFileSystemWatcher::fileChanged,
-        this, &Backend::refreshEdgeSpectrumSize);
-    refreshEdgeSpectrumSize();
+    connect(&m_edgeSpectrumWatcher, &QFileSystemWatcher::directoryChanged,
+        this, &Backend::refreshEdgeSpectrumLook);
+    connect(&m_edgeSpectrumWatcher, &QFileSystemWatcher::fileChanged,
+        this, &Backend::refreshEdgeSpectrumLook);
+    refreshEdgeSpectrumLook();
     connect(&m_showDesktopEdgeWatcher, &QFileSystemWatcher::directoryChanged,
         this, &Backend::refreshShowDesktopEdgeSettings);
     connect(&m_showDesktopEdgeWatcher, &QFileSystemWatcher::fileChanged,
@@ -1466,32 +1466,50 @@ void Backend::setEdgeSpectrumPosition(const QString &position) {
     emit edgeSpectrumSettingsChanged();
 }
 
-void Backend::refreshEdgeSpectrumSize() {
-    const QString path = dockConfigPath(QStringLiteral("edge-spectrum-size"));
-    const QString directory = QFileInfo(path).absolutePath();
-    if (QDir().mkpath(directory) && !m_edgeSpectrumSizeWatcher.directories().contains(directory))
-        m_edgeSpectrumSizeWatcher.addPath(directory);
-    if (QFileInfo::exists(path) && !m_edgeSpectrumSizeWatcher.files().contains(path))
-        m_edgeSpectrumSizeWatcher.addPath(path);
-    QFile file(path);
-    QString size = QStringLiteral("lg");
-    if (file.open(QIODevice::ReadOnly)) {
-        const QString saved = QString::fromUtf8(file.readAll()).trimmed();
-        if (saved == QLatin1String("sm") || saved == QLatin1String("md")
-            || saved == QLatin1String("lg"))
-            size = saved;
-    }
-    if (size == m_edgeSpectrumSize) return;
+namespace {
+const QStringList edgeSpectrumSizes = {QStringLiteral("sm"), QStringLiteral("md"),
+    QStringLiteral("lg")};
+const QStringList edgeSpectrumStyles = {QStringLiteral("bars"), QStringLiteral("wave")};
+}
+
+// Size and style are watched files so a running edge strip follows Settings live.
+void Backend::refreshEdgeSpectrumLook() {
+    const auto read = [this](const QString &name, const QStringList &allowed,
+        const QString &fallback) {
+        const QString path = dockConfigPath(name);
+        const QString directory = QFileInfo(path).absolutePath();
+        if (QDir().mkpath(directory) && !m_edgeSpectrumWatcher.directories().contains(directory))
+            m_edgeSpectrumWatcher.addPath(directory);
+        if (QFileInfo::exists(path) && !m_edgeSpectrumWatcher.files().contains(path))
+            m_edgeSpectrumWatcher.addPath(path);
+        QFile file(path);
+        if (file.open(QIODevice::ReadOnly)) {
+            const QString saved = QString::fromUtf8(file.readAll()).trimmed();
+            if (allowed.contains(saved)) return saved;
+        }
+        return fallback;
+    };
+    const QString size = read(QStringLiteral("edge-spectrum-size"), edgeSpectrumSizes,
+        QStringLiteral("lg"));
+    const QString style = read(QStringLiteral("edge-spectrum-style"), edgeSpectrumStyles,
+        QStringLiteral("bars"));
+    if (size == m_edgeSpectrumSize && style == m_edgeSpectrumStyle) return;
     m_edgeSpectrumSize = size;
+    m_edgeSpectrumStyle = style;
     emit edgeSpectrumSettingsChanged();
 }
 
 void Backend::setEdgeSpectrumSize(const QString &size) {
-    if (size != QLatin1String("sm") && size != QLatin1String("md")
-        && size != QLatin1String("lg")) return;
-    if (size == m_edgeSpectrumSize) return;
+    if (!edgeSpectrumSizes.contains(size) || size == m_edgeSpectrumSize) return;
     if (!writeDockConfig(QStringLiteral("edge-spectrum-size"), size)) return;
     m_edgeSpectrumSize = size;
+    emit edgeSpectrumSettingsChanged();
+}
+
+void Backend::setEdgeSpectrumStyle(const QString &style) {
+    if (!edgeSpectrumStyles.contains(style) || style == m_edgeSpectrumStyle) return;
+    if (!writeDockConfig(QStringLiteral("edge-spectrum-style"), style)) return;
+    m_edgeSpectrumStyle = style;
     emit edgeSpectrumSettingsChanged();
 }
 

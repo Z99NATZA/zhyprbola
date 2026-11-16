@@ -73,6 +73,7 @@ class Backend : public QObject {
     Q_PROPERTY(bool edgeSpectrumEnabled READ edgeSpectrumEnabled NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QString edgeSpectrumPosition READ edgeSpectrumPosition NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QString edgeSpectrumSize READ edgeSpectrumSize NOTIFY edgeSpectrumSettingsChanged)
+    Q_PROPERTY(QString edgeSpectrumStyle READ edgeSpectrumStyle NOTIFY edgeSpectrumSettingsChanged)
     Q_PROPERTY(QVariantList tasks READ tasks NOTIFY tasksChanged)
     Q_PROPERTY(bool taskVimEnabled READ taskVimEnabled NOTIFY taskVimEnabledChanged)
     Q_PROPERTY(bool noteVimEnabled READ noteVimEnabled NOTIFY noteVimEnabledChanged)
@@ -141,6 +142,7 @@ public:
     bool edgeSpectrumEnabled() const { return m_edgeSpectrumEnabled; }
     QString edgeSpectrumPosition() const { return m_edgeSpectrumPosition; }
     QString edgeSpectrumSize() const { return m_edgeSpectrumSize; }
+    QString edgeSpectrumStyle() const { return m_edgeSpectrumStyle; }
     QVariantList tasks() const { return m_tasks; }
     bool taskVimEnabled() const { return m_taskVimEnabled; }
     bool noteVimEnabled() const { return m_noteVimEnabled; }
@@ -194,6 +196,7 @@ public:
     Q_INVOKABLE void setEdgeSpectrumEnabled(bool enabled);
     Q_INVOKABLE void setEdgeSpectrumPosition(const QString &position);
     Q_INVOKABLE void setEdgeSpectrumSize(const QString &size);
+    Q_INVOKABLE void setEdgeSpectrumStyle(const QString &style);
     Q_INVOKABLE void addTask(const QString &text);
     Q_INVOKABLE void setTaskVimEnabled(bool enabled);
     Q_INVOKABLE void setNoteVimEnabled(bool enabled);
@@ -291,7 +294,7 @@ private:
     void refreshTheme();
     void refreshKeyVisualizerSettings();
     void refreshDateTimeSettings();
-    void refreshEdgeSpectrumSize();
+    void refreshEdgeSpectrumLook();
     void refreshShowDesktopEdgeSettings();
     void refreshSettingsSectionRequest();
     void loadDockLayout();
@@ -393,8 +396,9 @@ private:
     QVariantMap m_showDesktopEdgeSettings;
     bool m_edgeSpectrumEnabled = false;
     QString m_edgeSpectrumPosition = QStringLiteral("bottom");
-    QFileSystemWatcher m_edgeSpectrumSizeWatcher;
+    QFileSystemWatcher m_edgeSpectrumWatcher;
     QString m_edgeSpectrumSize = QStringLiteral("lg");
+    QString m_edgeSpectrumStyle = QStringLiteral("bars");
     QVariantList m_tasks;
     bool m_taskVimEnabled = false;
     bool m_noteVimEnabled = false;

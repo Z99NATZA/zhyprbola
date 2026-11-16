@@ -50,6 +50,7 @@ Window {
             riseDuration: 30
             fallDuration: 70
             orientation: SpectrumBars.Inward
+            wave: backend.edgeSpectrumStyle === "wave"
             barColor: Theme.accent
             barOpacity: 0.9
         }

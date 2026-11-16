@@ -138,6 +138,8 @@ background or animation.
 ```text
 Settings -> Spectrum: enable the edge spectrum, choose its edge and bar length.
 Bar length: sm (54 px), md (108 px), lg (161 px; original default).
+Style: bars (default) or wave (one gap-free filled shape; neighbouring bars merge
+about every 48 px and join with smooth curves). Saved as edge-spectrum-style.
 Changes apply live and persist. Bar width, spacing, and the edge baseline stay fixed.
 Bars move only where a bin rises above the recent average (~200 ms running
 mean), so the strip bounces at a few points; the edge strip runs cava with

@@ -333,6 +333,29 @@ private slots:
         QVERIFY2(moving > 0 && moving <= count / 4, qPrintable(QString::number(moving)));
         QVERIFY(tallest > minimum + (bars->height() - minimum) * 0.8);
 
+        // Wave style: follows Settings live, draws one shape and no bar delegates.
+        auto *wave = findItem(window->contentItem(), QStringLiteral("spectrum-wave"));
+        QVERIFY(wave);
+        QVERIFY(!wave->isVisible());
+        settings.setEdgeSpectrumStyle(QStringLiteral("wave"));
+        QTRY_COMPARE(observer.edgeSpectrumStyle(), QStringLiteral("wave"));
+        QVERIFY(bars->property("wave").toBool());
+        QVERIFY(wave->isVisible());
+        const QVariantList heights = bars->property("waveHeights").toList();
+        QVERIFY(heights.size() > 1 && heights.size() < count);
+        qreal waveMin = bars->height(), waveMax = 0;
+        for (const QVariant &height : heights) {
+            waveMin = std::min(waveMin, height.toReal());
+            waveMax = std::max(waveMax, height.toReal());
+        }
+        QCOMPARE(waveMin, minimum);
+        QVERIFY(waveMax > minimum + (bars->height() - minimum) * 0.5);
+        QCOMPARE(Backend().edgeSpectrumStyle(), QStringLiteral("wave"));
+        settings.setEdgeSpectrumStyle(QStringLiteral("invalid"));
+        QCOMPARE(settings.edgeSpectrumStyle(), QStringLiteral("wave"));
+        settings.setEdgeSpectrumStyle(QStringLiteral("bars"));
+        QTRY_VERIFY(!wave->isVisible());
+
         settings.setEdgeSpectrumSize(QStringLiteral("invalid"));
         QCOMPARE(settings.edgeSpectrumSize(), QStringLiteral("lg"));
         QFile saved(directory.filePath(QStringLiteral("zhyprbola/edge-spectrum-size")));
@@ -375,6 +398,19 @@ private slots:
             QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center.toPoint());
             QCOMPARE(backend.edgeSpectrumSize(), size);
             auto *check = findItem(item, QStringLiteral("spectrum-size-check-") + size);
+            QVERIFY(check);
+            QVERIFY(check->isVisible());
+        }
+        QCOMPARE(backend.edgeSpectrumStyle(), QStringLiteral("bars"));
+        for (const QString &style : {QStringLiteral("wave"), QStringLiteral("bars")}) {
+            auto *choice = findItem(item, QStringLiteral("spectrum-style-") + style);
+            QVERIFY(choice);
+            QVERIFY(choice->isVisible());
+            const QPointF center = choice->mapToScene(QPointF(
+                choice->width() / 2, choice->height() / 2));
+            QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center.toPoint());
+            QCOMPARE(backend.edgeSpectrumStyle(), style);
+            auto *check = findItem(item, QStringLiteral("spectrum-style-check-") + style);
             QVERIFY(check);
             QVERIFY(check->isVisible());
         }
