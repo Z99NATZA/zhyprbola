@@ -594,7 +594,7 @@ Item {
         y: 20
         width: 29
         height: 29
-        radius: panel.controlRadius
+        radius: width / 2
         color: closeMouse.containsMouse ? Theme.controlHover : Theme.control
 
         Text {
