@@ -297,6 +297,28 @@ private slots:
         QVERIFY(backend->tasks().first().toMap().value("done").toBool());
         QVERIFY(!card->property("vimHasFocus").toBool());
     }
+    void altJKMovesSelectedTask() {
+        enableVim();
+        const auto alt = [this](Qt::Key key) { QTest::keyClick(window.get(), key, Qt::AltModifier); };
+        const auto selected = [this] { return card->property("selectedTaskIndex").toInt(); };
+        alt(Qt::Key_J);
+        QCOMPARE(taskText(0), "second task"); QCOMPARE(taskText(1), "alpha beta tail");
+        QCOMPARE(selected(), 1);
+        alt(Qt::Key_J);
+        QCOMPARE(taskText(2), "alpha beta tail"); QCOMPARE(selected(), 2);
+        alt(Qt::Key_J);
+        QCOMPARE(taskText(2), "alpha beta tail"); QCOMPARE(selected(), 2);
+        alt(Qt::Key_K);
+        QCOMPARE(taskText(1), "alpha beta tail"); QCOMPARE(selected(), 1);
+        alt(Qt::Key_Up);
+        QCOMPARE(taskText(0), "alpha beta tail"); QCOMPARE(selected(), 0);
+        alt(Qt::Key_K);
+        QCOMPARE(taskText(0), "alpha beta tail"); QCOMPARE(selected(), 0);
+        alt(Qt::Key_Down);
+        QCOMPARE(taskText(1), "alpha beta tail"); QCOMPARE(selected(), 1);
+        QCOMPARE(card->property("vimMode").toString(), "normal");
+        QCOMPARE(backend->tasks().size(), 3);
+    }
     void activatingAnotherWindowClearsFocusAndSavesDraft() {
         enableVim();
         keys("idraft ");

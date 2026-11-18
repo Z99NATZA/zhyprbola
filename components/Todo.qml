@@ -197,8 +197,27 @@ Item {
             vimInput.cursorPosition = cursor + text.length
         }
 
+        // Alt+J / Alt+K: move the selected task down / up, like moving lines in Note.
+        function moveSelectedTask(delta) {
+            const from = selectedTaskIndex
+            const to = from + delta
+            if (from < 0 || to < 0 || to >= backend.tasks.length) return
+            backend.moveTask(selectedTaskId, delta > 0 ? to + 1 : to)
+            revealVimSelection()
+        }
+
         function handleVimKey(event) {
             event.accepted = false
+            if ((event.modifiers & Qt.AltModifier)
+                && !(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier))
+                && vimMode === "normal"
+                && (event.key === Qt.Key_J || event.key === Qt.Key_K
+                    || event.key === Qt.Key_Down || event.key === Qt.Key_Up)) {
+                vimCommand = ""
+                moveSelectedTask(event.key === Qt.Key_J || event.key === Qt.Key_Down ? 1 : -1)
+                event.accepted = true
+                return
+            }
             if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) return
             if (event.key === Qt.Key_Escape) {
                 finishVimEdit()

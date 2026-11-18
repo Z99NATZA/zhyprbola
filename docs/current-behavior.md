@@ -156,7 +156,7 @@ Items persist until deleted and do not expire when the date changes.
 
 The Vim switch before the task counter is off by default and remembers its state.
 Normal mode highlights the selected task and shows a block cursor. j/k select
-tasks; h/l, 0/$, and b/w move through its text. i inserts before the cursor,
+tasks, and Alt+j/Alt+k (or Alt+Down/Up) move the selected task down/up; h/l, 0/$, and b/w move through its text. i inserts before the cursor,
 a inserts after it, and A appends at the end of the text. ciw changes the word
 under the cursor, C changes through the end, r replaces one character, and R
 replaces continuously (Backspace restores replaced characters). Escape saves
