@@ -166,6 +166,13 @@ Space or Enter toggles completion. Mouse editing and reordering remain available
 Clicking away or switching windows saves the draft and clears the row highlight
 and cursor; clicking a task resumes Vim navigation.
 With Vim off, text fields keep their standard typing and Escape behavior.
+Undo/redo shares one history for list and text changes (add, edit, toggle,
+reorder, delete): u or Ctrl+Z undoes, Ctrl+R (Vim), Ctrl+Shift+Z, or Ctrl+Y
+redoes. An undone delete restores the same task with its done state and
+position; in Vim mode the step selects its task and puts the cursor on the
+changed text. A Vim insert or replace counts as one step when it ends. While
+typing in a text field, Ctrl+Z undoes that field instead. The history lasts
+until the panel restarts.
 ```
 
 ## Note

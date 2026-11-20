@@ -11,6 +11,10 @@ Item {
     width: 360
     height: 336
 
+    // Undo/redo shortcuts also work after clicking away, while the panel itself
+    // holds focus; key events left unaccepted by the card bubble up here.
+    Keys.onPressed: event => card.handleHistoryKey(event)
+
     Item {
         id: card
         objectName: "tasks-card"
@@ -206,8 +210,50 @@ Item {
             revealVimSelection()
         }
 
+        // One history for list and text changes: undo/redo restores the whole
+        // list, then selects the task the step touched and puts the cursor at
+        // the first changed character.
+        function stepHistory(undo) {
+            vimCommand = ""
+            clearTaskDrag()
+            // Plain strings: backend.tasks entries are live references.
+            const before = {}
+            for (const task of backend.tasks) before[task["id"]] = String(task["text"])
+            const taskId = undo ? backend.undoTask() : backend.redoTask()
+            if (taskId === "" || !vimEnabled || taskIndexIn(backend.tasks, taskId) < 0) return
+            selectedTaskId = taskId
+            syncVimSelection()
+            const oldText = taskId in before ? before[taskId] : vimInput.text
+            if (oldText !== vimInput.text)
+                vimInput.cursorPosition = Vim.normalPosition(vimInput.text,
+                    Vim.firstDifference(oldText, vimInput.text))
+        }
+
+        // Ctrl+Z undoes; Ctrl+Shift+Z or Ctrl+Y redoes. Text fields being typed
+        // in keep their own Ctrl+Z.
+        function handleHistoryKey(event) {
+            if (adding || editingTaskId !== "" || pendingDeleteTaskId !== ""
+                || vimMode !== "normal")
+                return
+            if (!(event.modifiers & Qt.ControlModifier)
+                || (event.modifiers & (Qt.AltModifier | Qt.MetaModifier)))
+                return
+            const shift = event.modifiers & Qt.ShiftModifier
+            if (event.key === Qt.Key_Z && !shift) stepHistory(true)
+            else if ((event.key === Qt.Key_Z && shift) || (event.key === Qt.Key_Y && !shift))
+                stepHistory(false)
+            else return
+            event.accepted = true
+        }
+
         function handleVimKey(event) {
             event.accepted = false
+            if (event.modifiers === Qt.ControlModifier && event.key === Qt.Key_R
+                && vimMode === "normal") {
+                stepHistory(false)
+                event.accepted = true
+                return
+            }
             if ((event.modifiers & Qt.AltModifier)
                 && !(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier))
                 && vimMode === "normal"
@@ -281,6 +327,7 @@ Item {
             else if (key === "w") vimInput.cursorPosition = Vim.wordForward(text, cursor, backend.isWordCharacter)
             else if (key === "b") vimInput.cursorPosition = Vim.wordBackward(text, cursor, backend.isWordCharacter)
             else if (key === "i") beginVimEdit("insert")
+            else if (key === "u") stepHistory(true)
             else if (key === "a" || key === "A") {
                 beginVimEdit("insert")
                 if (selectedTaskIndex >= 0)

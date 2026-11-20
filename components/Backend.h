@@ -216,6 +216,11 @@ public:
     Q_INVOKABLE void renameTask(const QString &id, const QString &text);
     Q_INVOKABLE void moveTask(const QString &id, int targetIndex);
     Q_INVOKABLE void deleteTask(const QString &id);
+    // One shared history for list and text changes. Each step restores the
+    // whole list, so an undone delete brings back the same task (id, state,
+    // position). Returns the id of the task the step touched, or "" if none.
+    Q_INVOKABLE QString undoTask();
+    Q_INVOKABLE QString redoTask();
     Q_INVOKABLE void setKeyVisualizerSetting(const QString &key, const QVariant &value);
     Q_INVOKABLE void setDateTimeSetting(const QString &key, const QVariant &value);
     Q_INVOKABLE QString formatDate(const QDateTime &dateTime) const;
@@ -313,6 +318,8 @@ private:
     void loadTasks();
     bool saveTasks() const;
     int taskIndex(const QString &id) const;
+    void recordTaskChange(const QString &id);
+    QString restoreTaskHistory(bool undo);
 
     QNetworkAccessManager m_network;
     QSet<QProcess *> m_queries;
@@ -398,6 +405,12 @@ private:
     QString m_edgeSpectrumSize = QStringLiteral("lg");
     QString m_edgeSpectrumStyle = QStringLiteral("bars");
     QVariantList m_tasks;
+    struct TaskHistoryStep {
+        QVariantList tasks;
+        QString taskId;
+    };
+    QList<TaskHistoryStep> m_taskUndo;
+    QList<TaskHistoryStep> m_taskRedo;
     bool m_taskVimEnabled = false;
     bool m_noteVimEnabled = false;
     QString m_noteLastFile;

@@ -53,3 +53,16 @@ function innerWord(text, position, isWordCharacter) {
         end = nextCharacter(text, end)
     return {start: start, end: end}
 }
+
+// First position where two texts differ, kept off the middle of a surrogate pair.
+function firstDifference(before, after) {
+    let index = 0
+    while (index < before.length && index < after.length
+        && before.charCodeAt(index) === after.charCodeAt(index))
+        index += 1
+    if (index > 0) {
+        const previous = after.charCodeAt(index - 1)
+        if (previous >= 0xd800 && previous <= 0xdbff) index -= 1
+    }
+    return index
+}

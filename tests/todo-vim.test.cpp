@@ -319,6 +319,79 @@ private slots:
         QCOMPARE(card->property("vimMode").toString(), "normal");
         QCOMPARE(backend->tasks().size(), 3);
     }
+    void undoRedoSharesHistoryForListAndText() {
+        enableVim();
+        const auto id = [this](int index) {
+            return backend->tasks().at(index).toMap().value("id").toString();
+        };
+        const auto ctrl = [this](Qt::Key key, Qt::KeyboardModifiers extra = Qt::NoModifier) {
+            QTest::keyClick(window.get(), key, Qt::ControlModifier | extra);
+        };
+        const auto selected = [this] { return card->property("selectedTaskIndex").toInt(); };
+        const QString secondId = id(1);
+        keys("wx"); QCOMPARE(taskText(), "alpha eta tail");
+        keys("iX "); escape(); QCOMPARE(taskText(), "alpha X eta tail");
+        keys("j "); QVERIFY(backend->tasks().at(1).toMap().value("done").toBool());
+        const QString doneAt = backend->tasks().at(1).toMap().value("doneAt").toString();
+        keys("dd"); QCOMPARE(backend->tasks().size(), 2);
+
+        // The deleted task comes back as the same task: id, done state, position.
+        keys("u");
+        QCOMPARE(backend->tasks().size(), 3);
+        QCOMPARE(id(1), secondId);
+        QVERIFY(backend->tasks().at(1).toMap().value("done").toBool());
+        QCOMPARE(backend->tasks().at(1).toMap().value("doneAt").toString(), doneAt);
+        QCOMPARE(selected(), 1);
+        keys("u"); QVERIFY(!backend->tasks().at(1).toMap().value("done").toBool());
+        // Text steps select their task and put the cursor on the change.
+        keys("u"); QCOMPARE(taskText(), "alpha eta tail");
+        QCOMPARE(selected(), 0); QCOMPARE(cursor(), 6);
+        keys("u"); QCOMPARE(taskText(), "alpha beta tail"); QCOMPARE(cursor(), 6);
+        QCOMPARE(card->property("vimMode").toString(), "normal");
+
+        ctrl(Qt::Key_R); QCOMPARE(taskText(), "alpha eta tail");
+        ctrl(Qt::Key_R); QCOMPARE(taskText(), "alpha X eta tail");
+        ctrl(Qt::Key_R); QVERIFY(backend->tasks().at(1).toMap().value("done").toBool());
+        QCOMPARE(selected(), 1);
+        ctrl(Qt::Key_R); QCOMPARE(backend->tasks().size(), 2);
+        ctrl(Qt::Key_R); QCOMPARE(backend->tasks().size(), 2);
+
+        // A new change after undo drops the redo steps.
+        keys("u"); QCOMPARE(backend->tasks().size(), 3);
+        QTest::keyClick(window.get(), Qt::Key_J, Qt::AltModifier);
+        QCOMPARE(id(2), secondId);
+        ctrl(Qt::Key_R); QCOMPARE(id(2), secondId); QCOMPARE(backend->tasks().size(), 3);
+        ctrl(Qt::Key_Z); QCOMPARE(id(1), secondId);
+        Backend reopened(nullptr, QStringLiteral("todo"));
+        QCOMPARE(reopened.tasks().at(1).toMap().value("id").toString(), secondId);
+    }
+    void undoRedoShortcutsWithoutVim() {
+        card->forceActiveFocus();
+        const QString firstId = backend->tasks().first().toMap().value("id").toString();
+        backend->deleteTask(firstId);
+        backend->moveTask(backend->tasks().first().toMap().value("id").toString(), 2);
+        QCOMPARE(taskText(), "third task");
+        QTest::keyClick(window.get(), Qt::Key_Z, Qt::ControlModifier);
+        QCOMPARE(taskText(), "second task");
+        QTest::keyClick(window.get(), Qt::Key_Z, Qt::ControlModifier);
+        QCOMPARE(backend->tasks().size(), 3);
+        QCOMPARE(backend->tasks().first().toMap().value("id").toString(), firstId);
+        QTest::keyClick(window.get(), Qt::Key_Z, Qt::ControlModifier | Qt::ShiftModifier);
+        QCOMPARE(backend->tasks().size(), 2);
+        // Clicking a checkbox moves focus off the card; shortcuts still work.
+        QTest::mouseClick(window.get(), Qt::LeftButton, Qt::NoModifier, QPoint(45, 82));
+        QVERIFY(backend->tasks().first().toMap().value("done").toBool());
+        QTest::keyClick(window.get(), Qt::Key_Z, Qt::ControlModifier);
+        QVERIFY(!backend->tasks().first().toMap().value("done").toBool());
+        QTest::keyClick(window.get(), Qt::Key_Y, Qt::ControlModifier);
+        QVERIFY(backend->tasks().first().toMap().value("done").toBool());
+        // While adding, Ctrl+Z belongs to the text field, not the list.
+        QVERIFY(QMetaObject::invokeMethod(card, "startAdding"));
+        auto *input = panel->findChild<QQuickItem *>("new-task-input");
+        QTRY_VERIFY(input->hasActiveFocus());
+        QTest::keyClick(window.get(), Qt::Key_Z, Qt::ControlModifier);
+        QVERIFY(backend->tasks().first().toMap().value("done").toBool());
+    }
     void activatingAnotherWindowClearsFocusAndSavesDraft() {
         enableVim();
         keys("idraft ");

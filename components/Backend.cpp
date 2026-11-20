@@ -1804,6 +1804,7 @@ void Backend::addTask(const QString &text) {
     task.insert(QStringLiteral("createdAt"), timestamp());
     task.insert(QStringLiteral("doneAt"), QString());
 
+    recordTaskChange(task.value(QStringLiteral("id")).toString());
     QVariantList next = m_tasks;
     next.append(task);
     m_tasks = next;
@@ -1816,6 +1817,7 @@ void Backend::toggleTask(const QString &id) {
     if (index < 0)
         return;
 
+    recordTaskChange(id);
     QVariantMap task = m_tasks.at(index).toMap();
     const bool done = !task.value(QStringLiteral("done")).toBool();
     task.insert(QStringLiteral("done"), done);
@@ -1834,6 +1836,7 @@ void Backend::renameTask(const QString &id, const QString &text) {
     QVariantMap task = m_tasks.at(index).toMap();
     if (task.value(QStringLiteral("text")).toString() == trimmed)
         return;
+    recordTaskChange(id);
     task.insert(QStringLiteral("text"), trimmed);
     m_tasks[index] = task;
     if (saveTasks())
@@ -1849,6 +1852,7 @@ void Backend::moveTask(const QString &id, int targetIndex) {
     if (from == targetIndex || from + 1 == targetIndex)
         return;
 
+    recordTaskChange(id);
     const QVariant task = m_tasks.takeAt(from);
     if (from < targetIndex)
         --targetIndex;
@@ -1862,10 +1866,36 @@ void Backend::deleteTask(const QString &id) {
     if (index < 0)
         return;
 
+    recordTaskChange(id);
     m_tasks.removeAt(index);
     if (saveTasks())
         emit tasksChanged();
 }
+
+void Backend::recordTaskChange(const QString &id) {
+    m_taskUndo.append({m_tasks, id});
+    if (m_taskUndo.size() > 200)
+        m_taskUndo.removeFirst();
+    m_taskRedo.clear();
+}
+
+QString Backend::restoreTaskHistory(bool undo) {
+    QList<TaskHistoryStep> &from = undo ? m_taskUndo : m_taskRedo;
+    QList<TaskHistoryStep> &to = undo ? m_taskRedo : m_taskUndo;
+    if (from.isEmpty())
+        return QString();
+
+    const TaskHistoryStep step = from.takeLast();
+    to.append({m_tasks, step.taskId});
+    m_tasks = step.tasks;
+    if (saveTasks())
+        emit tasksChanged();
+    return step.taskId;
+}
+
+QString Backend::undoTask() { return restoreTaskHistory(true); }
+
+QString Backend::redoTask() { return restoreTaskHistory(false); }
 
 Backend::~Backend() {
     m_panelActive = false;
