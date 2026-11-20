@@ -173,6 +173,9 @@ position; in Vim mode the step selects its task and puts the cursor on the
 changed text. A Vim insert or replace counts as one step when it ends. While
 typing in a text field, Ctrl+Z undoes that field instead. The history lasts
 until the panel restarts.
+Ctrl+N opens the new-task field (saving any edit in progress). Ctrl+D deletes
+the selected task at once in Vim mode; otherwise it asks to delete the task
+under the mouse. Enter confirms the delete dialog and Escape cancels it.
 ```
 
 ## Note

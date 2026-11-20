@@ -392,6 +392,67 @@ private slots:
         QTest::keyClick(window.get(), Qt::Key_Z, Qt::ControlModifier);
         QVERIFY(backend->tasks().first().toMap().value("done").toBool());
     }
+    void ctrlNAddsAndCtrlDDeletesInVim() {
+        enableVim();
+        const auto ctrl = [this](Qt::Key key) {
+            QTest::keyClick(window.get(), key, Qt::ControlModifier);
+        };
+        auto *input = panel->findChild<QQuickItem *>("new-task-input");
+        ctrl(Qt::Key_N);
+        QVERIFY(card->property("adding").toBool());
+        QTRY_VERIFY(input->hasActiveFocus());
+        ctrl(Qt::Key_N); QVERIFY(card->property("adding").toBool());
+        // Ctrl+D while typing a new task leaves the list alone.
+        ctrl(Qt::Key_D); QCOMPARE(backend->tasks().size(), 3);
+        keys("fourth"); QTest::keyClick(window.get(), Qt::Key_Return);
+        QCOMPARE(backend->tasks().size(), 4);
+        QCOMPARE(taskText(3), "fourth");
+        QCOMPARE(card->property("selectedTaskIndex").toInt(), 3);
+
+        // Ctrl+N from insert mode saves the draft first.
+        keys("kiX"); ctrl(Qt::Key_N);
+        QCOMPARE(taskText(2), "Xthird task");
+        QVERIFY(card->property("adding").toBool());
+        escape(); QCOMPARE(backend->tasks().size(), 4);
+
+        keys("k");
+        const QString selected = card->property("selectedTaskId").toString();
+        ctrl(Qt::Key_D);
+        QCOMPARE(backend->tasks().size(), 3);
+        QCOMPARE(card->property("pendingDeleteTaskId").toString(), QString());
+        ctrl(Qt::Key_Z);
+        QCOMPARE(backend->tasks().at(1).toMap().value("id").toString(), selected);
+    }
+    void ctrlDConfirmsHoveredTaskWithoutVim() {
+        card->forceActiveFocus();
+        const auto ctrl = [this](Qt::Key key) {
+            QTest::keyClick(window.get(), key, Qt::ControlModifier);
+        };
+        ctrl(Qt::Key_D);
+        QCOMPARE(card->property("pendingDeleteTaskId").toString(), QString());
+        const QString secondId = backend->tasks().at(1).toMap().value("id").toString();
+        QTest::mouseMove(window.get(), QPoint(130, 62 + 48 + 20));
+        QTRY_COMPARE(card->property("hoveredTaskId").toString(), secondId);
+        ctrl(Qt::Key_D);
+        QCOMPARE(card->property("pendingDeleteTaskId").toString(), secondId);
+        escape();
+        QCOMPARE(backend->tasks().size(), 3);
+        ctrl(Qt::Key_D);
+        QTest::keyClick(window.get(), Qt::Key_Return);
+        QCOMPARE(backend->tasks().size(), 2);
+        QCOMPARE(taskText(1), "third task");
+        ctrl(Qt::Key_Z);
+        QCOMPARE(backend->tasks().at(1).toMap().value("id").toString(), secondId);
+
+        // Ctrl+N from a mouse edit keeps the edited text.
+        card->setProperty("editingTaskId", secondId);
+        auto *input = panel->findChild<QQuickItem *>("new-task-input");
+        QTRY_VERIFY(window->activeFocusItem()
+            && window->activeFocusItem()->property("text").toString() == "second task");
+        keys(" edited"); ctrl(Qt::Key_N);
+        QCOMPARE(taskText(1), "second task edited");
+        QTRY_VERIFY(input->hasActiveFocus());
+    }
     void activatingAnotherWindowClearsFocusAndSavesDraft() {
         enableVim();
         keys("idraft ");

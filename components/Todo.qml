@@ -11,9 +11,9 @@ Item {
     width: 360
     height: 336
 
-    // Undo/redo shortcuts also work after clicking away, while the panel itself
+    // Ctrl shortcuts also work after clicking away, while the panel itself
     // holds focus; key events left unaccepted by the card bubble up here.
-    Keys.onPressed: event => card.handleHistoryKey(event)
+    Keys.onPressed: event => card.handleShortcutKey(event)
 
     Item {
         id: card
@@ -42,6 +42,7 @@ Item {
         property string editingTaskId: ""
         property string pendingDeleteTaskId: ""
         property string pendingDeleteTaskText: ""
+        property string hoveredTaskId: ""
         property string draggingTaskId: ""
         property var taskPreviewOrder: []
         property real draggingTaskY: 0
@@ -229,17 +230,35 @@ Item {
                     Vim.firstDifference(oldText, vimInput.text))
         }
 
-        // Ctrl+Z undoes; Ctrl+Shift+Z or Ctrl+Y redoes. Text fields being typed
-        // in keep their own Ctrl+Z.
-        function handleHistoryKey(event) {
-            if (adding || editingTaskId !== "" || pendingDeleteTaskId !== ""
-                || vimMode !== "normal")
+        // Ctrl+D: in Vim mode the selected task goes at once (Ctrl+Z restores
+        // it); otherwise the task under the mouse asks for confirmation.
+        function deleteShortcutTask() {
+            vimCommand = ""
+            if (vimHasFocus && selectedTaskId !== "") {
+                backend.deleteTask(selectedTaskId)
                 return
-            if (!(event.modifiers & Qt.ControlModifier)
+            }
+            const index = taskIndexIn(backend.tasks, hoveredTaskId)
+            if (index >= 0)
+                requestDeleteTask(hoveredTaskId, backend.tasks[index]["text"])
+        }
+
+        // Ctrl+N adds a task (saving any edit in progress), Ctrl+D deletes one,
+        // Ctrl+Z undoes, Ctrl+Shift+Z or Ctrl+Y redoes. Text fields being typed
+        // in keep their own Ctrl+Z.
+        function handleShortcutKey(event) {
+            if (pendingDeleteTaskId !== "" || !(event.modifiers & Qt.ControlModifier)
                 || (event.modifiers & (Qt.AltModifier | Qt.MetaModifier)))
                 return
             const shift = event.modifiers & Qt.ShiftModifier
-            if (event.key === Qt.Key_Z && !shift) stepHistory(true)
+            if (event.key === Qt.Key_N && !shift) {
+                if (!adding) startAdding()
+                event.accepted = true
+                return
+            }
+            if (adding || editingTaskId !== "" || vimMode !== "normal") return
+            if (event.key === Qt.Key_D && !shift) deleteShortcutTask()
+            else if (event.key === Qt.Key_Z && !shift) stepHistory(true)
             else if ((event.key === Qt.Key_Z && shift) || (event.key === Qt.Key_Y && !shift))
                 stepHistory(false)
             else return
@@ -412,6 +431,8 @@ Item {
 
         function startAdding() {
             if (vimEnabled) finishVimEdit()
+            // Taking focus from a mouse edit commits it before the row closes.
+            if (editingTaskId !== "") forceActiveFocus()
             editingTaskId = ""
             adding = true
             newTaskInput.text = ""
@@ -829,6 +850,8 @@ Item {
             enabled: visible
             focus: visible
             Keys.onEscapePressed: card.cancelDeleteTask()
+            Keys.onReturnPressed: card.confirmDeleteTask()
+            Keys.onEnterPressed: card.confirmDeleteTask()
 
             Rectangle {
                 anchors.fill: parent
@@ -1247,6 +1270,12 @@ Item {
             }
         }
 
-        HoverHandler { id: rowHover }
+        HoverHandler {
+            id: rowHover
+            onHoveredChanged: {
+                if (hovered) card.hoveredTaskId = row.taskId
+                else if (card.hoveredTaskId === row.taskId) card.hoveredTaskId = ""
+            }
+        }
     }
 }
