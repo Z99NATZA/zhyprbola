@@ -109,7 +109,7 @@ Item {
     function releaseCtrlShift() {
         const record = pendingCtrlShift
         resetCtrlShift()
-        if (record) appendKey("Ctrl+Shift")
+        if (record) appendKey("^Shift")
     }
 
     function escapeText(value) {
@@ -126,15 +126,15 @@ Item {
     // separated from their neighbours.
     function isSpacedToken(value) {
         return (isSpecialKey(value) && value !== "␣")
-            || /^(Ctrl|Alt|Super|Shift)\+/.test(value)
+            || /^(\^|Alt\+|Super\+|Shift\+)/.test(value)
     }
 
     function formatHistory(styled) {
         const grouped = []
         let previous = ""
-        const tokens = pendingCtrlShift ? history.concat("Ctrl+Shift") : history
+        const tokens = pendingCtrlShift ? history.concat("^Shift") : history
         for (const token of tokens) {
-            const shortcut = /^((?:(?:Ctrl|Alt|Super|Shift)\+)+)([a-z])$/i.exec(token)
+            const shortcut = /^((?:\^|(?:Alt|Super|Shift)\+)+)([a-z])$/i.exec(token)
             if (shortcut && token === previous)
                 grouped[grouped.length - 1] += shortcut[2]
             else
@@ -155,12 +155,12 @@ Item {
     function styledToken(value, accent) {
         let remaining = value
         let result = ""
-        let modifier = /^(Ctrl|Alt|Super|Shift)\+/.exec(remaining)
+        let modifier = /^(\^|Alt\+|Super\+|Shift\+)/.exec(remaining)
         while (modifier) {
             const prefix = modifier[0]
             result += '<font color="' + accent + '">' + prefix + '</font>'
             remaining = remaining.slice(prefix.length)
-            modifier = /^(Ctrl|Alt|Super|Shift)\+/.exec(remaining)
+            modifier = /^(\^|Alt\+|Super\+|Shift\+)/.exec(remaining)
         }
         const key = escapeText(remaining)
         const special = isSpecialKey(remaining) || remaining === "Shift"
@@ -190,14 +190,18 @@ Item {
     }
 
     function appendFormattedKey(key, hasCtrl, hasShift, hasAlt, hasSuper) {
-        if (hasCtrl && /^[a-z]$/i.test(key))
-            key = key.toLowerCase()
-        const prefix = []
-        if (hasCtrl) prefix.push("Ctrl")
-        if (hasCtrl && hasShift) prefix.push("Shift")
-        if (hasAlt) prefix.push("Alt")
-        if (hasSuper) prefix.push("Super")
-        appendKey(prefix.length ? prefix.join("+") + "+" + key : key)
+        // Ctrl shows as ^ (Ctrl+a = ^a, Ctrl+Shift+a = ^A).
+        let prefix = ""
+        if (hasCtrl) {
+            if (/^[a-z]$/i.test(key))
+                key = hasShift ? key.toUpperCase() : key.toLowerCase()
+            else if (hasShift)
+                prefix += "Shift+"
+            prefix = "^" + prefix
+        }
+        if (hasAlt) prefix += "Alt+"
+        if (hasSuper) prefix += "Super+"
+        appendKey(prefix + key)
     }
 
     function globalPress(name, text, hasShift, hasCtrl, hasAlt, hasSuper) {

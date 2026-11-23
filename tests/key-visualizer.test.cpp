@@ -104,32 +104,32 @@ private slots:
                  QString::fromUtf8("⌦"), QString::fromUtf8("←"), QString::fromUtf8("→"),
                  QString::fromUtf8("↑"), QString::fromUtf8("↓"), QStringLiteral("Home"),
                  QStringLiteral("End"), QStringLiteral("PgUp"), QStringLiteral("PgDn"),
-                 QStringLiteral("Ctrl+a"), QStringLiteral("Alt+x"),
-                 QStringLiteral("Super+a"), QStringLiteral("Ctrl+Alt+a"),
-                 QStringLiteral("Ctrl+Shift+a")}) {
+                 QStringLiteral("^a"), QStringLiteral("Alt+x"),
+                 QStringLiteral("Super+a"), QStringLiteral("^Alt+a"),
+                 QStringLiteral("^A")}) {
             const bool space = key == QString::fromUtf8("␣");
             check({"a", "b", key, "c", "d"}, space
                 ? QStringLiteral("ab") + key + "cd"
                 : QStringLiteral("ab ") + key + " cd");
             check({key}, key);
-            check({key, key}, key.contains(QLatin1Char('+'))
+            check({key, key}, (key.contains(QLatin1Char('+')) || key.startsWith(QLatin1Char('^')))
                 ? key + key.right(1) : space ? key + key : key + " " + key);
         }
         check({"h", "e", "l", "l", "o", QString::fromUtf8("␣"),
-                  "w", "o", "r", "l", "d", "Ctrl+a", QString::fromUtf8("⌫")},
-            QString::fromUtf8("hello␣world Ctrl+a ⌫"));
-        check({"a", "Ctrl+Shift", "b"}, QStringLiteral("a Ctrl+Shift b"));
-        check({"Ctrl+Shift", "Ctrl+Shift"}, QStringLiteral("Ctrl+Shift Ctrl+Shift"));
+                  "w", "o", "r", "l", "d", "^a", QString::fromUtf8("⌫")},
+            QString::fromUtf8("hello␣world ^a ⌫"));
+        check({"a", "^Shift", "b"}, QStringLiteral("a ^Shift b"));
+        check({"^Shift", "^Shift"}, QStringLiteral("^Shift ^Shift"));
         QVariantList repeatedShortcuts;
-        for (int i = 0; i < 13; ++i) repeatedShortcuts.append(QStringLiteral("Ctrl+k"));
-        check(repeatedShortcuts, QStringLiteral("Ctrl+kkkkkkkkkkkkk"));
-        repeatedShortcuts.append(QStringLiteral("Ctrl+x"));
-        repeatedShortcuts.append(QStringLiteral("Ctrl+k"));
-        check(repeatedShortcuts, QStringLiteral("Ctrl+kkkkkkkkkkkkk Ctrl+x Ctrl+k"));
-        object->setProperty("history", QVariantList{QStringLiteral("Ctrl+k"),
-            QStringLiteral("Ctrl+k")});
+        for (int i = 0; i < 13; ++i) repeatedShortcuts.append(QStringLiteral("^k"));
+        check(repeatedShortcuts, QStringLiteral("^kkkkkkkkkkkkk"));
+        repeatedShortcuts.append(QStringLiteral("^x"));
+        repeatedShortcuts.append(QStringLiteral("^k"));
+        check(repeatedShortcuts, QStringLiteral("^kkkkkkkkkkkkk ^x ^k"));
+        object->setProperty("history", QVariantList{QStringLiteral("^k"),
+            QStringLiteral("^k")});
         QCOMPARE(object->property("styledText").toString().count(
-            QStringLiteral("Ctrl+</font>")), 1);
+            QStringLiteral("^</font>")), 1);
         object->setProperty("history", QVariantList{QStringLiteral("helloworld123")});
         QCOMPARE(object->property("implicitWidth").toReal(), 480.0);
         QVariantList characters;
@@ -259,10 +259,10 @@ private slots:
         emit backend.globalKeyPressed(QStringLiteral("Shift_L"), QString(),
             true, true, false, false);
         QVERIFY(!object->property("previewing").toBool());
-        QCOMPARE(object->property("displayText").toString(), QStringLiteral("ok Ctrl+Shift"));
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("ok ^Shift"));
         emit backend.globalKeyReleased(QStringLiteral("Shift_L"));
         emit backend.globalKeyReleased(QStringLiteral("Control_L"));
-        QCOMPARE(object->property("displayText").toString(), QStringLiteral("ok Ctrl+Shift"));
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("ok ^Shift"));
     }
 
     void clearsHistoryFromContextMenu_data() {
@@ -399,7 +399,7 @@ private slots:
             const qreal empty = object->property("implicitHeight").toReal();
             for (const QString &typed : {QStringLiteral("hello"),
                      QString::fromUtf8("สวัสดีปั้นจั่นกิ๊กๆ ฟ้ญู ฎุฏุ"),
-                     QString::fromUtf8("␣ ⌫ ↵ Tab ⌦ ← → ↑ ↓ Ctrl+k")}) {
+                     QString::fromUtf8("␣ ⌫ ↵ Tab ⌦ ← → ↑ ↓ ^k")}) {
                 object->setProperty("history", QVariantList{typed});
                 QCOMPARE(object->property("implicitHeight").toReal(), empty);
             }
@@ -474,9 +474,9 @@ private slots:
         emit backend.globalKeyPressed(QStringLiteral("ampersand"), QStringLiteral("&"),
             false, false, false, false);
         QCOMPARE(object->property("displayText").toString(),
-            QString::fromUtf8("Ctrl+a Super+␣ <&"));
+            QString::fromUtf8("^a Super+␣ <&"));
         const QString styled = object->property("styledText").toString();
-        QVERIFY(styled.contains(QStringLiteral("<font color=\"#875a82\">Ctrl+</font>a")));
+        QVERIFY(styled.contains(QStringLiteral("<font color=\"#875a82\">^</font>a")));
         QVERIFY(styled.contains(QString::fromUtf8(
             "<font color=\"#875a82\">Super+</font><font color=\"#875a82\">␣</font>")));
         QVERIFY(styled.endsWith(QStringLiteral("&lt;&amp;")));
@@ -484,7 +484,7 @@ private slots:
 
         backend.setThemeName(QStringLiteral("white"));
         QTRY_VERIFY(object->property("styledText").toString().contains(
-            QStringLiteral("<font color=\"#467b9d\">Ctrl+</font>")));
+            QStringLiteral("<font color=\"#467b9d\">^</font>")));
 
         auto *visualizer = qobject_cast<QQuickItem *>(object.data());
         QVERIFY(visualizer);
@@ -509,7 +509,7 @@ private slots:
         // One Half Gray: terminal-gray surface, light text, light-gray accent.
         backend.setThemeName(QStringLiteral("one-half-gray"));
         QTRY_VERIFY(object->property("styledText").toString().contains(
-            QStringLiteral("<font color=\"#abb2bf\">Ctrl+</font>")));
+            QStringLiteral("<font color=\"#abb2bf\">^</font>")));
         QCOMPARE(display->property("color").value<QColor>(), QColor("#DCDFE4"));
         const QImage gray = window.grabWindow();
         QCOMPARE(gray.pixelColor(240, 4).name(), QStringLiteral("#282c34"));
@@ -797,30 +797,30 @@ private slots:
         QTest::keyClick(&window, Qt::Key_H);
         QTRY_COMPARE(visualizer->property("displayText").toString(), QStringLiteral("h"));
         QTest::keyClick(&window, Qt::Key_A, Qt::ControlModifier);
-        QTRY_COMPARE(visualizer->property("displayText").toString(), QStringLiteral("h Ctrl+a"));
+        QTRY_COMPARE(visualizer->property("displayText").toString(), QStringLiteral("h ^a"));
         QKeyEvent ctrlShift(QEvent::KeyPress, Qt::Key_A,
             Qt::ControlModifier | Qt::ShiftModifier, QString());
         QCoreApplication::sendEvent(&window, &ctrlShift);
         QCOMPARE(visualizer->property("displayText").toString(),
-            QStringLiteral("h Ctrl+a Ctrl+Shift+a"));
+            QStringLiteral("h ^a ^A"));
         QKeyEvent shifted(QEvent::KeyPress, Qt::Key_A, Qt::ShiftModifier,
             QStringLiteral("A"));
         QCoreApplication::sendEvent(&window, &shifted);
         QCOMPARE(visualizer->property("displayText").toString(),
-            QStringLiteral("h Ctrl+a Ctrl+Shift+a A"));
+            QStringLiteral("h ^a ^A A"));
         QTest::keyClick(&window, Qt::Key_Shift);
         QCOMPARE(visualizer->property("displayText").toString(),
-            QStringLiteral("h Ctrl+a Ctrl+Shift+a A"));
+            QStringLiteral("h ^a ^A A"));
 
         QKeyEvent thai(QEvent::KeyPress, Qt::Key_unknown, Qt::NoModifier,
             QString::fromUtf8("ก"));
         QCoreApplication::sendEvent(&window, &thai);
         QTRY_COMPARE(visualizer->property("displayText").toString(),
-            QString::fromUtf8("h Ctrl+a Ctrl+Shift+a Aก"));
+            QString::fromUtf8("h ^a ^A Aก"));
         QTest::keyClick(&window, Qt::Key_Space);
         QTest::keyClick(&window, Qt::Key_Backspace);
         QTRY_COMPARE(visualizer->property("displayText").toString(),
-            QString::fromUtf8("h Ctrl+a Ctrl+Shift+a Aก␣ ⌫"));
+            QString::fromUtf8("h ^a ^A Aก␣ ⌫"));
 
         const QImage image = window.grabWindow();
         QVERIFY(!image.isNull());
@@ -839,7 +839,7 @@ private slots:
         QTest::keyClick(&window, Qt::Key_Backtab, Qt::ShiftModifier);
         QTest::keyClick(&window, Qt::Key_Tab, Qt::ControlModifier);
         QCOMPARE(object->property("displayText").toString(),
-            QStringLiteral("Tab Tab Ctrl+Tab"));
+            QStringLiteral("Tab Tab ^Tab"));
     }
 
     void rendersCtrlShiftChords_data() {
@@ -926,25 +926,25 @@ private slots:
         };
 
         pressChord();
-        QCOMPARE(display(), QStringLiteral("Ctrl+Shift"));
+        QCOMPARE(display(), QStringLiteral("^Shift"));
         QCOMPARE(historySize(), 0);
         QVERIFY(object->property("styledText").toString().contains(
             QStringLiteral(">Shift</font>")));
         send(true, second, both, QString(), true);
-        QCOMPARE(display(), QStringLiteral("Ctrl+Shift"));
+        QCOMPARE(display(), QStringLiteral("^Shift"));
         releaseChord();
-        QCOMPARE(display(), QStringLiteral("Ctrl+Shift"));
+        QCOMPARE(display(), QStringLiteral("^Shift"));
         QCOMPARE(historySize(), 1);
 
         QVERIFY(clear());
         pressChord();
         send(true, Qt::Key_A, both, QStringLiteral("A"));
-        QCOMPARE(display(), QStringLiteral("Ctrl+Shift+a"));
+        QCOMPARE(display(), QStringLiteral("^A"));
         send(true, Qt::Key_A, both, QStringLiteral("A"), true);
-        QCOMPARE(display(), QStringLiteral("Ctrl+Shift+aa"));
+        QCOMPARE(display(), QStringLiteral("^AA"));
         send(false, Qt::Key_A, both);
         releaseChord();
-        QCOMPARE(display(), QStringLiteral("Ctrl+Shift+aa"));
+        QCOMPARE(display(), QStringLiteral("^AA"));
         QCOMPARE(historySize(), 2);
 
         QVERIFY(clear());
@@ -958,7 +958,7 @@ private slots:
         send(true, Qt::Key_A, Qt::ControlModifier, QStringLiteral("A"));
         send(false, Qt::Key_A, Qt::ControlModifier);
         send(false, Qt::Key_Control, Qt::NoModifier);
-        QCOMPARE(display(), QStringLiteral("A Ctrl+a"));
+        QCOMPARE(display(), QStringLiteral("A ^a"));
 
         QVERIFY(clear());
         pressChord();
@@ -968,7 +968,7 @@ private slots:
         QCOMPARE(historySize(), 0);
         pressChord();
         releaseChord();
-        QCOMPARE(display(), QStringLiteral("Ctrl+Shift"));
+        QCOMPARE(display(), QStringLiteral("^Shift"));
 
         QVERIFY(clear());
         pressChord();
@@ -1023,7 +1023,7 @@ private slots:
         press(Qt::Key_A, Qt::ControlModifier, QString(), true);
         press(Qt::Key_Backspace, Qt::NoModifier, QString(), true);
         QCOMPARE(object->property("displayText").toString(),
-            QString::fromUtf8("aaaA Ctrl+a ⌫"));
+            QString::fromUtf8("aaaA ^a ⌫"));
 
         object->setProperty("history", QVariantList{});
         backend.setKeyCaptureAvailable(true);
@@ -1042,13 +1042,13 @@ private slots:
             emit backend.globalKeyPressed(QStringLiteral("a"), QString(),
                 false, true, false, false);
         QCOMPARE(object->property("displayText").toString(),
-            QStringLiteral("AAA Ctrl+aa"));
+            QStringLiteral("AAA ^aa"));
         emit backend.globalKeyReleased(QStringLiteral("a"));
         emit backend.globalKeyReleased(QStringLiteral("Control_L"));
         emit backend.globalKeyPressed(QStringLiteral("a"), QStringLiteral("a"),
             false, false, false, false);
         QCOMPARE(object->property("displayText").toString(),
-            QStringLiteral("AAA Ctrl+aa a"));
+            QStringLiteral("AAA ^aa a"));
     }
 
     void rendersGlobalKeysWithoutWindowFocus() {
@@ -1083,7 +1083,7 @@ private slots:
         emit backend.globalKeyPressed(QStringLiteral("BackSpace"), QString(),
             false, false, false, false);
         QCOMPARE(visualizer->property("displayText").toString(),
-            QString::fromUtf8("h Ctrl+a Ctrl+Shift+a Aก␣ ⌫"));
+            QString::fromUtf8("h ^a ^A Aก␣ ⌫"));
 
         visualizer->setProperty("history", QVariantList{});
         emit backend.globalKeyPressed(QStringLiteral("Shift_L"), QString(),
@@ -1116,7 +1116,7 @@ private slots:
         emit backend.globalKeyPressed(QStringLiteral("Tab"), QStringLiteral("\t"),
             true, true, false, false);
         QCOMPARE(visualizer->property("displayText").toString(),
-            QStringLiteral("Tab Tab Ctrl+Shift+Tab"));
+            QStringLiteral("Tab Tab ^Shift+Tab"));
     }
 };
 
