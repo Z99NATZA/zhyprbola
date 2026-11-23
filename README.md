@@ -2,7 +2,10 @@
 
 ![Zhyprbola](assets/zhyprbola-logo.png)
 
-![Zhyprbola v0.1.0](assets/zhyprbola-preview-v0_1_0.png)
+<p>
+  <img src="assets/zhyprbola-preview-v0_1_0.png" alt="Zhyprbola v0.1.0" width="49%">
+  <img src="assets/zhyprbola-preview.png" alt="Zhyprbola desktop preview" width="49%">
+</p>
 
 ## Stack
 
