@@ -107,14 +107,17 @@ private slots:
                  QStringLiteral("Ctrl+a"), QStringLiteral("Alt+x"),
                  QStringLiteral("Super+a"), QStringLiteral("Ctrl+Alt+a"),
                  QStringLiteral("Ctrl+Shift+a")}) {
-            check({"a", "b", key, "c", "d"}, QStringLiteral("ab ") + key + " cd");
+            const bool space = key == QString::fromUtf8("␣");
+            check({"a", "b", key, "c", "d"}, space
+                ? QStringLiteral("ab") + key + "cd"
+                : QStringLiteral("ab ") + key + " cd");
             check({key}, key);
             check({key, key}, key.contains(QLatin1Char('+'))
-                ? key + key.right(1) : key + " " + key);
+                ? key + key.right(1) : space ? key + key : key + " " + key);
         }
         check({"h", "e", "l", "l", "o", QString::fromUtf8("␣"),
                   "w", "o", "r", "l", "d", "Ctrl+a", QString::fromUtf8("⌫")},
-            QString::fromUtf8("hello ␣ world Ctrl+a ⌫"));
+            QString::fromUtf8("hello␣world Ctrl+a ⌫"));
         check({"a", "Ctrl+Shift", "b"}, QStringLiteral("a Ctrl+Shift b"));
         check({"Ctrl+Shift", "Ctrl+Shift"}, QStringLiteral("Ctrl+Shift Ctrl+Shift"));
         QVariantList repeatedShortcuts;
@@ -171,7 +174,7 @@ private slots:
             backend.setKeyVisualizerSetting(QStringLiteral("fontSize"), font);
             backend.setKeyVisualizerSetting(QStringLiteral("paddingX"), QStringLiteral("md"));
             backend.setKeyVisualizerSetting(QStringLiteral("paddingY"), QStringLiteral("md"));
-            QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
+            QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello␣world"));
             const qreal defaultWidth = object->property("implicitWidth").toReal();
             QCOMPARE(defaultWidth, 480.0);
             const qreal defaultHeight = object->property("implicitHeight").toReal();
@@ -184,7 +187,7 @@ private slots:
             QCOMPARE(object->property("implicitHeight").toReal(), defaultHeight);
             const qreal narrowWidth = object->property("implicitWidth").toReal();
             backend.setKeyVisualizerSetting(QStringLiteral("paddingY"), QStringLiteral("sm"));
-            QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
+            QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello␣world"));
             QCOMPARE(object->property("implicitWidth").toReal(), narrowWidth);
             QVERIFY(object->property("implicitHeight").toReal() < defaultHeight);
             QVERIFY(object->property("implicitHeight").toReal()
@@ -213,13 +216,13 @@ private slots:
         QCOMPARE(object->property("displayText").toString(), QStringLiteral("Padding testa"));
         backend.setKeyVisualizerSetting(QStringLiteral("alignment"), QStringLiteral("left"));
         QVERIFY(object->property("previewing").toBool());
-        QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello␣world"));
         QVERIFY(QMetaObject::invokeMethod(object.data(), "appendKey",
             Q_ARG(QVariant, QStringLiteral("b"))));
         QCOMPARE(object->property("displayText").toString(), QStringLiteral("Padding testab"));
         backend.setKeyVisualizerSetting(QStringLiteral("paddingY"), QStringLiteral("md"));
         QVERIFY(object->property("previewing").toBool());
-        QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello␣world"));
     }
 
     void keepsTypedKeysAfterPreviewTimeout() {
@@ -244,7 +247,7 @@ private slots:
         backend.setKeyVisualizerSetting(QStringLiteral("alignment"), QStringLiteral("left"));
         QVERIFY(object->property("previewing").toBool());
         backend.setKeyVisualizerSetting(QStringLiteral("alignment"), QStringLiteral("right"));
-        QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
+        QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello␣world"));
         // Well past the old five-second clear: the preview ends and typed keys remain.
         QTest::qWait(5600);
         QVERIFY(!object->property("previewing").toBool());
@@ -305,7 +308,7 @@ private slots:
         if (preview) {
             backend.setKeyVisualizerSetting(QStringLiteral("alignment"), QStringLiteral("left"));
             QVERIFY(object->property("previewing").toBool());
-            QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello ␣ world"));
+            QCOMPARE(object->property("displayText").toString(), QStringLiteral("hello␣world"));
         }
 
         auto *menu = object->findChild<QObject *>(QStringLiteral("key-visualizer-context-menu"));
@@ -817,7 +820,7 @@ private slots:
         QTest::keyClick(&window, Qt::Key_Space);
         QTest::keyClick(&window, Qt::Key_Backspace);
         QTRY_COMPARE(visualizer->property("displayText").toString(),
-            QString::fromUtf8("h Ctrl+a Ctrl+Shift+a Aก ␣ ⌫"));
+            QString::fromUtf8("h Ctrl+a Ctrl+Shift+a Aก␣ ⌫"));
 
         const QImage image = window.grabWindow();
         QVERIFY(!image.isNull());
@@ -1080,7 +1083,7 @@ private slots:
         emit backend.globalKeyPressed(QStringLiteral("BackSpace"), QString(),
             false, false, false, false);
         QCOMPARE(visualizer->property("displayText").toString(),
-            QString::fromUtf8("h Ctrl+a Ctrl+Shift+a Aก ␣ ⌫"));
+            QString::fromUtf8("h Ctrl+a Ctrl+Shift+a Aก␣ ⌫"));
 
         visualizer->setProperty("history", QVariantList{});
         emit backend.globalKeyPressed(QStringLiteral("Shift_L"), QString(),

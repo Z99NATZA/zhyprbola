@@ -122,6 +122,13 @@ Item {
             "↑", "↓", "Home", "End", "PgUp", "PgDn"].includes(value)
     }
 
+    // Space stays flush with typed text; other special keys and shortcuts get
+    // separated from their neighbours.
+    function isSpacedToken(value) {
+        return (isSpecialKey(value) && value !== "␣")
+            || /^(Ctrl|Alt|Super|Shift)\+/.test(value)
+    }
+
     function formatHistory(styled) {
         const grouped = []
         let previous = ""
@@ -135,12 +142,12 @@ Item {
             previous = token
         }
         let result = ""
-        let previousSpecial = false
+        let previousSpaced = false
         for (const token of grouped) {
-            const special = isSpecialKey(token) || /^(Ctrl|Alt|Super|Shift)\+/.test(token)
-            if (result && (previousSpecial || special)) result += " "
+            const spaced = isSpacedToken(token)
+            if (result && (previousSpaced || spaced)) result += " "
             result += styled ? styledToken(token, Theme.accent.toString()) : token
-            previousSpecial = special
+            previousSpaced = spaced
         }
         return result
     }

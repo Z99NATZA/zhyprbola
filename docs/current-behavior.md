@@ -118,7 +118,7 @@ Settings: font size, Padding X/Y, and text alignment.
 Drag the bubble's left or right edge to set its width (minimum 200 px); the
 cursor changes near an edge, with no visible handle. The width persists.
 
-Font, padding, or alignment changes show hello ␣ world for five seconds, then
+Font, padding, or alignment changes show hello␣world for five seconds, then
 the earlier keys return. Typing ends the preview and continues the earlier keys. Legacy padding initializes both axes.
 English/Thai global input requires GNOME AT-SPI or readable Linux input devices.
 Without permission, keys are captured only while focused.
