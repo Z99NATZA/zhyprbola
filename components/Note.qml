@@ -82,6 +82,8 @@ Item {
         property int visualCursor: 0
         property bool visualLine: false
         property bool visualSync: false
+        // Caret position where a mouse press began; -1 when no press is active.
+        property int mousePressPosition: -1
         property var lastVisual: null
         readonly property bool normalMode: vimEnabled && vimMode !== "insert" && vimMode !== "replace"
 
@@ -1297,6 +1299,28 @@ Item {
             vimMode = "visual"
         }
 
+        // A finished mouse selection includes the character under the press
+        // and the character under the drag end, as Vim's Visual mode does.
+        function finishMouseSelection() {
+            const press = mousePressPosition
+            mousePressPosition = -1
+            if (press < 0 || !vimEnabled || vimMode !== "visual" || visualLine || editor.selectedText === "") return
+            const text = editor.text
+            const start = editor.selectionStart
+            const backward = editor.cursorPosition === start
+            visualAnchor = Vim.normalPosition(text, press)
+            visualCursor = backward ? start : Vim.previousCharacter(text, editor.selectionEnd)
+            updateVisualSelection()
+        }
+
+        // A click in normal mode may land on a line break; Vim keeps the
+        // cursor on the last character of the line instead.
+        function normalizeClickedCursor() {
+            if (!normalMode || vimMode !== "normal" || editor.selectedText !== "") return
+            const normal = Vim.normalPosition(editor.text, editor.cursorPosition)
+            if (normal !== editor.cursorPosition) editor.cursorPosition = normal
+        }
+
         function isVisualMotion(event) {
             const key = event.text
             if (key.length === 1 && "hjklwbe0123456789^$GgnN*# ".indexOf(key) >= 0) return true
@@ -1765,12 +1789,23 @@ Item {
                     onTextChanged: card.dirty = text !== card.savedText
                     onCursorRectangleChanged: flick.ensureVisible(cursorRectangle)
                     onSelectedTextChanged: card.syncVisualFromSelection()
-                    onCursorPositionChanged: {
-                        // Mouse clicks may land on a line break in normal mode.
-                        if (card.normalMode && card.vimMode === "normal" && selectedText === "") {
-                            const normal = Vim.normalPosition(text, cursorPosition)
-                            if (normal !== cursorPosition) cursorPosition = normal
+                    // Moving the cursor during a mouse press would reset the drag
+                    // anchor, so the normal-mode fix-up waits for the release.
+                    PointHandler {
+                        id: editorPress
+                        target: null
+                        onActiveChanged: {
+                            if (active) {
+                                card.mousePressPosition = editor.positionAt(point.position.x, point.position.y)
+                            } else {
+                                card.finishMouseSelection()
+                                card.normalizeClickedCursor()
+                            }
                         }
+                    }
+
+                    onCursorPositionChanged: {
+                        if (!editorPress.active) card.normalizeClickedCursor()
                     }
 
                     // Terminal-style cursor: a solid block in normal mode, a bar while inserting.
@@ -1781,6 +1816,45 @@ Item {
                         color: block ? Qt.alpha(Theme.accent, 0.55) : Theme.accent
                         // Visual mode draws its own block at the moving end below.
                         visible: editor.activeFocus && card.vimMode !== "visual"
+                    }
+
+                    // Visual Line highlights full rows, like a general editor. The
+                    // last row stops at its final character.
+                    readonly property var visualLineSpan: {
+                        editor.text
+                        editor.width
+                        card.visualAnchor
+                        card.visualCursor
+                        if (card.vimMode !== "visual" || !card.visualLine) return null
+                        const bounds = card.visualBounds()
+                        const first = editor.positionToRectangle(bounds.start)
+                        const last = editor.positionToRectangle(Vim.lineStart(editor.text, bounds.end))
+                        const end = editor.positionToRectangle(bounds.end)
+                        return {top: first.y, lastTop: last.y, bottom: end.y + end.height, endX: end.x}
+                    }
+
+                    Rectangle {
+                        objectName: "note-visual-line"
+                        z: -1
+                        readonly property var span: editor.visualLineSpan
+                        visible: span !== null && span.lastTop > span.top
+                        x: 0
+                        y: span ? span.top : 0
+                        width: flick.width
+                        height: span ? span.lastTop - span.top : 0
+                        color: Theme.selected
+                    }
+
+                    Rectangle {
+                        objectName: "note-visual-line-last"
+                        z: -1
+                        readonly property var span: editor.visualLineSpan
+                        visible: span !== null
+                        x: 0
+                        y: span ? span.lastTop : 0
+                        width: span ? span.endX : 0
+                        height: span ? span.bottom - span.lastTop : 0
+                        color: Theme.selected
                     }
 
                     Rectangle {

@@ -604,6 +604,36 @@ private slots:
         keys("0yyw."); QCOMPARE(text(), "help\nwop");
     }
 
+    // Screen point at the middle of the character cell that starts at `position`.
+    QPoint editorPoint(int position) const {
+        QRectF rect;
+        QMetaObject::invokeMethod(editor, "positionToRectangle", Q_RETURN_ARG(QRectF, rect),
+            Q_ARG(int, position));
+        return editor->mapToScene(rect.center()).toPoint();
+    }
+
+    void mouseDragIncludesCharactersUnderPressAndEnd() {
+        load("hello world\nfoo");
+        enableVim();
+
+        // Forward: press on 'h', drag to the caret after 'o'.
+        QTest::mousePress(window.get(), Qt::LeftButton, Qt::NoModifier, editorPoint(0));
+        QTest::mouseMove(window.get(), editorPoint(5));
+        QTest::mouseRelease(window.get(), Qt::LeftButton, Qt::NoModifier, editorPoint(5));
+        QTest::qWait(20);
+        QCOMPARE(mode(), "visual");
+        QCOMPARE(editor->property("selectedText").toString(), "hello");
+
+        // Backward: press on the space after 'hello', drag to the start.
+        escape();
+        QTest::mousePress(window.get(), Qt::LeftButton, Qt::NoModifier, editorPoint(5));
+        QTest::mouseMove(window.get(), editorPoint(0));
+        QTest::mouseRelease(window.get(), Qt::LeftButton, Qt::NoModifier, editorPoint(0));
+        QTest::qWait(20);
+        QCOMPARE(mode(), "visual");
+        QCOMPARE(editor->property("selectedText").toString(), "hello ");
+    }
+
     void visualMode() {
         load("one two three\nfour five\nsix");
         enableVim();
