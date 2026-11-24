@@ -1752,7 +1752,7 @@ Item {
                     selectedTextColor: card.textColor
                     selectByMouse: true
                     persistentSelection: false
-                    font.family: "monospace"
+                    font.family: card.family
                     font.pixelSize: 15
                     tabStopDistance: editorMetrics.advanceWidth * 4
                     cursorVisible: activeFocus
