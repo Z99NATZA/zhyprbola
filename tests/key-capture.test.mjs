@@ -7,6 +7,7 @@ test('AT-SPI forwards held-key repeats and stops when the parent closes', () => 
     const listeners = new Map();
     const output = [];
     let parentClosed;
+    let heartbeat;
     let loopQuit = false;
     const device = {
         get_capabilities: () => 1,
@@ -33,6 +34,10 @@ test('AT-SPI forwards held-key repeats and stops when the parent closes', () => 
             IOCondition: {HUP: 16, ERR: 8},
             PRIORITY_DEFAULT: 0,
             SOURCE_REMOVE: false,
+            SOURCE_CONTINUE: true,
+            timeout_add_seconds: (_priority, _interval, callback) => {
+                heartbeat = callback;
+            },
             io_add_watch: (_channel, _priority, _condition, callback) => {
                 parentClosed = callback;
             },
@@ -42,7 +47,7 @@ test('AT-SPI forwards held-key repeats and stops when the parent closes', () => 
     const source = readFileSync(new URL('../scripts/key-capture.js', import.meta.url), 'utf8');
     vm.runInContext(source.replace(/^import .*;\n/gm, ''), context);
 
-    assert.equal(output[0].type, 'ready');
+    assert.deepEqual(output[0], {type: 'ready', heartbeat: true});
     listeners.get('key-pressed')(device, 38, 0x61, 1 << 2, '\x01');
     assert.equal(output[1].text, 'a');
     assert.equal(output[1].ctrl, true);
@@ -54,6 +59,8 @@ test('AT-SPI forwards held-key repeats and stops when the parent closes', () => 
     listeners.get('key-released')(device, 38, 0x61, 0, '');
     listeners.get('key-pressed')(device, 38, 0x1000e01, 0, 'ก');
     assert.equal(output.at(-1).text, 'ก');
+    assert.equal(heartbeat(), true);
+    assert.deepEqual(output.at(-1), {type: 'heartbeat'});
     assert.equal(parentClosed(), false);
     assert.equal(loopQuit, true);
 });

@@ -80,6 +80,8 @@ QString dockConfigPath(const QString &name) {
 }
 
 constexpr int keyVisualizerMinimumWidth = 200;
+constexpr int keyCaptureRetryMs = 2000;
+constexpr int keyCaptureWatchdogMs = 8000;
 
 QVariantMap defaultKeyVisualizerSettings() {
     return {{QStringLiteral("fontSize"), QStringLiteral("md")},
@@ -508,29 +510,27 @@ Backend::Backend(QObject *parent, const QString &panelName) : QObject(parent) {
     connect(&m_settingsSectionRequestWatcher, &QFileSystemWatcher::fileChanged,
         this, &Backend::refreshSettingsSectionRequest);
     refreshSettingsSectionRequest();
+    m_keyCaptureRetry.setSingleShot(true);
+    m_keyCaptureRetry.setInterval(keyCaptureRetryMs);
+    connect(&m_keyCaptureRetry, &QTimer::timeout, this,
+        [this]() { startKeyCaptureHelper(false); });
+    m_keyCaptureWatchdog.setSingleShot(true);
+    m_keyCaptureWatchdog.setInterval(keyCaptureWatchdogMs);
+    connect(&m_keyCaptureWatchdog, &QTimer::timeout, &m_keyCapture, &QProcess::kill);
     connect(&m_keyCapture, &QProcess::readyReadStandardOutput,
         this, &Backend::readKeyCapture);
     connect(&m_keyCapture, &QProcess::finished, this,
-        [this](int, QProcess::ExitStatus) {
-            if (m_keyCaptureAvailable) {
-                m_keyCaptureAvailable = false;
-                emit keyCaptureAvailableChanged();
-            }
-            if (m_keyCaptureRequested && !m_keyCaptureTriedEvdev)
-                startEvdevKeyCapture();
-        });
+        &Backend::keyCaptureHelperStopped);
     connect(&m_keyCapture, &QProcess::errorOccurred, this,
         [this](QProcess::ProcessError error) {
-            if (error == QProcess::FailedToStart
-                && m_keyCaptureRequested && !m_keyCaptureTriedEvdev)
-                startEvdevKeyCapture();
+            if (error == QProcess::FailedToStart) keyCaptureHelperStopped();
         });
     connect(&m_keyCaptureGrant, &QProcess::finished, this,
         [this](int exitCode, QProcess::ExitStatus status) {
             m_keyCaptureGrantPending = false;
             emit keyCaptureGrantPendingChanged();
             if (status == QProcess::NormalExit && exitCode == 0
-                && m_keyCaptureRequested) {
+                && m_keyCaptureRequested && !m_keyCaptureAvailable) {
                 stopKeyCapture();
                 startKeyCapture();
             }
@@ -1328,32 +1328,51 @@ QString Backend::previewTime(const QString &format, const QString &locale,
 void Backend::startKeyCapture() {
     if (m_keyCapture.state() != QProcess::NotRunning || m_keyCaptureRequested) return;
     m_keyCaptureRequested = true;
-    m_keyCaptureTriedEvdev = false;
-    const QString script = QDir(QCoreApplication::applicationDirPath())
-        .absoluteFilePath(QStringLiteral("../scripts/key-capture.js"));
-    if (!QFileInfo::exists(script)) {
-        startEvdevKeyCapture();
-        return;
-    }
-    m_keyCaptureBuffer.clear();
-    m_keyCapture.start(QStringLiteral("gjs"), {QStringLiteral("-m"), script});
+    startKeyCaptureHelper(false);
 }
 
-void Backend::startEvdevKeyCapture() {
-    m_keyCaptureTriedEvdev = true;
-    const QString helper = QDir(QCoreApplication::applicationDirPath())
-        .absoluteFilePath(QStringLiteral("key-capture-evdev"));
-    if (!QFileInfo(helper).isExecutable()) return;
+void Backend::startKeyCaptureHelper(bool useEvdev) {
+    if (!m_keyCaptureRequested || m_keyCapture.state() != QProcess::NotRunning) return;
+    const QDir bin(QCoreApplication::applicationDirPath());
+    const QString script = bin.absoluteFilePath(QStringLiteral("../scripts/key-capture.js"));
+    useEvdev = useEvdev || !QFileInfo::exists(script);
+    QString program = QStringLiteral("gjs");
+    QStringList arguments{QStringLiteral("-m"), script};
+    if (useEvdev) {
+        program = bin.absoluteFilePath(QStringLiteral("key-capture-evdev"));
+        arguments.clear();
+        if (!QFileInfo(program).isExecutable()) {
+            m_keyCaptureRetry.start();
+            return;
+        }
+    }
+    m_keyCaptureUsingEvdev = useEvdev;
     m_keyCaptureBuffer.clear();
-    m_keyCapture.start(helper);
+    m_keyCaptureWatchdog.start();
+    m_keyCapture.start(program, arguments);
+}
+
+void Backend::keyCaptureHelperStopped() {
+    m_keyCaptureWatchdog.stop();
+    setKeyCaptureAvailable(false);
+    if (!m_keyCaptureRequested) return;
+    if (m_keyCaptureUsingEvdev)
+        m_keyCaptureRetry.start();
+    else
+        startKeyCaptureHelper(true);
+}
+
+void Backend::setKeyCaptureAvailable(bool available) {
+    if (m_keyCaptureAvailable == available) return;
+    m_keyCaptureAvailable = available;
+    emit keyCaptureAvailableChanged();
 }
 
 void Backend::stopKeyCapture() {
     m_keyCaptureRequested = false;
-    if (m_keyCaptureAvailable) {
-        m_keyCaptureAvailable = false;
-        emit keyCaptureAvailableChanged();
-    }
+    m_keyCaptureRetry.stop();
+    m_keyCaptureWatchdog.stop();
+    setKeyCaptureAvailable(false);
     if (m_keyCapture.state() == QProcess::NotRunning) return;
     m_keyCapture.terminate();
     if (!m_keyCapture.waitForFinished(500)) {
@@ -1374,7 +1393,9 @@ void Backend::grantKeyCaptureAccess() {
 }
 
 void Backend::readKeyCapture() {
-    m_keyCaptureBuffer.append(m_keyCapture.readAllStandardOutput());
+    const QByteArray output = m_keyCapture.readAllStandardOutput();
+    if (!m_keyCaptureRequested) return;
+    m_keyCaptureBuffer.append(output);
     if (m_keyCaptureBuffer.size() > 65536) m_keyCaptureBuffer.clear();
     int end = m_keyCaptureBuffer.indexOf('\n');
     while (end >= 0) {
@@ -1382,9 +1403,16 @@ void Backend::readKeyCapture() {
             m_keyCaptureBuffer.left(end)).object();
         m_keyCaptureBuffer.remove(0, end + 1);
         const QString type = event.value(QStringLiteral("type")).toString();
-        if (type == QLatin1String("ready") && !m_keyCaptureAvailable) {
-            m_keyCaptureAvailable = true;
-            emit keyCaptureAvailableChanged();
+        if (type == QLatin1String("ready")) {
+            // Older helpers only send a readiness message.
+            if (event.value(QStringLiteral("heartbeat")).toBool())
+                m_keyCaptureWatchdog.start();
+            else
+                m_keyCaptureWatchdog.stop();
+            setKeyCaptureAvailable(true);
+        } else if (type == QLatin1String("heartbeat")) {
+            if (m_keyCaptureAvailable && m_keyCaptureWatchdog.isActive())
+                m_keyCaptureWatchdog.start();
         } else if (type == QLatin1String("press")) {
             emit globalKeyPressed(event.value(QStringLiteral("name")).toString(),
                 event.value(QStringLiteral("text")).toString(),

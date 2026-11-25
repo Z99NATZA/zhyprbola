@@ -49,5 +49,9 @@ GLib.io_add_watch(parentInput, GLib.PRIORITY_DEFAULT,
         loop.quit();
         return GLib.SOURCE_REMOVE;
     });
-print(JSON.stringify({type: 'ready'}));
+GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 2, () => {
+    print(JSON.stringify({type: 'heartbeat'}));
+    return GLib.SOURCE_CONTINUE;
+});
+print(JSON.stringify({type: 'ready', heartbeat: true}));
 loop.run();

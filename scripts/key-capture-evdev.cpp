@@ -96,11 +96,21 @@ public:
             char byte;
             if (::read(STDIN_FILENO, &byte, 1) <= 0) m_app.quit();
         });
-        connect(&m_scanTimer, &QTimer::timeout, this, [this] { scanDevices(); });
+        connect(&m_scanTimer, &QTimer::timeout, this, [this] {
+            scanDevices();
+            if (m_countOnly) return;
+            if (m_devices.isEmpty()) {
+                m_app.exit(1);
+                return;
+            }
+            send({{QStringLiteral("type"), QStringLiteral("heartbeat")}});
+        });
         scanDevices();
         if (m_devices.isEmpty()) return;
         m_scanTimer.start(2000);
-        send({{QStringLiteral("type"), QStringLiteral("ready")}});
+        QJsonObject ready{{QStringLiteral("type"), QStringLiteral("ready")}};
+        if (!m_countOnly) ready.insert(QStringLiteral("heartbeat"), true);
+        send(ready);
         m_ready = true;
     }
 

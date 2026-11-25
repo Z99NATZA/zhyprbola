@@ -306,7 +306,9 @@ private:
     bool saveDockLayout(const QVariantMap &layout);
     void syncDockLayout();
     void readKeyCapture();
-    void startEvdevKeyCapture();
+    void startKeyCaptureHelper(bool useEvdev);
+    void keyCaptureHelperStopped();
+    void setKeyCaptureAvailable(bool available);
     bool playerctlAvailable() const;
     void refreshMpris();
     void refreshMprisPlayer(const QStringList &players, int index, const QString &fallback = QString(),
@@ -424,9 +426,11 @@ private:
     QString m_settingsSectionRequest;
     QProcess m_keyCapture;
     QProcess m_keyCaptureGrant;
+    QTimer m_keyCaptureRetry;
+    QTimer m_keyCaptureWatchdog;
     QByteArray m_keyCaptureBuffer;
     bool m_keyCaptureAvailable = false;
     bool m_keyCaptureGrantPending = false;
     bool m_keyCaptureRequested = false;
-    bool m_keyCaptureTriedEvdev = false;
+    bool m_keyCaptureUsingEvdev = false;
 };
