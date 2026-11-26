@@ -138,10 +138,12 @@ function fixture(length = 400) {
         Pango: {EllipsizeMode: {NONE: 0, END: 3}},
         DND: {makeDraggable: actor => (actor.draggable = new Actor())},
         GLib: {PRIORITY_DEFAULT_IDLE: 0, SOURCE_REMOVE: false,
-            idle_add: (_, callback) => { idles.set(++nextId, callback); return nextId; }},
+            idle_add: (_, callback) => { idles.set(++nextId, callback); return nextId; },
+            idle_add_once: (_, callback) => { idles.set(++nextId, callback); }},
         Meta: {KeyBindingFlags: {IGNORE_AUTOREPEAT: 1}, LaterType: {BEFORE_REDRAW: 1}},
         global: {
             display: {list_all_windows: () => []},
+            get_pointer: () => [0, 0, 0],
             compositor: {get_laters: () => ({
                 add: (_, callback) => { idles.set(++nextId, callback); return nextId; },
                 remove: id => idles.delete(id),
@@ -413,6 +415,52 @@ test('dragging running apps in a mixed region preserves surrounding components a
         ['workspaces', 'app', 'app', 'date-time']);
 });
 
+test('releasing just outside an app group snaps into the draft slot while distant drops revert', () => {
+    const {dock, context, flush} = mixedRegionFixture([['workspaces', 'running', 'time-display'], [], ['settings']]);
+    const a = item(1), b = item(2);
+    dock._dockItems.set('running', [a, b]);
+    dock._composeDockRegions();
+    dock._renderDockRegion('region-1', 400, false, 0);
+    const group = dock._dockGroupsByName.get('region-1');
+    const [pager, first, second, clock] = group.get_children();
+    first.x = 64;
+    second.x = 95;
+    group.width = 200;
+    group.height = 27;
+    first.draggable.emit('drag-begin');
+    // Ten pixels above the icons, inside the snap margin of the group.
+    context.global.get_pointer = () => [120, -10, 0];
+    const target = dock._dockDragSnapTarget(first._delegate);
+    assert.equal(target?.groupName, 'running');
+    assert.equal(dock._dropDockItem(target.groupName, target.group, first._delegate, target.position), true);
+    flush();
+    assert.equal(dock._dockItems.get('running').map(value => value.label).join(','), '2,1');
+    first.draggable.emit('drag-cancelled');
+    first.draggable.emit('drag-end');
+    assert.equal(dock._dockInteractions.size, 0);
+});
+
+test('a distant release outside the dock group still reverts the dragged icon', () => {
+    const {dock, context, flush} = mixedRegionFixture([['workspaces', 'running', 'time-display'], [], ['settings']]);
+    dock._dockItems.set('running', [item(1), item(2)]);
+    dock._composeDockRegions();
+    dock._renderDockRegion('region-1', 400, false, 0);
+    const group = dock._dockGroupsByName.get('region-1');
+    const original = group.get_children();
+    const [, first, second] = original;
+    first.x = 64;
+    second.x = 95;
+    group.width = 200;
+    group.height = 27;
+    first.draggable.emit('drag-begin');
+    context.global.get_pointer = () => [120, -100, 0];
+    assert.equal(dock._dockDragSnapTarget(first._delegate), null);
+    first.draggable.emit('drag-cancelled');
+    flush();
+    assert.deepEqual(group.get_children(), original);
+    first.draggable.emit('drag-end');
+});
+
 test('component animation and popup anchors follow the component into its shared region', () => {
     const {dock} = mixedRegionFixture([['sound', 'todo'], ['running'], ['settings', 'components']]);
     const group = dock._dockGroupsByName.get('region-1');
@@ -437,22 +485,24 @@ test('component animation and popup anchors follow the component into its shared
     assert.equal(rect?.x, 150);
 });
 
-test('canceling an app drag restores its block position without crossing surrounding components', () => {
-    const {dock} = mixedRegionFixture([['workspaces', 'running', 'time-display'], [], ['settings']]);
+test('releasing outside the dock after previewing keeps the draft slot without crossing surrounding components', () => {
+    const {dock, flush} = mixedRegionFixture([['workspaces', 'running', 'time-display'], [], ['settings']]);
     dock._dockItems.set('running', [item(1), item(2)]);
     dock._composeDockRegions();
     dock._renderDockRegion('region-1', 400, false, 0);
     const group = dock._dockGroupsByName.get('region-1');
     const original = group.get_children();
-    const first = original[1];
+    const [pager, first, second, clock] = original;
     first.x = 64;
-    original[2].x = 95;
+    second.x = 95;
     first.draggable.emit('drag-begin');
     assert.equal(first._delegate.originalIndex, 0);
     dock._previewDockItemDrag('running', group, first._delegate, 120);
     assert.equal(group.children[2], first);
     first.draggable.emit('drag-cancelled');
-    assert.deepEqual(group.get_children(), original);
+    assert.deepEqual(group.get_children(), [pager, second, first, clock]);
+    flush();
+    assert.equal(dock._dockItems.get('running').map(value => value.label).join(','), '2,1');
     first.draggable.emit('drag-end');
     assert.equal(dock._dockInteractions.size, 0);
 });

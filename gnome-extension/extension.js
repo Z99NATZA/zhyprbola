@@ -475,6 +475,22 @@ export default class ZhyprbolaExtension extends Extension {
         this._keyCountLabels = new Set();
         this._workspaceIndicators = new Set();
         this._menuManager = new ClickOnlyPopupMenuManager(this._dock);
+        // Groups only cover their icons. The dock catches releases in the
+        // margin around a group so a drop near the draft slot still snaps in.
+        this._dock._delegate = {
+            handleDragOver: source => {
+                const target = this._dockDragSnapTarget(source);
+                if (!target || !this._previewDockItemDrag(target.groupName, target.group, source,
+                    target.position))
+                    return DND.DragMotionResult.CONTINUE;
+                return DND.DragMotionResult.MOVE_DROP;
+            },
+            acceptDrop: source => {
+                const target = this._dockDragSnapTarget(source);
+                return !!target && this._dropDockItem(target.groupName, target.group, source,
+                    target.position);
+            },
+        };
         for (const name of this._regionNames()) {
             const region = new St.Widget({
                 style_class: `zhyprbola-dock-region zhyprbola-dock-region-${name}`,
@@ -497,18 +513,9 @@ export default class ZhyprbolaExtension extends Extension {
                             return DND.DragMotionResult.CONTINUE;
                         return DND.DragMotionResult.MOVE_DROP;
                     },
-                    acceptDrop: (source, _actor, x, y) => {
-                        if (!this._previewDockItemDrag(source?.groupName ?? name, group, source,
-                            vertical ? y : x))
-                            return false;
-                        const keys = group.get_children()
-                            .filter(child => child._delegate?.groupName === (source?.groupName ?? name))
-                            .map(child => child._delegate.key);
-                        source.dropAccepted = true;
-                        GLib.idle_add_once(GLib.PRIORITY_DEFAULT_IDLE, () =>
-                            this._commitDockItemOrder(source?.groupName ?? name, keys));
-                        return true;
-                    },
+                    acceptDrop: (source, _actor, x, y) =>
+                        this._dropDockItem(source?.groupName ?? name, group, source,
+                            vertical ? y : x),
                 };
             }
             region.add_child(group);
@@ -927,10 +934,15 @@ export default class ZhyprbolaExtension extends Extension {
             const group = button.get_parent();
             if (!group)
                 return;
-            if (!button._delegate.dropAccepted &&
-                button._delegate.originalIndex >= 0)
-                this._moveDockDragPlaceholder(group, button,
-                    button._delegate.originalIndex);
+            // The draft slot is still on screen, so release snaps the icon
+            // into it wherever the pointer ended up.
+            if (!button._delegate.dropAccepted && button._delegate.originalIndex >= 0) {
+                const draftIndex = group.get_children()
+                    .filter(child => child._delegate?.groupName === delegate.groupName)
+                    .indexOf(button);
+                if (draftIndex !== button._delegate.originalIndex)
+                    this._commitDockDraft(delegate.groupName, group, button._delegate);
+            }
             button.reactive = true;
             content.opacity = 255;
             button.remove_style_class_name('zhyprbola-dock-drag-placeholder');
@@ -1031,6 +1043,38 @@ export default class ZhyprbolaExtension extends Extension {
             .length;
         this._moveDockDragPlaceholder(group, source.button, targetIndex);
         return true;
+    }
+
+    _dockDragSnapTarget(source) {
+        const group = source?.button?.get_parent();
+        if (!group || source.destroyed || !source.groupName)
+            return null;
+        const [groupX, groupY] = group.get_transformed_position();
+        const [groupWidth, groupHeight] = group.get_transformed_size();
+        const [pointerX, pointerY] = global.get_pointer();
+        const margin = DOCK_CONFIG.buttonSize / 2;
+        const x = pointerX - groupX;
+        const y = pointerY - groupY;
+        if (x < -margin || y < -margin || x > groupWidth + margin || y > groupHeight + margin)
+            return null;
+        const vertical = [DockPosition.LEFT, DockPosition.RIGHT].includes(this._dockPosition);
+        return {group, groupName: source.groupName, position: vertical ? y : x};
+    }
+
+    _dropDockItem(groupName, group, source, position) {
+        if (!this._previewDockItemDrag(groupName, group, source, position))
+            return false;
+        this._commitDockDraft(groupName, group, source);
+        return true;
+    }
+
+    _commitDockDraft(groupName, group, source) {
+        const keys = group.get_children()
+            .filter(child => child._delegate?.groupName === groupName)
+            .map(child => child._delegate.key);
+        source.dropAccepted = true;
+        GLib.idle_add_once(GLib.PRIORITY_DEFAULT_IDLE, () =>
+            this._commitDockItemOrder(groupName, keys));
     }
 
     _moveDockDragPlaceholder(group, button, targetIndex) {
