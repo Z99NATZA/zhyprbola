@@ -34,6 +34,10 @@ Item {
             : filePath.slice(filePath.lastIndexOf("/") + 1)
         readonly property bool isMarkdown: /\.(md|markdown)$/i.test(filePath)
         property bool preview: false
+        // Editor text size, changed with Ctrl+= / Ctrl+- and reset with Ctrl+0.
+        property int editorFontSize: 15
+        readonly property int minEditorFontSize: 8
+        readonly property int maxEditorFontSize: 40
         property string message: ""
         property bool messageError: false
         // Inline rename field in the context menu; Vim keys apply when Vim is on.
@@ -950,6 +954,11 @@ Item {
             }
         }
 
+        function zoomEditor(step) {
+            editorFontSize = Math.max(minEditorFontSize,
+                Math.min(maxEditorFontSize, editorFontSize + step))
+        }
+
         function handleVimKey(event) {
             if (!vimEnabled) return
             // Pressing Shift (or another modifier) on its own must not cancel a
@@ -1509,6 +1518,18 @@ Item {
             onActivated: card.closeTab()
         }
         Shortcut {
+            sequences: ["Ctrl+=", "Ctrl++", "Ctrl+Shift++", "Ctrl+Shift+="]
+            onActivated: card.zoomEditor(1)
+        }
+        Shortcut {
+            sequences: ["Ctrl+-", "Ctrl+_"]
+            onActivated: card.zoomEditor(-1)
+        }
+        Shortcut {
+            sequence: "Ctrl+0"
+            onActivated: card.editorFontSize = 15
+        }
+        Shortcut {
             sequences: ["Ctrl+Tab", "Ctrl+PgDown"]
             onActivated: card.nextTab(1)
         }
@@ -1777,7 +1798,7 @@ Item {
                     selectByMouse: true
                     persistentSelection: false
                     font.family: card.family
-                    font.pixelSize: 15
+                    font.pixelSize: card.editorFontSize
                     tabStopDistance: editorMetrics.advanceWidth * 4
                     cursorVisible: activeFocus
                     focus: true

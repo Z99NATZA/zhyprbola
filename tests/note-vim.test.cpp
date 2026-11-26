@@ -233,6 +233,34 @@ private slots:
         QCOMPARE(backend->noteOpenFiles(), QStringList({first}));
     }
 
+    void zoomEditorFontSize() {
+        QCOMPARE(editor->property("font").value<QFont>().pixelSize(), 15);
+
+        // Ctrl+= and Ctrl++ (Ctrl+Shift+=) grow the text, Ctrl+- shrinks it.
+        QTest::keyClick(window.get(), Qt::Key_Equal, Qt::ControlModifier);
+        QCOMPARE(card->property("editorFontSize").toInt(), 16);
+        QCOMPARE(editor->property("font").value<QFont>().pixelSize(), 16);
+        QTest::keyClick(window.get(), Qt::Key_Plus, Qt::ControlModifier | Qt::ShiftModifier);
+        QCOMPARE(card->property("editorFontSize").toInt(), 17);
+        QTest::keyClick(window.get(), Qt::Key_Minus, Qt::ControlModifier);
+        QCOMPARE(card->property("editorFontSize").toInt(), 16);
+
+        // Ctrl+0 resets, and the size stays within its limits.
+        QTest::keyClick(window.get(), Qt::Key_0, Qt::ControlModifier);
+        QCOMPARE(card->property("editorFontSize").toInt(), 15);
+        for (int i = 0; i < 40; ++i)
+            QTest::keyClick(window.get(), Qt::Key_Equal, Qt::ControlModifier);
+        QCOMPARE(card->property("editorFontSize").toInt(), 40);
+        for (int i = 0; i < 60; ++i)
+            QTest::keyClick(window.get(), Qt::Key_Minus, Qt::ControlModifier);
+        QCOMPARE(card->property("editorFontSize").toInt(), 8);
+        QTest::keyClick(window.get(), Qt::Key_0, Qt::ControlModifier);
+
+        // Typing still works after zooming.
+        keys("ok");
+        QCOMPARE(text(), "ok");
+    }
+
     void contextMenuTogglesVimAndPersists() {
         auto *menu = panel->findChild<QObject *>("note-menu");
         QVERIFY(menu);
