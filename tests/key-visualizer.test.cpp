@@ -120,12 +120,17 @@ private slots:
             QString::fromUtf8("hello␣world ^a ⌫"));
         check({"a", "^Shift", "b"}, QStringLiteral("a ^Shift b"));
         check({"^Shift", "^Shift"}, QStringLiteral("^Shift ^Shift"));
+        // Plain repeats show three keys, then the total; three or fewer show all.
+        check({"x", "x", "x"}, QStringLiteral("xxx"));
+        check({"x", "x", "x", "x"}, QStringLiteral("xxx*4"));
+        check({"x", "x", "x", "x", "y"}, QStringLiteral("xxx*4 y"));
+        check({"Tab", "Tab", "Tab", "Tab"}, QStringLiteral("Tab Tab Tab*4"));
         QVariantList repeatedShortcuts;
         for (int i = 0; i < 13; ++i) repeatedShortcuts.append(QStringLiteral("^k"));
-        check(repeatedShortcuts, QStringLiteral("^kkkkkkkkkkkkk"));
+        check(repeatedShortcuts, QStringLiteral("^kkk*13"));
         repeatedShortcuts.append(QStringLiteral("^x"));
         repeatedShortcuts.append(QStringLiteral("^k"));
-        check(repeatedShortcuts, QStringLiteral("^kkkkkkkkkkkkk ^x ^k"));
+        check(repeatedShortcuts, QStringLiteral("^kkk*13 ^x ^k"));
         object->setProperty("history", QVariantList{QStringLiteral("^k"),
             QStringLiteral("^k")});
         QCOMPARE(object->property("styledText").toString().count(
@@ -301,10 +306,13 @@ private slots:
         QTRY_VERIFY(visualizer->hasActiveFocus());
 
         // Fill beyond the visible text so Clear must also discard hidden history.
-        for (int i = 0; i < 48; ++i)
-            emit backend.globalKeyPressed(QStringLiteral("a"), QStringLiteral("a"),
-                false, false, false, false);
-        QCOMPARE(object->property("displayText").toString(), QString(48, QLatin1Char('a')));
+        // Alternate keys so runs do not collapse into "*n" counts.
+        for (int i = 0; i < 48; ++i) {
+            const QString key = i % 2 ? QStringLiteral("a") : QStringLiteral("b");
+            emit backend.globalKeyPressed(key, key, false, false, false, false);
+        }
+        QCOMPARE(object->property("displayText").toString(),
+            QStringLiteral("ba").repeated(24));
         if (preview) {
             backend.setKeyVisualizerSetting(QStringLiteral("alignment"), QStringLiteral("left"));
             QVERIFY(object->property("previewing").toBool());
@@ -1049,6 +1057,31 @@ private slots:
             false, false, false, false);
         QCOMPARE(object->property("displayText").toString(),
             QStringLiteral("AAA ^aa a"));
+    }
+
+    void keepsEarlierKeysBeforeLongRuns() {
+        VisualizerBackend backend;
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        const QString file = QFINDTESTDATA("../components/KeyVisualizer.qml");
+        QVERIFY(!file.isEmpty());
+        QQmlComponent component(&engine, QUrl::fromLocalFile(file));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        backend.setKeyCaptureAvailable(true);
+
+        const auto press = [&](const QString &key) {
+            emit backend.globalKeyPressed(key, key, false, false, false, false);
+        };
+        for (const char c : std::string("hello"))
+            press(QString(QLatin1Char(c)));
+        press(QStringLiteral("space"));
+        for (int i = 0; i < 60; ++i) press(QStringLiteral("j"));
+        for (int i = 0; i < 60; ++i) press(QStringLiteral("k"));
+        // Hundreds of presses in two runs must not push "hello" out of history.
+        QCOMPARE(object->property("displayText").toString(),
+            QString::fromUtf8("hello␣ jjj*60 kkk*60"));
     }
 
     void rendersGlobalKeysWithoutWindowFocus() {

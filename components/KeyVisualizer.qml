@@ -83,8 +83,28 @@ Item {
         if (!value) return
         pendingCtrlShift = false
         endPreview()
-        const next = history.concat(value)
-        history = next.length > 48 ? next.slice(-48) : next
+        history = trimHistory(history.concat(value))
+    }
+
+    // History is kept by runs of the same key, because a long run is shown as
+    // one "*n" group and should not push older keys out of the display.
+    readonly property int maxHistoryRuns: 48
+    readonly property int maxHistoryLength: 500
+
+    function trimHistory(list) {
+        let runs = 0
+        let start = list.length
+        let previous = null
+        for (let i = list.length - 1; i >= 0; --i) {
+            if (list[i] !== previous) {
+                runs++
+                previous = list[i]
+            }
+            if (runs > maxHistoryRuns) break
+            start = i
+        }
+        const kept = list.slice(start)
+        return kept.length > maxHistoryLength ? kept.slice(-maxHistoryLength) : kept
     }
 
     function resetCtrlShift() {
@@ -129,25 +149,41 @@ Item {
             || /^(\^|Alt\+|Super\+|Shift\+)/.test(value)
     }
 
+    // A run of the same key shows up to three times, then "*n" for the total,
+    // so holding or mashing a key does not flood the bubble.
+    readonly property int maxRepeatShown: 3
+
     function formatHistory(styled) {
-        const grouped = []
-        let previous = ""
+        const entries = []
         const tokens = pendingCtrlShift ? history.concat("^Shift") : history
-        for (const token of tokens) {
+        let index = 0
+        while (index < tokens.length) {
+            const token = tokens[index]
+            let count = 1
+            while (index + count < tokens.length && tokens[index + count] === token) count++
+            index += count
+            const shown = Math.min(count, maxRepeatShown)
             const shortcut = /^((?:\^|(?:Alt|Super|Shift)\+)+)([a-z])$/i.exec(token)
-            if (shortcut && token === previous)
-                grouped[grouped.length - 1] += shortcut[2]
+            // A collapsed run starts a new word, so it is set off from earlier keys.
+            const breakBefore = count > maxRepeatShown
+            if (shortcut)
+                entries.push({token: shortcut[1] + shortcut[2].repeat(shown), suffix: "",
+                    breakBefore: breakBefore})
             else
-                grouped.push(token)
-            previous = token
+                for (let i = 0; i < shown; i++)
+                    entries.push({token: token, suffix: "", breakBefore: breakBefore && i === 0})
+            if (count > maxRepeatShown)
+                entries[entries.length - 1].suffix = "*" + count
         }
         let result = ""
         let previousSpaced = false
-        for (const token of grouped) {
-            const spaced = isSpacedToken(token)
-            if (result && (previousSpaced || spaced)) result += " "
-            result += styled ? styledToken(token, Theme.accent.toString()) : token
-            previousSpaced = spaced
+        for (const entry of entries) {
+            const spaced = isSpacedToken(entry.token)
+            if (result && (previousSpaced || spaced || entry.breakBefore)) result += " "
+            result += (styled ? styledToken(entry.token, Theme.accent.toString()) : entry.token)
+                + entry.suffix
+            // A "*n" count closes its run, so the next key starts a new word.
+            previousSpaced = spaced || entry.suffix !== ""
         }
         return result
     }
