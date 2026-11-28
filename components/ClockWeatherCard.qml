@@ -11,9 +11,14 @@ Rectangle {
 
     radius: 26
     color: Theme.componentSurfaceFor(componentKey)
-    border.width: Theme.cardBorderWidth
-    border.color: Theme.cardBorder
+    border.width: borderMenu.borderVisible ? 1 : 0
+    border.color: borderMenu.borderColor
     Component.onCompleted: ready = true
+
+    CardBorderMenu {
+        id: borderMenu
+        componentKey: card.componentKey
+    }
 
     transform: Translate {
         id: enterTransform

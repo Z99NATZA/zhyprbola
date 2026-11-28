@@ -24,6 +24,12 @@ Item {
         property color dimColor: Qt.alpha(textColor, 0.72)
         property color surfaceColor: Theme.componentSurfaceFor("note")
         property real cornerRadius: 14
+        // Right-click "Border" row toggles this; default follows the theme.
+        readonly property string borderMode: backend.cardBorderModes["note"] || ""
+        readonly property bool borderVisible:
+            borderMode === "show" || (borderMode !== "hide" && Theme.cardBorderWidth > 0)
+        readonly property color borderColor:
+            Theme.cardBorderWidth > 0 ? Theme.cardBorder : Theme.line
         readonly property string family: Qt.application.font.family
 
         // Document state.
@@ -1550,8 +1556,8 @@ Item {
             anchors.fill: parent
             radius: card.cornerRadius
             color: card.surfaceColor
-            border.width: Theme.cardBorderWidth
-            border.color: Theme.cardBorder
+            border.width: card.borderVisible ? 1 : 0
+            border.color: card.borderColor
         }
 
         Item {
@@ -2240,6 +2246,55 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     onClicked: backend.setNoteVimEnabled(!card.vimEnabled)
+                }
+            }
+
+            // "Border: show hide" with the active choice solid, like the Vim row.
+            Rectangle {
+                objectName: "note-border-toggle"
+                width: contextMenu.availableWidth
+                height: 34
+                radius: 7
+                color: borderRowMouse.containsMouse ? Theme.controlHover : "transparent"
+
+                Row {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 8
+
+                    Text {
+                        text: "Border:"
+                        color: Theme.text
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 14
+                    }
+                    Text {
+                        objectName: "note-border-show"
+                        readonly property bool active: card.borderVisible
+                        text: "show"
+                        color: Theme.text
+                        opacity: active ? 1 : 0.35
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 14
+                    }
+                    Text {
+                        objectName: "note-border-hide"
+                        readonly property bool active: !card.borderVisible
+                        text: "hide"
+                        color: Theme.text
+                        opacity: active ? 1 : 0.35
+                        font.family: Qt.application.font.family
+                        font.pixelSize: 14
+                    }
+                }
+
+                MouseArea {
+                    id: borderRowMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: backend.setCardBorderMode("note",
+                        card.borderVisible ? "hide" : "show")
                 }
             }
         }

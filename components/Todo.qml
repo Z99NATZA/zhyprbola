@@ -502,8 +502,13 @@ Item {
             anchors.fill: parent
             radius: card.cornerRadius
             color: card.surfaceColor
-            border.width: Theme.cardBorderWidth
-            border.color: Theme.cardBorder
+            border.width: borderMenu.borderVisible ? 1 : 0
+            border.color: borderMenu.borderColor
+        }
+
+        CardBorderMenu {
+            id: borderMenu
+            componentKey: "todo"
         }
 
         MouseArea {

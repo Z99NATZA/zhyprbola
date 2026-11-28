@@ -868,18 +868,38 @@ void Backend::setThemeName(const QString &name) {
     if (writeDockConfig(QStringLiteral("theme"), name)) refreshTheme();
 }
 
-QString Backend::clockBorderMode() const {
-    return QSettings().value(QStringLiteral("clock/borderMode")).toString();
+// Cards whose right-click menu can show or hide their border. Note lives in
+// its own window, so it is not one of componentKeys().
+QStringList cardBorderKeys() {
+    return {
+        QStringLiteral("clock"),
+        QStringLiteral("weather"),
+        QStringLiteral("music"),
+        QStringLiteral("todo"),
+        QStringLiteral("note")
+    };
 }
 
-void Backend::setClockBorderMode(const QString &mode) {
+QVariantMap Backend::cardBorderModes() const {
+    QSettings settings;
+    QVariantMap modes;
+    for (const QString &key : cardBorderKeys()) {
+        const QString mode = settings.value(QStringLiteral("%1/borderMode").arg(key)).toString();
+        if (mode == QLatin1String("show") || mode == QLatin1String("hide"))
+            modes.insert(key, mode);
+    }
+    return modes;
+}
+
+void Backend::setCardBorderMode(const QString &key, const QString &mode) {
+    if (!cardBorderKeys().contains(key)) return;
     if (mode != QLatin1String("show") && mode != QLatin1String("hide")) return;
 
     QSettings settings;
-    const QString key = QStringLiteral("clock/borderMode");
-    if (settings.value(key).toString() == mode) return;
-    settings.setValue(key, mode);
-    emit clockBorderModeChanged();
+    const QString settingKey = QStringLiteral("%1/borderMode").arg(key);
+    if (settings.value(settingKey).toString() == mode) return;
+    settings.setValue(settingKey, mode);
+    emit cardBorderModesChanged();
 }
 
 void Backend::setComponentOpacity(int opacity) {
