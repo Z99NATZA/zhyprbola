@@ -580,6 +580,50 @@ private slots:
         QVERIFY(position.y() >= 0 && position.y() + keys->height() < box->height());
     }
 
+    void cardOpacityOverridesOnlyOpacityZoneCards() {
+        QTemporaryDir config;
+        QVERIFY(config.isValid());
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+        const auto restoreConfig = qScopeGuard([previous] {
+            if (previous.isNull()) qunsetenv("XDG_CONFIG_HOME");
+            else qputenv("XDG_CONFIG_HOME", previous);
+        });
+
+        Backend backend;
+        Backend observer;
+        QVERIFY(backend.opacityEnabledComponents().contains(QStringLiteral("clock")));
+        backend.moveOpacityComponent(QStringLiteral("weather"), QStringLiteral("default"), {});
+        QVERIFY(backend.opacityDisabledComponents().contains(QStringLiteral("weather")));
+
+        backend.setCardOpacity(QStringLiteral("clock"), 40);
+        backend.setCardOpacity(QStringLiteral("weather"), 55);
+        backend.setCardOpacity(QStringLiteral("note"), 130);
+        backend.setCardOpacity(QStringLiteral("calendar"), 20);
+        const QVariantMap expected{{QStringLiteral("clock"), 40},
+            {QStringLiteral("weather"), 55}, {QStringLiteral("note"), 100}};
+        QCOMPARE(backend.cardOpacities(), expected);
+        // Other processes pick the saved file up through the config watcher.
+        QTRY_COMPARE(observer.cardOpacities(), expected);
+
+        // Settings opacity wins for cards in the Opacity zone only.
+        backend.setComponentOpacity(70);
+        // Note is in the Opacity zone by default, like clock.
+        QVERIFY(backend.opacityEnabledComponents().contains(QStringLiteral("note")));
+        const QVariantMap kept{{QStringLiteral("weather"), 55}};
+        QCOMPARE(backend.cardOpacities(), kept);
+        QTRY_COMPARE(observer.cardOpacities(), kept);
+        QCOMPARE(observer.componentOpacity(), 70);
+
+        // Moving the Settings slider back to the same value still clears new overrides.
+        backend.setCardOpacity(QStringLiteral("clock"), 30);
+        backend.setComponentOpacity(70);
+        QCOMPARE(backend.cardOpacities(), kept);
+
+        Backend reopened;
+        QCOMPARE(reopened.cardOpacities(), kept);
+    }
+
     void persistsComponentOpacityAndShowsRange() {
         QTemporaryDir config;
         QVERIFY(config.isValid());

@@ -2214,6 +2214,12 @@ Item {
                 active: card.borderVisible
                 onToggled: Theme.toggleCardBorder("note")
             }
+
+            OpacityRow {
+                namePrefix: "note"
+                width: contextMenu.availableWidth
+                componentKey: "note"
+            }
         }
 
         function toggleMaximized() {

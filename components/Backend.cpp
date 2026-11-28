@@ -801,6 +801,34 @@ void Backend::refreshRadio(const QString &radio, Completion completed) {
     }
 }
 
+// Cards with a right-click menu for their own border and opacity. Note lives in
+// its own window, so it is not one of componentKeys().
+QStringList cardBorderKeys() {
+    return {
+        QStringLiteral("clock"),
+        QStringLiteral("weather"),
+        QStringLiteral("music"),
+        QStringLiteral("todo"),
+        QStringLiteral("note")
+    };
+}
+
+QVariantMap validatedCardOpacities(const QJsonObject &saved) {
+    QVariantMap opacities;
+    for (const QString &key : cardBorderKeys()) {
+        const QJsonValue value = saved.value(key);
+        if (!value.isDouble()) continue;
+        const int opacity = value.toInt(-1);
+        if (opacity >= 0 && opacity <= 100) opacities.insert(key, opacity);
+    }
+    return opacities;
+}
+
+bool writeCardOpacities(const QVariantMap &opacities) {
+    return writeDockConfig(QStringLiteral("card-opacity"), QString::fromUtf8(
+        QJsonDocument(QJsonObject::fromVariantMap(opacities)).toJson(QJsonDocument::Compact)));
+}
+
 void Backend::refreshTheme() {
     const QString configRoot = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
     QDir().mkpath(configRoot);
@@ -810,8 +838,9 @@ void Backend::refreshTheme() {
         QStringLiteral("component-opacity"));
     const QString opacityComponentsPath = QDir(themeDir).filePath(
         QStringLiteral("component-opacity-components"));
+    const QString cardOpacityPath = QDir(themeDir).filePath(QStringLiteral("card-opacity"));
     for (const QString &path : {configRoot, themeDir, themeFile, opacityFilePath,
-             opacityComponentsPath}) {
+             opacityComponentsPath, cardOpacityPath}) {
         if (QFileInfo::exists(path) && !m_themeWatcher.files().contains(path)
             && !m_themeWatcher.directories().contains(path))
             m_themeWatcher.addPath(path);
@@ -857,6 +886,16 @@ void Backend::refreshTheme() {
         m_opacityDisabledComponents = opacityComponents.second;
         emit componentOpacityChanged();
     }
+
+    QFile cardOpacityFile(cardOpacityPath);
+    QJsonObject savedCardOpacities;
+    if (cardOpacityFile.open(QIODevice::ReadOnly))
+        savedCardOpacities = QJsonDocument::fromJson(cardOpacityFile.readAll()).object();
+    const QVariantMap cardOpacities = validatedCardOpacities(savedCardOpacities);
+    if (cardOpacities != m_cardOpacities) {
+        m_cardOpacities = cardOpacities;
+        emit componentOpacityChanged();
+    }
 }
 
 void Backend::setThemeName(const QString &name) {
@@ -866,18 +905,6 @@ void Backend::setThemeName(const QString &name) {
         QStringLiteral("mauve"), QStringLiteral("silver-dawn")};
     if (!names.contains(name) || name == m_themeName) return;
     if (writeDockConfig(QStringLiteral("theme"), name)) refreshTheme();
-}
-
-// Cards whose right-click menu can show or hide their border. Note lives in
-// its own window, so it is not one of componentKeys().
-QStringList cardBorderKeys() {
-    return {
-        QStringLiteral("clock"),
-        QStringLiteral("weather"),
-        QStringLiteral("music"),
-        QStringLiteral("todo"),
-        QStringLiteral("note")
-    };
 }
 
 QVariantMap Backend::cardBorderModes() const {
@@ -904,9 +931,31 @@ void Backend::setCardBorderMode(const QString &key, const QString &mode) {
 
 void Backend::setComponentOpacity(int opacity) {
     opacity = qBound(0, opacity, 100);
+    // The Settings value overrides a card's own opacity only for cards in the
+    // Opacity zone; cards outside it keep what their menu set.
+    QVariantMap cardOpacities = m_cardOpacities;
+    for (const QString &key : m_opacityEnabledComponents) cardOpacities.remove(key);
+    if (cardOpacities != m_cardOpacities && writeCardOpacities(cardOpacities)) {
+        m_cardOpacities = cardOpacities;
+        emit componentOpacityChanged();
+    }
+
     if (opacity == m_componentOpacity) return;
     if (!writeDockConfig(QStringLiteral("component-opacity"), QString::number(opacity))) return;
     m_componentOpacity = opacity;
+    emit componentOpacityChanged();
+}
+
+// Called once per finished change (slider release), not while dragging, so other
+// processes reload the file only once.
+void Backend::setCardOpacity(const QString &key, int opacity) {
+    if (!cardBorderKeys().contains(key)) return;
+    opacity = qBound(0, opacity, 100);
+    if (m_cardOpacities.value(key) == opacity) return;
+    QVariantMap cardOpacities = m_cardOpacities;
+    cardOpacities.insert(key, opacity);
+    if (!writeCardOpacities(cardOpacities)) return;
+    m_cardOpacities = cardOpacities;
     emit componentOpacityChanged();
 }
 

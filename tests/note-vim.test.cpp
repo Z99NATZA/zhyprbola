@@ -293,6 +293,36 @@ private slots:
         QVERIFY(menu->property("visible").toBool());
     }
 
+    void contextMenuOpacitySavesOnceOnRelease() {
+        auto *menu = panel->findChild<QObject *>("note-menu");
+        QVERIFY(menu);
+        QTest::mouseClick(window.get(), Qt::RightButton, Qt::NoModifier, QPoint(200, 200));
+        QTRY_VERIFY(menu->property("opened").toBool());
+        auto *row = panel->findChild<QQuickItem *>("note-opacity");
+        auto *slider = panel->findChild<QQuickItem *>("note-opacity-slider");
+        QVERIFY(row && slider);
+        QTest::qWait(30);
+        const QColor before = card->property("surfaceColor").value<QColor>();
+        const QPoint left = slider->mapToScene(QPointF(2, slider->height() / 2)).toPoint();
+        const QPoint middle = slider->mapToScene(
+            QPointF(slider->width() / 2, slider->height() / 2)).toPoint();
+
+        QTest::mousePress(window.get(), Qt::LeftButton, Qt::NoModifier, left);
+        QTest::mouseMove(window.get(), middle);
+        QTest::mouseMove(window.get(), middle + QPoint(1, 0));
+        // While dragging the card previews the value but nothing is saved yet.
+        QTRY_VERIFY(card->property("surfaceColor").value<QColor>().alphaF() < before.alphaF());
+        QVERIFY(backend->cardOpacities().isEmpty());
+        QVERIFY(!QFile::exists(testConfig->filePath("zhyprbola/card-opacity")));
+
+        QTest::mouseRelease(window.get(), Qt::LeftButton, Qt::NoModifier, middle + QPoint(1, 0));
+        QTRY_VERIFY(backend->cardOpacities().contains("note"));
+        const int saved = backend->cardOpacities().value("note").toInt();
+        QVERIFY(saved > 0 && saved < 100);
+        QCOMPARE(qRound(card->property("surfaceColor").value<QColor>().alphaF() * 100), saved);
+        QVERIFY(menu->property("visible").toBool());
+    }
+
     void backendRenamesTextFiles() {
         const QString path = filePath("old.txt");
         writeFile(path, "x");

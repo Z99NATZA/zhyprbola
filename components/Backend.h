@@ -59,6 +59,8 @@ class Backend : public QObject {
         NOTIFY componentOpacityChanged)
     Q_PROPERTY(QStringList opacityDisabledComponents READ opacityDisabledComponents
         NOTIFY componentOpacityChanged)
+    // Per-card background opacity set from a card's right-click menu: {key: 0-100}.
+    Q_PROPERTY(QVariantMap cardOpacities READ cardOpacities NOTIFY componentOpacityChanged)
     Q_PROPERTY(QString dockPosition READ dockPosition NOTIFY dockSettingsChanged)
     Q_PROPERTY(int dockBgOpacity READ dockBgOpacity NOTIFY dockSettingsChanged)
     Q_PROPERTY(QStringList dockGroups READ dockGroups NOTIFY dockSettingsChanged)
@@ -130,6 +132,7 @@ public:
     int componentOpacity() const { return m_componentOpacity; }
     QStringList opacityEnabledComponents() const { return m_opacityEnabledComponents; }
     QStringList opacityDisabledComponents() const { return m_opacityDisabledComponents; }
+    QVariantMap cardOpacities() const { return m_cardOpacities; }
     QString dockPosition() const { return m_dockPosition; }
     int dockBgOpacity() const { return m_dockBgOpacity; }
     QStringList dockGroups() const { return m_dockGroups; }
@@ -180,6 +183,7 @@ public:
     Q_INVOKABLE void setThemeName(const QString &name);
     Q_INVOKABLE void setCardBorderMode(const QString &key, const QString &mode);
     Q_INVOKABLE void setComponentOpacity(int opacity);
+    Q_INVOKABLE void setCardOpacity(const QString &key, int opacity);
     Q_INVOKABLE void moveOpacityComponent(const QString &key, const QString &destination,
         const QString &beforeKey);
     Q_INVOKABLE void setDockPosition(const QString &position);
@@ -392,6 +396,7 @@ private:
     int m_componentOpacity = 100;
     QStringList m_opacityEnabledComponents;
     QStringList m_opacityDisabledComponents;
+    QVariantMap m_cardOpacities;
     QString m_dockPosition = QStringLiteral("bottom");
     int m_dockBgOpacity = 50;
     QStringList m_dockGroups = {QStringLiteral("zhyprbola"), QStringLiteral("running")};

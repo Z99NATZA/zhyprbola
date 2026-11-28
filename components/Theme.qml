@@ -57,9 +57,27 @@ QtObject {
     readonly property real componentOpacity: Math.max(0, Math.min(100,
         backend.componentOpacity)) / 100
     readonly property color componentSurface: Qt.alpha(cardSurface, componentOpacity)
-    function componentSurfaceFor(componentKey) {
+    // Opacity shown while a card's menu slider is being dragged ({key: 0-100}).
+    // It stays in this process; the value is saved once when the drag ends.
+    property var cardOpacityPreview: ({})
+    function previewCardOpacity(componentKey, percent) {
+        const preview = Object.assign({}, cardOpacityPreview)
+        if (percent === undefined) delete preview[componentKey]
+        else preview[componentKey] = percent
+        cardOpacityPreview = preview
+    }
+    // 0-100: the card's own value (live preview, then saved) wins over Settings.
+    function componentOpacityPercentFor(componentKey) {
+        const preview = cardOpacityPreview[componentKey]
+        if (preview !== undefined) return preview
+        const own = (backend.cardOpacities || {})[componentKey]
+        if (own !== undefined) return own
         return backend.opacityDisabledComponents.includes(componentKey)
-            ? cardSurface : componentSurface
+            ? 100 : Math.round(componentOpacity * 100)
+    }
+    function componentSurfaceFor(componentKey) {
+        return Qt.alpha(cardSurface,
+            Math.max(0, Math.min(100, componentOpacityPercentFor(componentKey))) / 100)
     }
     // Card outline like the terminal window frame; themes without one draw none.
     readonly property color cardBorder: palette.border || "transparent"
