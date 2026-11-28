@@ -51,7 +51,7 @@ The icon source is assets/zhyprbola-icon.svg, with a transparent exterior and
 solid green/white/mint shapes. assets/zhyprbola-icon.md documents PNG export.
 The Qt host embeds the 512 px PNG and uses app ID
 org.zhyprbola.Zhyprbola. make install-app installs the matching user desktop
-entry and both SVG/PNG icons; make dock, make run, and make run-panel include this step.
+entry and both SVG/PNG icons; make dock and make run-panel include this step.
 GNOME uses the desktop entry for the Overview, app switcher, and running app icon.
 
 Running apps remain visible even when the same app exists in Apps.

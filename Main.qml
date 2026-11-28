@@ -58,15 +58,6 @@ Window {
                 }
             }
 
-            Bar {
-                x: 0
-                y: 0
-                width: stage.width
-                onManagerRequested: componentManager.opened = true
-                onWifiRequested: wifiPanel.opened = true
-                onBluetoothRequested: bluetoothPanel.opened = true
-            }
-
             Row {
                 x: 90 + 40 * stage.layoutProgress
                 y: 100 + 5 * stage.layoutProgress
@@ -96,21 +87,6 @@ Window {
                 MusicPlayer {
                     scale: stage.leftScale
                     transformOrigin: Item.TopLeft
-                }
-            }
-
-            Item {
-                x: 90 + 40 * stage.layoutProgress
-                y: 550 + 210 * stage.layoutProgress
-                width: 420 * stage.leftScale
-                height: 245 * stage.leftScale
-                visible: stage.appsEnabled
-                enabled: visible
-
-                Apps {
-                    scale: stage.leftScale
-                    transformOrigin: Item.TopLeft
-                    onSettingsRequested: componentManager.opened = true
                 }
             }
 

@@ -1,4 +1,4 @@
-.PHONY: run run-panel install-app dock dock-enable dock-disable dock-remove check build
+.PHONY: run-panel install-app dock dock-enable dock-disable dock-remove check build
 
 QMLLINT := $(shell command -v qmllint || command -v /usr/lib/qt6/bin/qmllint)
 
@@ -12,9 +12,6 @@ build/key-capture-evdev: scripts/key-capture-evdev.cpp
 
 install-app: build
 	./scripts/install-app
-
-run: install-app
-	./build/zhyprbola
 
 run-panel: install-app
 	./scripts/run-panel bluetooth

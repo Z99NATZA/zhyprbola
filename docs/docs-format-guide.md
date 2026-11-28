@@ -40,7 +40,7 @@ command
 docker compose up -d --build
 
 # Run with Make
-make run
+make dock
 make down
 
 # description1
