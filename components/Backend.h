@@ -53,6 +53,7 @@ class Backend : public QObject {
     Q_PROPERTY(bool playing READ playing NOTIFY musicChanged)
     Q_PROPERTY(QVariantList spectrum READ spectrum NOTIFY spectrumChanged)
     Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
+    Q_PROPERTY(QString clockBorderMode READ clockBorderMode NOTIFY clockBorderModeChanged)
     Q_PROPERTY(int componentOpacity READ componentOpacity NOTIFY componentOpacityChanged)
     Q_PROPERTY(QStringList opacityEnabledComponents READ opacityEnabledComponents
         NOTIFY componentOpacityChanged)
@@ -125,6 +126,7 @@ public:
     bool playing() const { return m_playing; }
     QVariantList spectrum() const { return m_spectrum; }
     QString themeName() const { return m_themeName; }
+    QString clockBorderMode() const;
     int componentOpacity() const { return m_componentOpacity; }
     QStringList opacityEnabledComponents() const { return m_opacityEnabledComponents; }
     QStringList opacityDisabledComponents() const { return m_opacityDisabledComponents; }
@@ -176,6 +178,7 @@ public:
     Q_INVOKABLE void setComponentEnabled(const QString &key, bool enabled);
     Q_INVOKABLE void resetComponentSettings();
     Q_INVOKABLE void setThemeName(const QString &name);
+    Q_INVOKABLE void setClockBorderMode(const QString &mode);
     Q_INVOKABLE void setComponentOpacity(int opacity);
     Q_INVOKABLE void moveOpacityComponent(const QString &key, const QString &destination,
         const QString &beforeKey);
@@ -245,6 +248,7 @@ signals:
     void bluetoothDevicesChanged();
     void connectionActionsChanged();
     void themeChanged();
+    void clockBorderModeChanged();
     void componentOpacityChanged();
     void dockSettingsChanged();
     void showDesktopEdgeSettingsChanged();

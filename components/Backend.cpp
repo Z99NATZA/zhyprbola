@@ -868,6 +868,20 @@ void Backend::setThemeName(const QString &name) {
     if (writeDockConfig(QStringLiteral("theme"), name)) refreshTheme();
 }
 
+QString Backend::clockBorderMode() const {
+    return QSettings().value(QStringLiteral("clock/borderMode")).toString();
+}
+
+void Backend::setClockBorderMode(const QString &mode) {
+    if (mode != QLatin1String("show") && mode != QLatin1String("hide")) return;
+
+    QSettings settings;
+    const QString key = QStringLiteral("clock/borderMode");
+    if (settings.value(key).toString() == mode) return;
+    settings.setValue(key, mode);
+    emit clockBorderModeChanged();
+}
+
 void Backend::setComponentOpacity(int opacity) {
     opacity = qBound(0, opacity, 100);
     if (opacity == m_componentOpacity) return;
