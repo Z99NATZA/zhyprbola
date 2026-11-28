@@ -44,11 +44,9 @@ Item {
         focus: true
         closePolicy: Controls.Popup.CloseOnEscape | Controls.Popup.CloseOnPressOutside
 
-        Component.onCompleted: {
-            // A windowed popup lets the compositor dismiss it outside the card window.
-            if (typeof borderMenu.popupType !== "undefined")
-                borderMenu.popupType = Controls.Popup.Window
-        }
+        // Drawn inside the card window so it shows at once; no open/close animation.
+        enter: null
+        exit: null
 
         background: Rectangle {
             radius: 8
