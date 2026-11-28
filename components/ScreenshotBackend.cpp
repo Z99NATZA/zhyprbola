@@ -165,6 +165,10 @@ void ScreenshotBackend::refresh() {
             emit positionChanged();
         }
     }
+    refreshFiles();
+}
+
+void ScreenshotBackend::refreshFiles(const QString &renamedPath, const QString &newPath) {
     QDir dir(m_directory);
     // Watch the parent too, so a missing Screenshots directory can appear later.
     for (const QString &path : {m_directory, QFileInfo(m_directory).absolutePath()})
@@ -182,12 +186,13 @@ void ScreenshotBackend::refresh() {
         endResetModel();
     }
     QStringList selected;
-    for (const QString &path : m_selected)
-        if (m_paths.contains(path)) selected.append(path);
+    for (const QString &path : m_paths)
+        if (m_selected.contains(path == newPath ? renamedPath : path)) selected.append(path);
     if (selected != m_selected) {
         m_selected = selected;
         emit selectionChanged();
     }
+    if (m_anchor == renamedPath) m_anchor = newPath;
     if (!m_paths.contains(m_anchor)) m_anchor.clear();
 }
 
@@ -306,6 +311,33 @@ void ScreenshotBackend::selectIndices(const QVariantList &indices) {
 void ScreenshotBackend::copyPaths() {
     if (!m_selected.isEmpty())
         QGuiApplication::clipboard()->setText(m_selected.join(QLatin1Char('\n')));
+}
+
+QString ScreenshotBackend::renameScreenshot(const QString &path, const QString &newName) {
+    const QFileInfo source(path);
+    if (!m_paths.contains(path) || !source.isFile() || source.isSymLink())
+        return QStringLiteral("Screenshot no longer exists.");
+
+    QString name = newName.trimmed();
+    if (name.isEmpty() || name.startsWith(QLatin1Char('.')) || name.contains(QLatin1Char('/'))
+        || name.contains(QLatin1Char('\\')) || name.contains(QChar::Null))
+        return QStringLiteral("Enter a valid screenshot name.");
+    const QString suffix = QFileInfo(name).suffix();
+    if (suffix.isEmpty()) {
+        name += QLatin1Char('.') + source.suffix();
+    } else if (suffix.compare(source.suffix(), Qt::CaseInsensitive) != 0) {
+        return QStringLiteral("Keep the .%1 extension.").arg(source.suffix());
+    }
+    if (name == source.fileName()) return {};
+
+    const QFileInfo destination(source.dir().filePath(name));
+    if (destination.exists() || destination.isSymLink())
+        return QStringLiteral("A file named %1 already exists.").arg(name);
+    QFile file(path);
+    if (!file.rename(destination.filePath()))
+        return QStringLiteral("Cannot rename screenshot: %1").arg(file.errorString());
+    refreshFiles(path, destination.filePath());
+    return {};
 }
 
 void ScreenshotBackend::deleteSelected() {

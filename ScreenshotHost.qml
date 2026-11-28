@@ -14,6 +14,20 @@ Window {
     modality: Qt.NonModal
     color: "transparent"
     title: "Zhyprbola Screenshots"
+    property Item renameEditor: null
+    property string renameError: ""
+
+    function cancelRename() {
+        const editor = renameEditor
+        renameEditor = null
+        renameError = ""
+        if (editor) editor.focus = false
+    }
+
+    function commitRename(path, name) {
+        renameError = screenshots.renameScreenshot(path, name)
+        if (renameError === "") cancelRename()
+    }
 
     function openPreview(index) {
         const row = images.itemAtIndex(index)
@@ -23,12 +37,16 @@ Window {
         screenshots.dismiss()
     }
 
-    Shortcut { sequence: "Ctrl+C"; onActivated: screenshots.copyPaths() }
-    Shortcut { sequence: "Ctrl+A"; onActivated: screenshots.selectAll() }
-    Shortcut { sequence: "Delete"; onActivated: screenshots.deleteSelected() }
-    Shortcut { sequence: "Ctrl+Z"; onActivated: screenshots.undo() }
-    Shortcut { sequence: "Escape"; onActivated: screenshots.dismiss() }
-    onActiveChanged: { if (active) screenshots.refresh() }
+    Shortcut { sequence: "Ctrl+C"; enabled: !host.renameEditor; onActivated: screenshots.copyPaths() }
+    Shortcut { sequence: "Ctrl+A"; enabled: !host.renameEditor; onActivated: screenshots.selectAll() }
+    Shortcut { sequence: "Delete"; enabled: !host.renameEditor; onActivated: screenshots.deleteSelected() }
+    Shortcut { sequence: "Ctrl+Z"; enabled: !host.renameEditor; onActivated: screenshots.undo() }
+    Shortcut { sequence: "Escape"; enabled: !host.renameEditor; onActivated: screenshots.dismiss() }
+    onActiveChanged: {
+        if (active) screenshots.refresh()
+        else cancelRename()
+    }
+    onVisibleChanged: if (!visible) cancelRename()
     onClosing: function(close) {
         close.accepted = false
         screenshots.dismiss()
@@ -97,8 +115,18 @@ Window {
                 required property string modified
                 readonly property bool selected: screenshots.selectedPaths.indexOf(filePath) >= 0
                 readonly property Item selectionCard: card
+                readonly property Item nameLabel: fileNameLabel
+                readonly property bool renaming: host.renameEditor === renameInput
                 width: images.width - 12
                 height: 88
+
+                function beginRename() {
+                    renameInput.text = fileName
+                    host.renameEditor = renameInput
+                    renameInput.forceActiveFocus()
+                    renameInput.select(0, fileName.lastIndexOf("."))
+                }
+
                 Rectangle {
                     id: card
                     x: 24
@@ -120,12 +148,42 @@ Window {
                         x: 124; y: 18
                         width: parent.width - x - 12
                         spacing: 8
-                        Text {
+                        Item {
                             width: parent.width
-                            text: row.fileName
-                            color: Components.Theme.text
-                            elide: Text.ElideMiddle
-                            font.pixelSize: 13
+                            height: fileNameLabel.implicitHeight
+                            Text {
+                                id: fileNameLabel
+                                anchors.fill: parent
+                                visible: !row.renaming
+                                text: row.fileName
+                                color: Components.Theme.text
+                                elide: Text.ElideMiddle
+                                font.pixelSize: 13
+                            }
+                            TextInput {
+                                id: renameInput
+                                objectName: "screenshotRenameInput"
+                                anchors.fill: parent
+                                visible: row.renaming
+                                clip: true
+                                color: Components.Theme.text
+                                selectionColor: Components.Theme.accent
+                                selectedTextColor: Components.Theme.accentText
+                                font: fileNameLabel.font
+                                selectByMouse: true
+                                Accessible.name: "Screenshot file name"
+                                Keys.onEscapePressed: host.cancelRename()
+                                onActiveFocusChanged: if (!activeFocus && row.renaming) host.cancelRename()
+                                onTextEdited: host.renameError = ""
+                                onAccepted: host.commitRename(row.filePath, text)
+                            }
+                            Rectangle {
+                                y: parent.height + 2
+                                width: parent.width
+                                height: 1
+                                visible: row.renaming
+                                color: Components.Theme.accent
+                            }
                         }
                         Text { text: row.modified; color: Components.Theme.mutedText; font.pixelSize: 11 }
                     }
@@ -147,12 +205,24 @@ Window {
             hoverEnabled: true
             preventStealing: true
             acceptedButtons: Qt.LeftButton
+            cursorShape: overRenameInput(mouseX, mouseY) ? Qt.IBeamCursor : Qt.ArrowCursor
             property real startX: 0
             property real startY: 0
             property real endX: 0
             property real endY: 0
             property bool dragging: false
             property bool skipClick: false
+
+            function overRenameInput(x, y) {
+                const editor = host.renameEditor
+                return editor !== null && editor.contains(mapToItem(editor, x, y))
+            }
+
+            function overName(row, x, y) {
+                const label = row.nameLabel
+                const point = mapToItem(label, x, y)
+                return label.contains(point) && point.x < label.contentWidth
+            }
 
             function indexAtCard(x, y) {
                 const index = images.indexAt(x, y + images.contentY)
@@ -184,6 +254,11 @@ Window {
             }
 
             onPressed: function(mouse) {
+                if (overRenameInput(mouse.x, mouse.y)) {
+                    mouse.accepted = false
+                    return
+                }
+                host.cancelRename()
                 startX = endX = mouse.x
                 startY = endY = mouse.y
                 dragging = false
@@ -215,18 +290,33 @@ Window {
             onClicked: function(mouse) {
                 if (skipClick) return
                 const index = indexAtCard(mouse.x, mouse.y)
-                if (index >= 0)
-                    screenshots.select(index, !!(mouse.modifiers & Qt.ControlModifier),
-                        !!(mouse.modifiers & Qt.ShiftModifier))
-                else if (!(mouse.modifiers & Qt.ControlModifier))
+                const control = !!(mouse.modifiers & Qt.ControlModifier)
+                const shift = !!(mouse.modifiers & Qt.ShiftModifier)
+                if (index >= 0) {
+                    const row = images.itemAtIndex(index)
+                    if (!control && !shift && row.selected && screenshots.selectedPaths.length === 1
+                        && overName(row, mouse.x, mouse.y))
+                        row.beginRename()
+                    else
+                        screenshots.select(index, control, shift)
+                } else if (!control) {
                     screenshots.selectIndices([])
+                }
             }
             onDoubleClicked: function(mouse) {
                 if (skipClick) return
                 const index = indexAtCard(mouse.x, mouse.y)
                 if (index >= 0) {
+                    const row = images.itemAtIndex(index)
+                    const onName = overName(row, mouse.x, mouse.y)
+                    const selectionModifier = mouse.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)
+                    if (overRenameInput(mouse.x, mouse.y) || (onName && selectionModifier)) {
+                        mouse.accepted = false
+                        return
+                    }
                     screenshots.select(index, false, false)
-                    host.openPreview(index)
+                    if (onName) row.beginRename()
+                    else host.openPreview(index)
                 }
             }
             onExited: images.hoveredIndex = -1
@@ -252,7 +342,7 @@ Window {
             spacing: 6
             Text {
                 width: parent.width
-                text: screenshots.error
+                text: host.renameError || screenshots.error
                 visible: text.length > 0
                 color: Components.Theme.accent
                 wrapMode: Text.Wrap
@@ -274,6 +364,7 @@ Window {
                     enabled: images.count > 0
                     opacity: enabled ? 1 : 0.4
                     onClicked: {
+                        host.cancelRename()
                         if (allSelected) screenshots.selectIndices([])
                         else screenshots.selectAll()
                     }
@@ -300,7 +391,10 @@ Window {
                     text: "Delete"
                     enabled: screenshots.selectedPaths.length > 0
                     opacity: enabled ? 1 : 0.4
-                    onClicked: screenshots.deleteSelected()
+                    onClicked: {
+                        host.cancelRename()
+                        screenshots.deleteSelected()
+                    }
                     background: Rectangle {
                         radius: 8
                         color: deleteButton.down ? Qt.darker(Components.Theme.accent, 1.15)

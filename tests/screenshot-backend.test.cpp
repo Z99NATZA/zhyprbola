@@ -170,7 +170,7 @@ private slots:
         QTRY_COMPARE(surface->property("color").value<QColor>().alpha(), 89);
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
         QVERIFY(QTest::qWaitForWindowExposed(window));
-        QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(200, 95));
+        QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(80, 95));
         auto *preview = window->findChild<QQuickWindow *>("screenshotPreviewWindow");
         QVERIFY(preview);
         QTRY_VERIFY(preview->isVisible());
@@ -280,7 +280,7 @@ private slots:
         QVERIFY(!window->findChild<QQuickWindow *>("screenshotPreviewWindow"));
         QSignalSpy dismissed(&model, &ScreenshotBackend::dismissRequested);
 
-        QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(200, 95));
+        QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(80, 95));
         QPointer<QQuickWindow> preview = window->findChild<QQuickWindow *>("screenshotPreviewWindow");
         QVERIFY(preview);
         QTRY_VERIFY(preview->isVisible());
@@ -364,7 +364,7 @@ private slots:
         QVERIFY(!window->isVisible());
         model.Show();
         QVERIFY(QTest::qWaitForWindowExposed(window));
-        QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(200, 95));
+        QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(80, 95));
         preview = window->findChild<QQuickWindow *>("screenshotPreviewWindow");
         QVERIFY(preview);
         QTRY_VERIFY(preview->isVisible());
@@ -378,7 +378,7 @@ private slots:
         // Reopening the same image creates another window without replacing the first.
         model.Show();
         QVERIFY(QTest::qWaitForWindowExposed(window));
-        QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(200, 95));
+        QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(80, 95));
         auto previews = window->findChildren<QQuickWindow *>("screenshotPreviewWindow");
         QCOMPARE(previews.size(), 2);
         QPointer<QQuickWindow> second = previews[0] == preview ? previews[1] : previews[0];
@@ -457,6 +457,80 @@ private slots:
         QTest::keyClick(window, Qt::Key_Escape);
         QTRY_VERIFY(!model.opened());
         QTRY_VERIFY(!window->isVisible());
+    }
+
+    void selectedScreenshotNameCanBeEditedInline() {
+        QTemporaryDir dir;
+        QImage image(10, 10, QImage::Format_RGB32);
+        image.fill(Qt::blue);
+        QVERIFY(image.save(dir.filePath("second.png")));
+        QVERIFY(image.save(dir.filePath("first.png")));
+        ScreenshotBackend model(dir.path());
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("screenshots", &model);
+        engine.rootContext()->setContextProperty("backend", &model);
+        engine.load(QUrl::fromLocalFile(QFINDTESTDATA("../ScreenshotHost.qml")));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        window->requestActivate();
+        QVERIFY(QTest::qWaitForWindowActive(window));
+
+        const QString original = pathAt(model, 0);
+        const QString other = pathAt(model, 1);
+        const QPoint namePoint(165, 90);
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, namePoint);
+        QCOMPARE(model.selectedPaths(), QStringList{original});
+        QVERIFY(!window->property("renameEditor").value<QObject *>());
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, namePoint);
+        auto *editor = window->activeFocusItem();
+        QVERIFY(editor);
+        QCOMPARE(editor->objectName(), QStringLiteral("screenshotRenameInput"));
+        QCOMPARE(editor->property("selectedText").toString(), QFileInfo(original).completeBaseName());
+
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, namePoint + QPoint(10, 0));
+        QCOMPARE(window->activeFocusItem(), editor);
+        QVERIFY(editor->property("selectedText").toString().isEmpty());
+        QTest::keyClick(window, Qt::Key_A, Qt::ControlModifier);
+        QCOMPARE(editor->property("selectedText").toString(), QFileInfo(original).fileName());
+        QTest::keyClick(window, Qt::Key_Delete);
+        QCOMPARE(editor->property("text").toString(), QString());
+        QCOMPARE(model.selectedPaths(), QStringList{original});
+        QVERIFY(QFileInfo::exists(original));
+
+        const auto paste = [window](const QString &name) {
+            QGuiApplication::clipboard()->setText(name);
+            QTest::keyClick(window, Qt::Key_A, Qt::ControlModifier);
+            QTest::keyClick(window, Qt::Key_V, Qt::ControlModifier);
+        };
+        paste(QFileInfo(other).fileName());
+        QTest::keyClick(window, Qt::Key_Return);
+        QCOMPARE(window->activeFocusItem(), editor);
+        QVERIFY(!window->property("renameError").toString().isEmpty());
+        QVERIFY(QFileInfo::exists(original));
+        QVERIFY(QFileInfo::exists(other));
+        QTest::keyClick(window, Qt::Key_Escape);
+        QVERIFY(window->isVisible());
+        QVERIFY(!window->property("renameEditor").value<QObject *>());
+        QVERIFY(window->property("renameError").toString().isEmpty());
+
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, namePoint);
+        paste(QStringLiteral("Renamed screenshot"));
+        QTest::keyClick(window, Qt::Key_Return);
+        const QString renamed = dir.filePath("Renamed screenshot.png");
+        QTRY_COMPARE(model.selectedPaths(), QStringList{renamed});
+        QVERIFY(!window->property("renameEditor").value<QObject *>());
+        QVERIFY(!QFileInfo::exists(original));
+        QCOMPARE(QImage(renamed), QImage(other));
+        QTest::keyClick(window, Qt::Key_C, Qt::ControlModifier);
+        QCOMPARE(QGuiApplication::clipboard()->text(), renamed);
+
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(20, 90));
+        QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier, namePoint);
+        QVERIFY(window->isVisible());
+        QVERIFY(window->activeFocusItem());
+        QCOMPARE(window->activeFocusItem()->objectName(), QStringLiteral("screenshotRenameInput"));
     }
 
     void selectAllButtonAndMarqueeFromGutter() {

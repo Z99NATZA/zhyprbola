@@ -48,6 +48,7 @@ public:
     Q_INVOKABLE void selectIndices(const QVariantList &indices);
     Q_INVOKABLE void selectAll();
     Q_INVOKABLE void copyPaths();
+    Q_INVOKABLE QString renameScreenshot(const QString &path, const QString &newName);
     Q_INVOKABLE void deleteSelected();
     Q_INVOKABLE void undo();
 public slots:
@@ -63,6 +64,7 @@ signals:
     void componentOpacityChanged();
     Q_SCRIPTABLE void dismissRequested();
 private:
+    void refreshFiles(const QString &renamedPath = {}, const QString &newPath = {});
     void setError(const QString &error);
     QString m_directory;
     QStringList m_paths;
