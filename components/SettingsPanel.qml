@@ -1113,6 +1113,8 @@ Item {
         required property string rangePrefix
         required property int percent
         signal edited(int value)
+        // A finished change: drag released, or a keyboard step.
+        signal committed(int value)
 
         width: panel.contentWidth
         height: panel.contentRowHeight
@@ -1131,10 +1133,22 @@ Item {
             hoverEnabled: true
             focusPolicy: Qt.StrongFocus
             Accessible.name: opacityControl.title
-            onMoved: opacityControl.edited(Math.round(range.value))
+            property bool dragged: false
+            onMoved: {
+                opacityControl.edited(Math.round(range.value))
+                if (pressed) dragged = true
+                else opacityControl.committed(Math.round(range.value))
+            }
+            onPressedChanged: {
+                if (pressed || !dragged) return
+                dragged = false
+                opacityControl.committed(Math.round(range.value))
+            }
             Keys.onPressed: event => {
                 if (event.key === Qt.Key_Home || event.key === Qt.Key_End) {
-                    opacityControl.edited(event.key === Qt.Key_Home ? 0 : 100)
+                    const value = event.key === Qt.Key_Home ? 0 : 100
+                    opacityControl.edited(value)
+                    opacityControl.committed(value)
                     event.accepted = true
                 }
             }
@@ -1934,9 +1948,13 @@ Item {
     }
 
     component KeyChoice: Column {
+        id: keyChoice
         required property string title
         required property string settingKey
         required property var options
+        // A key visualizer setting by default; override both for other values.
+        property string selected: backend.keyVisualizerSettings[settingKey] || ""
+        property var pick: key => backend.setKeyVisualizerSetting(settingKey, key)
         width: panel.contentWidth
         spacing: 6
 
@@ -1960,7 +1978,7 @@ Item {
                     width: (panel.contentWidth - 8 * (options.length - 1)) / options.length
                     height: panel.sidebarRowHeight
                     radius: panel.controlRadius
-                    color: backend.keyVisualizerSettings[settingKey] === modelData.key
+                    color: keyChoice.selected === modelData.key
                         ? Theme.selected : (optionMouse.containsMouse
                             ? Theme.controlHover : Theme.control)
 
@@ -1978,7 +1996,7 @@ Item {
                         anchors.right: parent.right
                         anchors.rightMargin: 11
                         anchors.verticalCenter: parent.verticalCenter
-                        visible: backend.keyVisualizerSettings[settingKey] === modelData.key
+                        visible: keyChoice.selected === modelData.key
                         text: "✓"
                         color: Theme.accent
                         font.family: Qt.application.font.family
@@ -1991,7 +2009,7 @@ Item {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: backend.setKeyVisualizerSetting(settingKey, modelData.key)
+                        onClicked: keyChoice.pick(modelData.key)
                     }
                 }
             }
@@ -2062,6 +2080,30 @@ Item {
             width: parent.width
             spacing: 17
 
+            // The key visualizer window is too short for a right-click card
+            // menu, so its own opacity and border are set here.
+            Column {
+                width: parent.width
+                spacing: 6
+
+                Text {
+                    text: "Opacity"
+                    color: Theme.mutedText
+                    font.family: Qt.application.font.family
+                    font.pixelSize: panel.controlFontSize
+                    font.weight: panel.controlFontWeight
+                }
+
+                OpacityControl {
+                    objectName: "key-visualizer-opacity-box"
+                    title: "Key visualizer opacity"
+                    rangePrefix: "key-visualizer-opacity"
+                    percent: Math.round(Theme.componentOpacityPercentFor("key-visualizer"))
+                    // Saved once per drag so the visualizer reloads a single time.
+                    onCommitted: value => backend.setCardOpacity("key-visualizer", value)
+                }
+            }
+
             KeyChoice {
                 title: "Font size"
                 settingKey: "fontSize"
@@ -2089,6 +2131,14 @@ Item {
                 options: [{key: "left", label: "Left"},
                     {key: "center", label: "Center"},
                     {key: "right", label: "Right"}]
+            }
+
+            KeyChoice {
+                title: "Border"
+                settingKey: "border"
+                options: [{key: "show", label: "show"}, {key: "hide", label: "hide"}]
+                selected: Theme.cardBorderVisible("key-visualizer") ? "show" : "hide"
+                pick: key => backend.setCardBorderMode("key-visualizer", key)
             }
 
             Rectangle {

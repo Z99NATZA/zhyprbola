@@ -801,8 +801,9 @@ void Backend::refreshRadio(const QString &radio, Completion completed) {
     }
 }
 
-// Cards with a right-click menu for their own border and opacity. Note lives in
-// its own window, so it is not one of componentKeys().
+// Cards with their own border and opacity: set from a card's right-click menu,
+// or from Settings for the key visualizer. Note lives in its own window, so it
+// is not one of componentKeys().
 QStringList cardBorderKeys() {
     return {
         QStringLiteral("clock"),
@@ -812,7 +813,8 @@ QStringList cardBorderKeys() {
         QStringLiteral("note"),
         QStringLiteral("calendar"),
         QStringLiteral("system-status"),
-        QStringLiteral("audio-spectrum")
+        QStringLiteral("audio-spectrum"),
+        QStringLiteral("key-visualizer")
     };
 }
 
@@ -825,6 +827,38 @@ QVariantMap validatedCardOpacities(const QJsonObject &saved) {
         if (opacity >= 0 && opacity <= 100) opacities.insert(key, opacity);
     }
     return opacities;
+}
+
+QVariantMap validatedCardBorderModes(const QJsonObject &saved) {
+    QVariantMap modes;
+    for (const QString &key : cardBorderKeys()) {
+        const QString mode = saved.value(key).toString();
+        if (mode == QLatin1String("show") || mode == QLatin1String("hide"))
+            modes.insert(key, mode);
+    }
+    return modes;
+}
+
+bool writeCardBorderModes(const QVariantMap &modes) {
+    return writeDockConfig(QStringLiteral("card-border"), QString::fromUtf8(
+        QJsonDocument(QJsonObject::fromVariantMap(modes)).toJson(QJsonDocument::Compact)));
+}
+
+// Border modes used to live in QSettings, which other processes never see
+// change. Copy them into the watched card-border file once.
+void migrateCardBorderModes(const QString &path) {
+    if (QFileInfo::exists(path)) return;
+    QSettings settings;
+    QVariantMap modes;
+    for (const QString &key : cardBorderKeys()) {
+        const QString mode = settings.value(QStringLiteral("%1/borderMode").arg(key)).toString();
+        if (mode == QLatin1String("show") || mode == QLatin1String("hide"))
+            modes.insert(key, mode);
+    }
+    if (!modes.isEmpty() && writeCardBorderModes(modes)) {
+        for (const QString &key : cardBorderKeys())
+            settings.remove(QStringLiteral("%1/borderMode").arg(key));
+    }
 }
 
 bool writeCardOpacities(const QVariantMap &opacities) {
@@ -842,8 +876,10 @@ void Backend::refreshTheme() {
     const QString opacityComponentsPath = QDir(themeDir).filePath(
         QStringLiteral("component-opacity-components"));
     const QString cardOpacityPath = QDir(themeDir).filePath(QStringLiteral("card-opacity"));
+    const QString cardBorderPath = QDir(themeDir).filePath(QStringLiteral("card-border"));
+    migrateCardBorderModes(cardBorderPath);
     for (const QString &path : {configRoot, themeDir, themeFile, opacityFilePath,
-             opacityComponentsPath, cardOpacityPath}) {
+             opacityComponentsPath, cardOpacityPath, cardBorderPath}) {
         if (QFileInfo::exists(path) && !m_themeWatcher.files().contains(path)
             && !m_themeWatcher.directories().contains(path))
             m_themeWatcher.addPath(path);
@@ -899,6 +935,16 @@ void Backend::refreshTheme() {
         m_cardOpacities = cardOpacities;
         emit componentOpacityChanged();
     }
+
+    QFile cardBorderFile(cardBorderPath);
+    QJsonObject savedCardBorders;
+    if (cardBorderFile.open(QIODevice::ReadOnly))
+        savedCardBorders = QJsonDocument::fromJson(cardBorderFile.readAll()).object();
+    const QVariantMap cardBorderModes = validatedCardBorderModes(savedCardBorders);
+    if (cardBorderModes != m_cardBorderModes) {
+        m_cardBorderModes = cardBorderModes;
+        emit cardBorderModesChanged();
+    }
 }
 
 void Backend::setThemeName(const QString &name) {
@@ -910,25 +956,15 @@ void Backend::setThemeName(const QString &name) {
     if (writeDockConfig(QStringLiteral("theme"), name)) refreshTheme();
 }
 
-QVariantMap Backend::cardBorderModes() const {
-    QSettings settings;
-    QVariantMap modes;
-    for (const QString &key : cardBorderKeys()) {
-        const QString mode = settings.value(QStringLiteral("%1/borderMode").arg(key)).toString();
-        if (mode == QLatin1String("show") || mode == QLatin1String("hide"))
-            modes.insert(key, mode);
-    }
-    return modes;
-}
-
 void Backend::setCardBorderMode(const QString &key, const QString &mode) {
     if (!cardBorderKeys().contains(key)) return;
     if (mode != QLatin1String("show") && mode != QLatin1String("hide")) return;
+    if (m_cardBorderModes.value(key).toString() == mode) return;
 
-    QSettings settings;
-    const QString settingKey = QStringLiteral("%1/borderMode").arg(key);
-    if (settings.value(settingKey).toString() == mode) return;
-    settings.setValue(settingKey, mode);
+    QVariantMap modes = m_cardBorderModes;
+    modes.insert(key, mode);
+    if (!writeCardBorderModes(modes)) return;
+    m_cardBorderModes = modes;
     emit cardBorderModesChanged();
 }
 

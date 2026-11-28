@@ -12,6 +12,7 @@
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QScopeGuard>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <QtTest>
 #include <functional>
@@ -622,6 +623,108 @@ private slots:
 
         Backend reopened;
         QCOMPARE(reopened.cardOpacities(), kept);
+    }
+
+    void cardBorderModesShareAcrossProcessesAndMigrate() {
+        QTemporaryDir config;
+        QVERIFY(config.isValid());
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+        const auto restoreConfig = qScopeGuard([previous] {
+            if (previous.isNull()) qunsetenv("XDG_CONFIG_HOME");
+            else qputenv("XDG_CONFIG_HOME", previous);
+        });
+        // Older builds kept the mode in QSettings; it moves to card-border once.
+        QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, config.path());
+        {
+            QSettings legacy;
+            legacy.setValue(QStringLiteral("clock/borderMode"), QStringLiteral("hide"));
+        }
+
+        Backend backend;
+        Backend observer;
+        QCOMPARE(backend.cardBorderModes().value(QStringLiteral("clock")).toString(),
+            QStringLiteral("hide"));
+        QVERIFY(QFile::exists(config.filePath(QStringLiteral("zhyprbola/card-border"))));
+        QVERIFY(!QSettings().contains(QStringLiteral("clock/borderMode")));
+
+        // A change made in one process (Settings) reaches another (the card).
+        backend.setCardBorderMode(QStringLiteral("key-visualizer"), QStringLiteral("hide"));
+        backend.setCardBorderMode(QStringLiteral("wifi"), QStringLiteral("hide"));
+        backend.setCardBorderMode(QStringLiteral("clock"), QStringLiteral("bogus"));
+        const QVariantMap expected{{QStringLiteral("clock"), QStringLiteral("hide")},
+            {QStringLiteral("key-visualizer"), QStringLiteral("hide")}};
+        QCOMPARE(backend.cardBorderModes(), expected);
+        QTRY_COMPARE(observer.cardBorderModes(), expected);
+    }
+
+    void keysSectionSetsVisualizerOpacityAndBorder() {
+        QTemporaryDir config;
+        QVERIFY(config.isValid());
+        const QByteArray previous = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", config.path().toUtf8());
+        const auto restoreConfig = qScopeGuard([previous] {
+            if (previous.isNull()) qunsetenv("XDG_CONFIG_HOME");
+            else qputenv("XDG_CONFIG_HOME", previous);
+        });
+        QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, config.path());
+
+        Backend backend;
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(
+            QFINDTESTDATA("../components/SettingsPanel.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        object->setProperty("section", QStringLiteral("keys"));
+        auto *settings = qobject_cast<QQuickItem *>(object.data());
+        QVERIFY(settings);
+        QQuickWindow window;
+        window.resize(660, 900);
+        settings->setHeight(900);
+        settings->setParentItem(window.contentItem());
+        window.show();
+        QTRY_VERIFY(window.isExposed());
+
+        auto *range = object->findChild<QQuickItem *>(
+            QStringLiteral("key-visualizer-opacity-range"));
+        QVERIFY(range && range->isVisible());
+        QCOMPARE(qRound(range->property("value").toDouble()), 100);
+        const QPoint start = range->mapToScene(QPointF(range->width() - 4,
+            range->height() / 2)).toPoint();
+        const QPoint end = range->mapToScene(QPointF(range->width() * 0.4,
+            range->height() / 2)).toPoint();
+        QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, start);
+        QTest::mouseMove(&window, end);
+        QTest::mouseMove(&window, end - QPoint(1, 0));
+        // Nothing is written while the drag is in progress.
+        QTest::qWait(30);
+        QVERIFY(backend.cardOpacities().isEmpty());
+        QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, end - QPoint(1, 0));
+        QTRY_VERIFY(backend.cardOpacities().contains(QStringLiteral("key-visualizer")));
+        const int saved = backend.cardOpacities().value(QStringLiteral("key-visualizer")).toInt();
+        QVERIFY(saved > 20 && saved < 60);
+
+        // The default theme draws no border, so "hide" starts selected.
+        // Repeater delegates are only reachable through the visual item tree.
+        std::function<QQuickItem *(QQuickItem *, const QString &)> findVisual;
+        findVisual = [&findVisual](QQuickItem *item, const QString &name) {
+            if (item->objectName() == name) return item;
+            for (auto *child : item->childItems()) {
+                if (auto *found = findVisual(child, name)) return found;
+            }
+            return static_cast<QQuickItem *>(nullptr);
+        };
+        auto *show = findVisual(settings, QStringLiteral("key-choice-check-border-show"));
+        auto *hide = findVisual(settings, QStringLiteral("key-choice-check-border-hide"));
+        QVERIFY(show && hide && !show->isVisible() && hide->isVisible());
+        const QPointF showCenter = show->parentItem()->mapToScene(QPointF(
+            show->parentItem()->width() / 2, show->parentItem()->height() / 2));
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, showCenter.toPoint());
+        QTRY_COMPARE(backend.cardBorderModes().value(QStringLiteral("key-visualizer")).toString(),
+            QStringLiteral("show"));
+        QTRY_VERIFY(show->isVisible() && !hide->isVisible());
     }
 
     void persistsComponentOpacityAndShowsRange() {

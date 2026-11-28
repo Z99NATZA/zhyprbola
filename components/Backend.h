@@ -128,7 +128,7 @@ public:
     bool playing() const { return m_playing; }
     QVariantList spectrum() const { return m_spectrum; }
     QString themeName() const { return m_themeName; }
-    QVariantMap cardBorderModes() const;
+    QVariantMap cardBorderModes() const { return m_cardBorderModes; }
     int componentOpacity() const { return m_componentOpacity; }
     QStringList opacityEnabledComponents() const { return m_opacityEnabledComponents; }
     QStringList opacityDisabledComponents() const { return m_opacityDisabledComponents; }
@@ -397,6 +397,7 @@ private:
     QStringList m_opacityEnabledComponents;
     QStringList m_opacityDisabledComponents;
     QVariantMap m_cardOpacities;
+    QVariantMap m_cardBorderModes;
     QString m_dockPosition = QStringLiteral("bottom");
     int m_dockBgOpacity = 50;
     QStringList m_dockGroups = {QStringLiteral("zhyprbola"), QStringLiteral("running")};

@@ -351,8 +351,9 @@ Item {
         anchors.fill: parent
         radius: Math.min(26, height / 3)
         color: Theme.componentSurfaceFor("key-visualizer")
-        border.width: Theme.cardBorderWidth
-        border.color: Theme.cardBorder
+        // Border and opacity are set in Settings > Keys (no room for a card menu).
+        border.width: Theme.cardBorderVisible("key-visualizer") ? 1 : 0
+        border.color: Theme.cardOutline
 
         Text {
             objectName: "key-visualizer-display"
