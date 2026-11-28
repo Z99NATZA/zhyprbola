@@ -8,11 +8,8 @@ Item {
     id: root
 
     property string componentKey: ""
-    readonly property string mode: backend.cardBorderModes[componentKey] || ""
-    readonly property bool borderVisible:
-        mode === "show" || (mode !== "hide" && Theme.cardBorderWidth > 0)
-    readonly property color borderColor:
-        Theme.cardBorderWidth > 0 ? Theme.cardBorder : Theme.line
+    readonly property bool borderVisible: Theme.cardBorderVisible(componentKey)
+    readonly property color borderColor: Theme.cardOutline
 
     anchors.fill: parent
 
@@ -60,31 +57,13 @@ Item {
             border.color: root.borderColor
         }
 
-        contentItem: MouseArea {
-            implicitWidth: borderLabels.implicitWidth + 28
-            implicitHeight: 34
-            onClicked: backend.setCardBorderMode(root.componentKey,
-                root.borderVisible ? "hide" : "show")
-
-            Row {
-                id: borderLabels
-                anchors.centerIn: parent
-                spacing: 8
-
-                Repeater {
-                    model: ["Border:", "show", "hide"]
-
-                    Text {
-                        required property string modelData
-                        text: modelData
-                        color: Theme.text
-                        font.family: Qt.application.font.family
-                        font.pixelSize: 14
-                        opacity: modelData === "Border:" || root.borderVisible === (modelData === "show")
-                            ? 1 : 0.45
-                    }
-                }
-            }
+        contentItem: ToggleRow {
+            namePrefix: root.componentKey + "-border"
+            label: "Border"
+            onText: "show"
+            offText: "hide"
+            active: root.borderVisible
+            onToggled: Theme.toggleCardBorder(root.componentKey)
         }
     }
 }

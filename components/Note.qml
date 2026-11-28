@@ -25,11 +25,8 @@ Item {
         property color surfaceColor: Theme.componentSurfaceFor("note")
         property real cornerRadius: 14
         // Right-click "Border" row toggles this; default follows the theme.
-        readonly property string borderMode: backend.cardBorderModes["note"] || ""
-        readonly property bool borderVisible:
-            borderMode === "show" || (borderMode !== "hide" && Theme.cardBorderWidth > 0)
-        readonly property color borderColor:
-            Theme.cardBorderWidth > 0 ? Theme.cardBorder : Theme.line
+        readonly property bool borderVisible: Theme.cardBorderVisible("note")
+        readonly property color borderColor: Theme.cardOutline
         readonly property string family: Qt.application.font.family
 
         // Document state.
@@ -2199,103 +2196,23 @@ Item {
                 onTriggered: card.preview = !card.preview
             }
 
-            // "Vim: on off" as plain text: the active choice is solid, the other
-            // faded. Clicking the row toggles Vim and keeps the menu open.
-            Rectangle {
-                id: vimRow
-                objectName: "note-vim-toggle"
+            // Clicking a row toggles it and keeps the menu open.
+            ToggleRow {
+                namePrefix: "note-vim"
                 width: contextMenu.availableWidth
-                height: 34
-                radius: 7
-                color: vimRowMouse.containsMouse ? Theme.controlHover : "transparent"
-
-                Row {
-                    anchors.left: parent.left
-                    anchors.leftMargin: 12
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 8
-
-                    Text {
-                        text: "Vim:"
-                        color: Theme.text
-                        font.family: Qt.application.font.family
-                        font.pixelSize: 14
-                    }
-                    Text {
-                        objectName: "note-vim-on"
-                        readonly property bool active: card.vimEnabled
-                        text: "on"
-                        color: Theme.text
-                        opacity: active ? 1 : 0.35
-                        font.family: Qt.application.font.family
-                        font.pixelSize: 14
-                    }
-                    Text {
-                        objectName: "note-vim-off"
-                        readonly property bool active: !card.vimEnabled
-                        text: "off"
-                        color: Theme.text
-                        opacity: active ? 1 : 0.35
-                        font.family: Qt.application.font.family
-                        font.pixelSize: 14
-                    }
-                }
-
-                MouseArea {
-                    id: vimRowMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: backend.setNoteVimEnabled(!card.vimEnabled)
-                }
+                label: "Vim"
+                active: card.vimEnabled
+                onToggled: backend.setNoteVimEnabled(!card.vimEnabled)
             }
 
-            // "Border: show hide" with the active choice solid, like the Vim row.
-            Rectangle {
-                objectName: "note-border-toggle"
+            ToggleRow {
+                namePrefix: "note-border"
                 width: contextMenu.availableWidth
-                height: 34
-                radius: 7
-                color: borderRowMouse.containsMouse ? Theme.controlHover : "transparent"
-
-                Row {
-                    anchors.left: parent.left
-                    anchors.leftMargin: 12
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 8
-
-                    Text {
-                        text: "Border:"
-                        color: Theme.text
-                        font.family: Qt.application.font.family
-                        font.pixelSize: 14
-                    }
-                    Text {
-                        objectName: "note-border-show"
-                        readonly property bool active: card.borderVisible
-                        text: "show"
-                        color: Theme.text
-                        opacity: active ? 1 : 0.35
-                        font.family: Qt.application.font.family
-                        font.pixelSize: 14
-                    }
-                    Text {
-                        objectName: "note-border-hide"
-                        readonly property bool active: !card.borderVisible
-                        text: "hide"
-                        color: Theme.text
-                        opacity: active ? 1 : 0.35
-                        font.family: Qt.application.font.family
-                        font.pixelSize: 14
-                    }
-                }
-
-                MouseArea {
-                    id: borderRowMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: backend.setCardBorderMode("note",
-                        card.borderVisible ? "hide" : "show")
-                }
+                label: "Border"
+                onText: "show"
+                offText: "hide"
+                active: card.borderVisible
+                onToggled: Theme.toggleCardBorder("note")
             }
         }
 

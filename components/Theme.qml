@@ -64,6 +64,17 @@ QtObject {
     // Card outline like the terminal window frame; themes without one draw none.
     readonly property color cardBorder: palette.border || "transparent"
     readonly property int cardBorderWidth: palette.border ? 1 : 0
+    // Outline color for cards whose border is forced on in themes without one.
+    readonly property color cardOutline: cardBorderWidth > 0 ? cardBorder : line
+    // Per-card "Border: show | hide" override; unset follows the theme.
+    function cardBorderVisible(componentKey) {
+        const mode = backend.cardBorderModes[componentKey] || ""
+        return mode === "show" || (mode !== "hide" && cardBorderWidth > 0)
+    }
+    function toggleCardBorder(componentKey) {
+        backend.setCardBorderMode(componentKey,
+            cardBorderVisible(componentKey) ? "hide" : "show")
+    }
     readonly property color panelSurface: cardSurface
     readonly property color managerSurface: cardSurface
     readonly property color barSurface: cardSurface
