@@ -599,7 +599,7 @@ private slots:
         backend.setCardOpacity(QStringLiteral("clock"), 40);
         backend.setCardOpacity(QStringLiteral("weather"), 55);
         backend.setCardOpacity(QStringLiteral("note"), 130);
-        backend.setCardOpacity(QStringLiteral("calendar"), 20);
+        backend.setCardOpacity(QStringLiteral("wifi"), 20);
         const QVariantMap expected{{QStringLiteral("clock"), 40},
             {QStringLiteral("weather"), 55}, {QStringLiteral("note"), 100}};
         QCOMPARE(backend.cardOpacities(), expected);

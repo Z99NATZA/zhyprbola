@@ -809,7 +809,10 @@ QStringList cardBorderKeys() {
         QStringLiteral("weather"),
         QStringLiteral("music"),
         QStringLiteral("todo"),
-        QStringLiteral("note")
+        QStringLiteral("note"),
+        QStringLiteral("calendar"),
+        QStringLiteral("system-status"),
+        QStringLiteral("audio-spectrum")
     };
 }
 

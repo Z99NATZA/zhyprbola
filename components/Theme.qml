@@ -86,7 +86,7 @@ QtObject {
     readonly property color cardOutline: cardBorderWidth > 0 ? cardBorder : line
     // Per-card "Border: show | hide" override; unset follows the theme.
     function cardBorderVisible(componentKey) {
-        const mode = backend.cardBorderModes[componentKey] || ""
+        const mode = (backend.cardBorderModes || {})[componentKey] || ""
         return mode === "show" || (mode !== "hide" && cardBorderWidth > 0)
     }
     function toggleCardBorder(componentKey) {
